@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 25% 98%;
+    --foreground: 110 10% 25%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 110 10% 25%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 110 10% 25%;
+
+    --primary: 100 10% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 15% 80%;
+    --secondary-foreground: 110 10% 25%;
+
+    --muted: 30 15% 95%;
+    --muted-foreground: 110 5% 40%;
+
+    --accent: 30 15% 90%;
+    --accent-foreground: 110 10% 25%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 15% 90%;
+    --input: 30 15% 90%;
+    --ring: 100 10% 55%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 110 15% 15%;
+    --foreground: 30 15% 90%;
+
+    --card: 110 15% 18%;
+    --card-foreground: 30 15% 90%;
+
+    --popover: 110 15% 18%;
+    --popover-foreground: 30 15% 90%;
+
+    --primary: 100 10% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 110 10% 25%;
+    --secondary-foreground: 30 15% 90%;
+
+    --muted: 110 10% 22%;
+    --muted-foreground: 30 10% 70%;
+
+    --accent: 110 10% 25%;
+    --accent-foreground: 30 15% 90%;
+
+    --destructive: 0 60% 40%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 110 10% 25%;
+    --input: 110 10% 25%;
+    --ring: 100 10% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .mobile-container {
+    @apply px-4 py-4 md:container md:py-6;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold md:text-3xl;
+  }
+
+  .page-description {
+    @apply text-sm text-muted-foreground md:text-base;
+  }
+
+  .card-hover {
+    @apply transition-all hover:shadow-md hover:border-shrub/50;
+  }
+}
+
