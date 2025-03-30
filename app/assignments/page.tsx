@@ -26,75 +26,76 @@ type Group = {
   }
 }
 
-// Mock data
-const MOCK_PEOPLE: Person[] = [
-  { id: "1", name: "John Smith", groupId: "g1" },
-  { id: "2", name: "Sarah Johnson", groupId: "g2" },
-  { id: "3", name: "Michael Brown", groupId: "g3" },
-  { id: "4", name: "Emily Davis", groupId: "g1" },
-  { id: "5", name: "David Wilson", groupId: "g2" },
-  { id: "6", name: "Lisa Thompson", groupId: "g3" },
-  { id: "7", name: "Robert Garcia" }, // Uncategorized
-  { id: "8", name: "Jennifer Martinez" }, // Uncategorized
-  { id: "9", name: "William Anderson" }, // Uncategorized
-]
-
-const MOCK_GROUPS: Group[] = [
-  {
-    id: "g1",
-    name: "Family",
-    personIds: ["1", "4"],
-    prayerDays: [0, 3, 6], // Sunday, Wednesday, Saturday
-    prayerSettings: { type: "all" },
-  },
-  {
-    id: "g2",
-    name: "Church",
-    personIds: ["2", "5"],
-    prayerDays: [0, 4], // Sunday, Thursday
-    prayerSettings: { type: "random", count: 2 },
-  },
-  {
-    id: "g3",
-    name: "Work",
-    personIds: ["3", "6"],
-    prayerDays: [1, 5], // Monday, Friday
-    prayerSettings: { type: "recent" },
-  },
-]
-
 // Day names
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 export default function AssignmentsPage() {
-  const [people] = useState<Person[]>(MOCK_PEOPLE)
-  const [groups] = useState<Group[]>(MOCK_GROUPS)
+  // Initialize state with empty arrays
+  const [people, setPeople] = useState<Person[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
 
-  // Get uncategorized people
+  // useEffect hook will be needed here to fetch people and groups from Firestore
+  // useEffect(() => {
+  //   // Fetch data based on logged-in user
+  // }, []);
+
+
+  // Get uncategorized people - uses local state, will update when fetching real data
   const uncategorizedPeople = people.filter((person) => !person.groupId)
 
-  // Get people in a specific group
+  // Get people in a specific group - uses local state, will update when fetching real data
   const getPeopleInGroup = (groupId: string) => {
     return people.filter((person) => person.groupId === groupId)
   }
 
-  // Toggle expanded state for a group
+  // Toggle expanded state for a group - remains the same
   const toggleExpandGroup = (groupId: string) => {
     setExpandedGroupId(expandedGroupId === groupId ? null : groupId)
   }
 
-  // Toggle day selection for a group
+  // Toggle day for group - Needs Firestore update
   const toggleDayForGroup = (groupId: string, dayIndex: number) => {
-    // In a real app, this would update the database
-    console.log(`Toggled day ${dayIndex} for group ${groupId}`)
+    // TODO: Replace with Firestore updateDoc for the specific group
+    console.log(`Toggled day ${dayIndex} for group ${groupId} (needs Firestore implementation)`);
   }
 
-  // Toggle selection type for a group
+  // Toggle selection type for group - Needs Firestore update
   const toggleSelectionType = (groupId: string, type: "random" | "recent" | "all") => {
-    // In a real app, this would update the database
-    console.log(`Set selection type to ${type} for group ${groupId}`)
+    // TODO: Replace with Firestore updateDoc for the specific group
+    console.log(`Set selection type to ${type} for group ${groupId} (needs Firestore implementation)`);
   }
+  
+  // Add Person - Needs Firestore add/update
+  const handleAddPerson = () => {
+    // TODO: Implement adding a person (likely involves a dialog/form and Firestore addDoc)
+    console.log("Add Person clicked (needs implementation)");
+  };
+
+  // Assign Person to Group - Needs Firestore update
+  const handleAssignPerson = (personId: string, groupId: string) => {
+     // TODO: Implement assigning person to group (update Person doc, potentially update Group doc)
+     console.log(`Assign person ${personId} to group ${groupId} (needs implementation)`);
+  };
+  
+  // Add Group - Needs Firestore add
+  const handleAddGroup = () => {
+    // TODO: Implement adding a group (likely involves a dialog/form and Firestore addDoc)
+     console.log("Add Group clicked (needs implementation)");
+  };
+  
+  // Remove Person from Group - Needs Firestore update
+  const handleRemovePersonFromGroup = (personId: string, groupId: string) => {
+    // TODO: Implement removing person from group (update Person doc, potentially update Group doc)
+     console.log(`Remove person ${personId} from group ${groupId} (needs implementation)`);
+  };
+  
+  // Add Person to Specific Group - Needs Firestore update
+  const handleAddPersonToGroup = (groupId: string) => {
+     // TODO: Implement adding person to a specific group (likely involves a dialog/form selecting existing people or adding new, then update Firestore)
+     console.log(`Add Person to group ${groupId} clicked (needs implementation)`);
+  };
+
 
   return (
     <div className="mobile-container pb-16 md:pb-6">
@@ -115,7 +116,8 @@ export default function AssignmentsPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center justify-between">
                 <span>Uncategorized People</span>
-                <Button size="sm" variant="outline" className="gap-1">
+                {/* Connect handleAddPerson */}
+                <Button size="sm" variant="outline" className="gap-1" onClick={handleAddPerson}>
                   <UserPlus className="h-4 w-4" />
                   Add Person
                 </Button>
@@ -132,7 +134,8 @@ export default function AssignmentsPage() {
                         <User className="h-4 w-4 text-muted-foreground" />
                         <span>{person.name}</span>
                       </div>
-                      <Button variant="ghost" size="sm" className="gap-1 text-xs">
+                      {/* TODO: Add actual assign functionality - maybe dropdown with groups? */}
+                      <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => console.log('Assign clicked for', person.id)}> 
                         Assign to Group
                       </Button>
                     </div>
@@ -145,7 +148,8 @@ export default function AssignmentsPage() {
           {/* Groups Section */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Groups</h2>
-            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90">
+            {/* Connect handleAddGroup */}
+            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90" onClick={handleAddGroup}>
               <Plus className="h-4 w-4" />
               New Group
             </Button>
@@ -185,10 +189,12 @@ export default function AssignmentsPage() {
                             <User className="h-4 w-4 text-muted-foreground" />
                             <span>{person.name}</span>
                           </div>
+                          {/* Connect handleRemovePersonFromGroup */}
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemovePersonFromGroup(person.id, group.id)} 
                           >
                             <X className="h-4 w-4" />
                           </Button>
@@ -197,7 +203,8 @@ export default function AssignmentsPage() {
                     </div>
                   )}
 
-                  <Button variant="outline" size="sm" className="gap-1 w-full">
+                  {/* Connect handleAddPersonToGroup */}
+                  <Button variant="outline" size="sm" className="gap-1 w-full" onClick={() => handleAddPersonToGroup(group.id)}>
                     <UserPlus className="h-4 w-4" />
                     Add Person to Group
                   </Button>

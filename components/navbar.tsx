@@ -1,15 +1,39 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { FileText, Calendar, Users, Settings, Heart } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { FileText, Calendar, Users, Settings, Heart, LogOut, User as UserIcon, LogIn } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModeToggle } from "@/components/mode-toggle"
+import { useAuth } from "@/context/AuthContext"
+import { auth } from "@/lib/firebaseConfig"
+import { signOut } from "firebase/auth"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import type { LucideIcon } from "lucide-react"
+
+// Define an interface for nav items
+interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+}
 
 export default function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { user, loading } = useAuth()
 
-  const navItems = [
+  // Apply the type to the array
+  const navItems: NavItem[] = [
     {
       name: "Listen",
       href: "/notes",
@@ -32,6 +56,62 @@ export default function Navbar() {
     },
   ]
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push('/');
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
+  };
+
+  const renderUserAuth = () => {
+    if (loading) {
+      return <div className="h-8 w-8 animate-pulse rounded-full bg-muted"></div>;
+    }
+
+    if (user) {
+      return (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user.photoURL || undefined} alt={user.displayName || user.email || "User"} />
+                <AvatarFallback>{user.email ? user.email[0].toUpperCase() : <UserIcon size={16} />}</AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56" align="end" forceMount>
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">
+                  {user.displayName || "User"}
+                </p>
+                <p className="text-xs leading-none text-muted-foreground">
+                  {user.email}
+                </p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      );
+    } else {
+      return (
+        <Link href="/login">
+          <Button variant="ghost">
+            <LogIn className="mr-2 h-4 w-4" />
+            Login
+          </Button>
+        </Link>
+      );
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background">
       <div className="container flex h-14 items-center">
@@ -49,13 +129,7 @@ export default function Navbar() {
                   pathname === item.href ? "text-shrub font-semibold" : "text-foreground/60",
                 )}
               >
-                {typeof item.icon === "function" ? (
-                  <div className="mr-2">
-                    <item.icon />
-                  </div>
-                ) : (
-                  <item.icon className={cn("mr-2 h-4 w-4", pathname === item.href ? "stroke-[2.5px]" : "")} />
-                )}
+                <item.icon className={cn("mr-2 h-4 w-4", pathname === item.href ? "stroke-[2.5px]" : "")} />
                 {item.name}
               </Link>
             ))}
@@ -69,6 +143,8 @@ export default function Navbar() {
         </div>
 
         <div className="flex flex-1 items-center justify-end space-x-2">
+          {renderUserAuth()}
+          <ModeToggle />
           <nav className="flex items-center">
             <ModeToggle />
           </nav>
@@ -87,11 +163,7 @@ export default function Navbar() {
                 pathname === item.href ? "text-shrub font-semibold" : "text-foreground/60",
               )}
             >
-              {typeof item.icon === "function" ? (
-                <item.icon />
-              ) : (
-                <item.icon className={cn("h-5 w-5", pathname === item.href ? "stroke-[2.5px]" : "")} />
-              )}
+              <item.icon className={cn("h-5 w-5", pathname === item.href ? "stroke-[2.5px]" : "")} />
               <span>{item.name}</span>
             </Link>
           ))}

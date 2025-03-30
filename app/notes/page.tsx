@@ -33,20 +33,12 @@ type FollowUp = {
   completed: boolean
 }
 
-// Mock data for suggestions
-const PEOPLE_SUGGESTIONS = [
-  { id: "1", name: "John Smith" },
-  { id: "2", name: "Sarah Johnson" },
-  { id: "3", name: "Michael Brown" },
-  { id: "4", name: "Emily Davis" },
-]
-
 export default function NotesPage() {
   const [text, setText] = useState("")
   const [parsedData, setParsedData] = useState<Person[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestionQuery, setSuggestionQuery] = useState("")
-  const [filteredSuggestions, setFilteredSuggestions] = useState(PEOPLE_SUGGESTIONS)
+  const [filteredSuggestions, setFilteredSuggestions] = useState<{ id: string; name: string }[]>([])
   const [cursorPosition, setCursorPosition] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor")
@@ -116,22 +108,19 @@ export default function NotesPage() {
     const newText = e.target.value
     setText(newText)
 
-    // Get cursor position
     const position = e.target.selectionStart || 0
     setCursorPosition(position)
 
-    // Check if we should show suggestions (after @ symbol)
     const lastAtSymbolIndex = newText.lastIndexOf("@", position)
     if (lastAtSymbolIndex !== -1 && lastAtSymbolIndex < position) {
       const query = newText.substring(lastAtSymbolIndex + 1, position).trim()
       setSuggestionQuery(query)
-
-      // Filter suggestions based on query
-      const filtered = PEOPLE_SUGGESTIONS.filter((person) => person.name.toLowerCase().includes(query.toLowerCase()))
-      setFilteredSuggestions(filtered)
-      setShowSuggestions(filtered.length > 0)
+      setShowSuggestions(false)
+      setFilteredSuggestions([])
     } else {
       setShowSuggestions(false)
+      setSuggestionQuery("")
+      setFilteredSuggestions([])
     }
   }
 
@@ -170,23 +159,6 @@ export default function NotesPage() {
         placeholder="Start typing... Use @name for people and #MMDD for follow-up dates"
         className="min-h-[200px] md:min-h-[300px] font-mono"
       />
-
-      {/* Suggestions popup */}
-      {showSuggestions && (
-        <div className="absolute z-10 mt-1 w-full max-h-[200px] overflow-auto rounded-md border bg-popover shadow-md">
-          <div className="p-2 text-xs text-muted-foreground">People suggestions:</div>
-          {filteredSuggestions.map((person) => (
-            <button
-              key={person.id}
-              className="flex w-full items-center px-4 py-2 text-sm hover:bg-accent"
-              onClick={() => handleSelectPerson(person)}
-            >
-              <User className="mr-2 h-4 w-4" />
-              {person.name}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 
@@ -197,7 +169,7 @@ export default function NotesPage() {
         <div className="text-center py-8 text-muted-foreground">
           <p>Your parsed prayer requests will appear here</p>
           <p className="text-sm mt-2">
-            Try typing <code>@John Smith</code> to get started
+            Try typing <code>@PersonName</code> to get started
           </p>
         </div>
       ) : (
@@ -338,7 +310,7 @@ export default function NotesPage() {
 
       {isMobile ? renderMobileLayout() : renderDesktopLayout()}
 
-      <Dialog open={isFullscreen} onOpenChange={setIsFullscreen} className="max-w-[95vw]">
+      <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>
         <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0">
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4 border-b">
@@ -354,23 +326,6 @@ export default function NotesPage() {
                 placeholder="Start typing... Use @name for people and #MMDD for follow-up dates"
                 className="min-h-[calc(90vh-120px)] w-full font-mono resize-none"
               />
-
-              {/* Suggestions popup (same as above) */}
-              {showSuggestions && (
-                <div className="absolute z-10 mt-1 w-full max-w-[calc(100%-2rem)] max-h-[200px] overflow-auto rounded-md border bg-popover shadow-md">
-                  <div className="p-2 text-xs text-muted-foreground">People suggestions:</div>
-                  {filteredSuggestions.map((person) => (
-                    <button
-                      key={person.id}
-                      className="flex w-full items-center px-4 py-2 text-sm hover:bg-accent"
-                      onClick={() => handleSelectPerson(person)}
-                    >
-                      <User className="mr-2 h-4 w-4" />
-                      {person.name}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
             <div className="p-4 border-t flex justify-end">
               <Button>Save Notes</Button>

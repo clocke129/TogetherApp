@@ -15,45 +15,50 @@ Together is a web application built with Next.js, TypeScript, and Tailwind CSS t
 
 ## Core Data Models
 
+*(Note: When implementing with Firestore, `createdBy` fields should store the Firebase Authentication `uid`, and timestamp fields should use Firestore's `serverTimestamp()`.)*
+
 ### User
-- `id`: string
+- `id`: string (Corresponds to Firebase Auth uid)
 - `email`: string
 - `displayName`: string
-- `createdAt`: timestamp
+- `createdAt`: timestamp *(Firestore server timestamp)*
 - `settings`: object
 
 ### Person
-- `id`: string
+- `id`: string (Firestore document ID)
 - `name`: string
-- `createdBy`: userId
-- `groupIds`: string[]
+- `createdBy`: userId (Firebase Auth uid)
+- `groupIds`: string[] (Array of Group document IDs)
 - `prayerRequests`: PrayerRequest[]
 - `followUps`: FollowUp[]
-- `lastPrayedFor`: timestamp
+- `lastPrayedFor`: timestamp *(Firestore server timestamp)*
+*(Note: Prayer Requests and Follow-ups are stored in subcollections under each Person document)*
 
 ### Group
-- `id`: string
+- `id`: string (Firestore document ID)
 - `name`: string
-- `createdBy`: userId
-- `personIds`: string[]
+- `createdBy`: userId (Firebase Auth uid)
+- `personIds`: string[] (Array of Person document IDs)
 - `prayerDays`: number[] (0-6 representing Sun-Sat)
 - `prayerSettings`: object (random, recent, etc.)
 
 ### PrayerRequest
-- `id`: string
-- `personId`: string
+*(Note: Stored as documents in a subcollection: `/persons/{personId}/prayerRequests/{requestId}`)*
+- `id`: string (Firestore document ID)
+- `personId`: string (Reference to parent Person document ID)
 - `content`: string
-- `createdAt`: timestamp
-- `updatedAt`: timestamp
-- `prayedForDates`: timestamp[]
+- `createdAt`: timestamp *(Firestore server timestamp)*
+- `updatedAt`: timestamp *(Firestore server timestamp)*
+- `prayedForDates`: timestamp[] *(Array of Firestore server timestamps)*
 
 ### FollowUp
-- `id`: string
-- `personId`: string
+*(Note: Stored as documents in a subcollection: `/persons/{personId}/followUps/{followUpId}`)*
+- `id`: string (Firestore document ID)
+- `personId`: string (Reference to parent Person document ID)
 - `content`: string
-- `dueDate`: timestamp
+- `dueDate`: timestamp *(Firestore server timestamp, optional)*
 - `completed`: boolean
-- `completedAt`: timestamp
+- `completedAt`: timestamp *(Firestore server timestamp, optional)*
 - `isRecurring`: boolean
 - `recurringPattern`: object
 
