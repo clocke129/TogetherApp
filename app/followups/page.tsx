@@ -33,8 +33,16 @@ import {
   Timestamp,
   orderBy,
   serverTimestamp,
+  deleteField,
+  FieldValue,
 } from "firebase/firestore"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 // Types
 type Person = {
@@ -204,29 +212,49 @@ export default function FollowupsPage() {
     return `${year}-${month}-${day}`;
   }
 
-  // Get current time as a Timestamp for comparisons
+  // --- Filtering and Sorting Logic --- //
+
+  // Get comparison timestamps
   const now = Timestamp.now();
+  const sevenDaysFromNow = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
   const epochZeroTimestamp = Timestamp.fromDate(new Date(0));
 
   // Filter logic using Timestamps
-  const overdueFollowUps = followUps.filter(
-    (followUp) =>
-      !followUp.completed &&
-      followUp.dueDate < now &&
-      followUp.dueDate.seconds !== epochZeroTimestamp.seconds // Check against epoch zero
-  );
+  const activeFollowUps = followUps.filter((followUp) => !followUp.completed);
 
-  const upcomingFollowUps = followUps.filter(
-    (followUp) => !followUp.completed && followUp.dueDate >= now
-  );
+  const overdueFollowUps = activeFollowUps
+    .filter(
+      (followUp) =>
+        followUp.dueDate < now &&
+        followUp.dueDate.seconds !== epochZeroTimestamp.seconds
+    )
+    .sort((a, b) => a.dueDate.seconds - b.dueDate.seconds); // Sort: Most overdue first
 
-  const noDateFollowUps = followUps.filter(
-    (followUp) =>
-      !followUp.completed &&
-      followUp.dueDate.seconds === epochZeroTimestamp.seconds // Check against epoch zero
-  );
+  const thisWeekFollowUps = activeFollowUps
+     .filter(
+       (followUp) =>
+         followUp.dueDate >= now &&
+         followUp.dueDate < sevenDaysFromNow
+     )
+     .sort((a, b) => a.dueDate.seconds - b.dueDate.seconds); // Sort: Soonest first
+  
+  const futureFollowUps = activeFollowUps
+     .filter(
+       (followUp) => followUp.dueDate >= sevenDaysFromNow
+     )
+     .sort((a, b) => a.dueDate.seconds - b.dueDate.seconds); // Sort: Chronological
 
-  const completedFollowUps = followUps.filter((followUp) => followUp.completed);
+  const noDateFollowUps = activeFollowUps
+    .filter(
+      (followUp) => followUp.dueDate.seconds === epochZeroTimestamp.seconds
+    );
+    // No specific sort needed for no-date items unless based on content/person
+
+  const completedFollowUps = followUps
+      .filter((followUp) => followUp.completed)
+      .sort((a, b) => b.dueDate.seconds - a.dueDate.seconds); // Optional: Sort completed by most recent due date first
+  
+   // --- End Filtering and Sorting --- //
 
   // Get recurring pattern text
   const getRecurringPatternText = (pattern?: RecurringPattern) => {
@@ -289,7 +317,7 @@ export default function FollowupsPage() {
     }
   };
 
-  // Handle editing a follow-up - will need modification to update in Firestore
+  // Handle editing a follow-up - FIX UNDEFINED FIELDS
   const handleEditFollowUp = async () => {
     if (!editingFollowUp || !editingFollowUp.id || !editingFollowUp.personId) {
         console.error("Invalid editing follow-up state.");
@@ -301,21 +329,46 @@ export default function FollowupsPage() {
     const docRef = doc(db, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id);
 
     try {
-      const dataToUpdate = {
+      const isRecurring = editingFollowUp.isRecurring ?? false;
+      const dataToUpdate: {
+          content: string;
+          dueDate: Timestamp;
+          isRecurring: boolean;
+          recurringPattern?: RecurringPattern | FieldValue;
+      } = {
         content: editingFollowUp.content,
-        // Ensure dueDate is a Timestamp, default to epoch 0 if needed
         dueDate: editingFollowUp.dueDate instanceof Timestamp ? editingFollowUp.dueDate : Timestamp.fromDate(new Date(0)),
-        isRecurring: editingFollowUp.isRecurring,
-        recurringPattern: editingFollowUp.isRecurring ? editingFollowUp.recurringPattern : undefined,
-        // Note: completed status is toggled separately
+        isRecurring: isRecurring,
+        recurringPattern: isRecurring ? (editingFollowUp.recurringPattern || { type: "weekly", interval: 1 }) : deleteField(),
       };
+      
       await updateDoc(docRef, dataToUpdate);
       console.log("Follow-up updated successfully.");
 
-      // Update local state for responsiveness
-      setFollowUps(prev => prev.map(fu => 
-         fu.id === editingFollowUp!.id ? { ...fu, ...dataToUpdate } : fu
-      ));
+      // --- Refactored Local State Update --- //
+      setFollowUps(prev => prev.map(fu => {
+         if (fu.id === editingFollowUp!.id) {
+            // Create the updated object based on editing state first
+            const updatedFollowUp: FollowUp = {
+                ...editingFollowUp!,
+                content: dataToUpdate.content, // Update fields from dataToUpdate
+                dueDate: dataToUpdate.dueDate,
+                isRecurring: dataToUpdate.isRecurring,
+                // Handle recurringPattern separately for local state
+                recurringPattern: dataToUpdate.isRecurring 
+                                     ? (dataToUpdate.recurringPattern as RecurringPattern) // Assume it's RecurringPattern if isRecurring is true
+                                     : undefined // Set to undefined locally if not recurring
+            };
+             // Ensure recurringPattern exists if isRecurring is true (can happen if toggled on in dialog)
+             if (updatedFollowUp.isRecurring && !updatedFollowUp.recurringPattern) {
+                  updatedFollowUp.recurringPattern = { type: "weekly", interval: 1 }; 
+             }
+            return updatedFollowUp;
+         } else {
+            return fu;
+         }
+      }));
+      // --- End Refactored Local State Update --- //
 
       setEditingFollowUp(null);
       setIsEditDialogOpen(false);
@@ -468,7 +521,7 @@ export default function FollowupsPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Edit Follow-up Dialog */}
+        {/* Edit Follow-up Dialog - ADD RECURRING INPUTS */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
             {editingFollowUp && (
@@ -511,12 +564,12 @@ export default function FollowupsPage() {
                       }}
                     />
                   </div>
-                  {/* Recurring Switch/Settings */}
+                  {/* Recurring Switch */}
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="edit-recurring" className="text-right">Recurring</Label>
                     <Switch
                       id="edit-recurring"
-                      checked={editingFollowUp.isRecurring}
+                      checked={editingFollowUp.isRecurring ?? false} // Default checked state to false if undefined
                       onCheckedChange={(checked) => {
                         if (!editingFollowUp) return;
                         setEditingFollowUp({
@@ -527,7 +580,57 @@ export default function FollowupsPage() {
                       }}
                     />
                   </div>
-                  {/* Add inputs for recurringPattern if isRecurring is true - TBD if needed */}
+                  
+                  {/* ADD Conditional Recurring Pattern Inputs */} 
+                  {(editingFollowUp.isRecurring ?? false) && (
+                    <div className="grid grid-cols-2 gap-4 pl-10 col-span-4"> {/* Indent slightly */} 
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-recurringType">Frequency</Label>
+                        <Select
+                          value={editingFollowUp.recurringPattern?.type || "weekly"}
+                          onValueChange={(value: "daily" | "weekly" | "monthly" | "yearly") => {
+                            if (!editingFollowUp) return;
+                            setEditingFollowUp({
+                              ...editingFollowUp,
+                              recurringPattern: {
+                                ...(editingFollowUp.recurringPattern as RecurringPattern || { interval: 1 }), // Ensure interval exists
+                                type: value,
+                              },
+                            })
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select frequency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-interval">Every</Label>
+                        <Input
+                          id="edit-interval"
+                          type="number"
+                          min="1"
+                          value={editingFollowUp.recurringPattern?.interval || 1}
+                          onChange={(e) => {
+                            if (!editingFollowUp) return;
+                            setEditingFollowUp({
+                              ...editingFollowUp,
+                              recurringPattern: {
+                                ...(editingFollowUp.recurringPattern as RecurringPattern || { type: "weekly" }), // Ensure type exists
+                                interval: Number.parseInt(e.target.value) || 1,
+                              },
+                            })
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                 </div>
                 <DialogFooter>
@@ -545,235 +648,309 @@ export default function FollowupsPage() {
           <TabsTrigger value="completed">Completed</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="active" className="space-y-6">
-          {/* Overdue Follow-ups */}
-          {overdueFollowUps.length > 0 && (
-            <Card className="border-destructive/20">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-destructive" />
-                  <span>Overdue</span>
-                  <Badge variant="destructive">{overdueFollowUps.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {overdueFollowUps.map((followUp) => (
-                    <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                      <Checkbox
-                        id={followUp.id}
-                        checked={followUp.completed}
-                        onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                        className="mt-1"
-                      />
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <label htmlFor={followUp.id} className="font-medium cursor-pointer">
-                            {followUp.content}
-                          </label>
-                          {followUp.isRecurring && (
-                            <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                              <Repeat className="h-3 w-3" />
-                              {getRecurringPatternText(followUp.recurringPattern)}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <User className="h-3 w-3" />
-                            <span>{getPersonNameById(followUp.personId)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="destructive" className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {formatDate(followUp.dueDate.toDate())}
-                            </Badge>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => openEditDialog(followUp)}
-                            >
-                              <CalendarPlus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
+        <TabsContent value="active" className="space-y-2">
+           <Accordion type="multiple" className="w-full space-y-2" defaultValue={['overdue', 'this-week']}>
+              {overdueFollowUps.length > 0 && (
+                 <AccordionItem value="overdue">
+                   <AccordionTrigger className="p-3 bg-card border border-destructive/20 rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                      <div className="flex items-center gap-2 text-lg font-medium">
+                        <AlertTriangle className="h-5 w-5 text-destructive" />
+                        <span>Overdue</span>
+                        <Badge variant="destructive">{overdueFollowUps.length}</Badge>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Upcoming Follow-ups */}
-          {upcomingFollowUps.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-shrub" />
-                  <span>Upcoming</span>
-                  <Badge variant="outline">{upcomingFollowUps.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {upcomingFollowUps.map((followUp) => (
-                    <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                      <Checkbox
-                        id={followUp.id}
-                        checked={followUp.completed}
-                        onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                        className="mt-1"
-                      />
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <label htmlFor={followUp.id} className="font-medium cursor-pointer">
-                            {followUp.content}
-                          </label>
-                          {followUp.isRecurring && (
-                            <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                              <Repeat className="h-3 w-3" />
-                              {getRecurringPatternText(followUp.recurringPattern)}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <User className="h-3 w-3" />
-                            <span>{getPersonNameById(followUp.personId)}</span>
+                   </AccordionTrigger>
+                   <AccordionContent className="p-0">
+                      <Card className="rounded-t-none border-t-0 border-destructive/20">
+                        <CardContent className="pt-4">
+                          <div className="space-y-4">
+                            {overdueFollowUps.map((followUp) => (
+                              <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
+                                <Checkbox
+                                  id={followUp.id}
+                                  checked={followUp.completed}
+                                  onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
+                                  className="mt-1"
+                                />
+                                <div className="space-y-1 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <label htmlFor={followUp.id} className="font-medium cursor-pointer">
+                                      {followUp.content}
+                                    </label>
+                                    {followUp.isRecurring && (
+                                      <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
+                                        <Repeat className="h-3 w-3" />
+                                        {getRecurringPatternText(followUp.recurringPattern)}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                      <User className="h-3 w-3" />
+                                      <span>{getPersonNameById(followUp.personId)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="destructive" className="flex items-center gap-1">
+                                        <Clock className="h-3 w-3" />
+                                        {formatDate(followUp.dueDate.toDate())}
+                                      </Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => openEditDialog(followUp)}
+                                      >
+                                        <CalendarPlus className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(followUp.dueDate.toDate())}
-                            </Badge>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => openEditDialog(followUp)}
-                            >
-                              <CalendarPlus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                        </CardContent>
+                      </Card>
+                   </AccordionContent>
+                 </AccordionItem>
+              )}
 
-          {/* No Date Follow-ups */}
-          {noDateFollowUps.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <span>No Date Assigned</span>
-                  <Badge variant="outline">{noDateFollowUps.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {noDateFollowUps.map((followUp) => (
-                    <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                      <Checkbox
-                        id={followUp.id}
-                        checked={followUp.completed}
-                        onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                        className="mt-1"
-                      />
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <label htmlFor={followUp.id} className="font-medium cursor-pointer">
-                            {followUp.content}
-                          </label>
-                          {followUp.isRecurring && (
-                            <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                              <Repeat className="h-3 w-3" />
-                              {getRecurringPatternText(followUp.recurringPattern)}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <User className="h-3 w-3" />
-                          <span>{getPersonNameById(followUp.personId)}</span>
-                        </div>
+              {thisWeekFollowUps.length > 0 && (
+                 <AccordionItem value="this-week">
+                   <AccordionTrigger className="p-3 bg-card border rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                      <div className="flex items-center gap-2 text-lg font-medium">
+                        <Calendar className="h-5 w-5 text-shrub" />
+                        <span>This Week</span>
+                        <Badge variant="outline">{thisWeekFollowUps.length}</Badge>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => setDateForFollowUp(followUp.id)}>
-                        Set Date
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                   </AccordionTrigger>
+                   <AccordionContent className="p-0">
+                      <Card className="rounded-t-none border-t-0">
+                         <CardContent className="pt-4">
+                            <div className="space-y-4">
+                              {thisWeekFollowUps.map((followUp) => (
+                                <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
+                                  <Checkbox
+                                    id={followUp.id}
+                                    checked={followUp.completed}
+                                    onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
+                                    className="mt-1"
+                                  />
+                                  <div className="space-y-1 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <label htmlFor={followUp.id} className="font-medium cursor-pointer">
+                                        {followUp.content}
+                                      </label>
+                                      {followUp.isRecurring && (
+                                        <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
+                                          <Repeat className="h-3 w-3" />
+                                          {getRecurringPatternText(followUp.recurringPattern)}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <User className="h-3 w-3" />
+                                        <span>{getPersonNameById(followUp.personId)}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="flex items-center gap-1">
+                                          <Calendar className="h-3 w-3" />
+                                          {formatDate(followUp.dueDate.toDate())}
+                                        </Badge>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() => openEditDialog(followUp)}
+                                        >
+                                          <CalendarPlus className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                         </CardContent>
+                      </Card>
+                   </AccordionContent>
+                 </AccordionItem>
+              )}
+              
+              {futureFollowUps.length > 0 && (
+                 <AccordionItem value="future">
+                   <AccordionTrigger className="p-3 bg-card border rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                      <div className="flex items-center gap-2 text-lg font-medium">
+                        <Calendar className="h-5 w-5 text-shrub" />
+                        <span>Future</span>
+                        <Badge variant="outline">{futureFollowUps.length}</Badge>
+                      </div>
+                   </AccordionTrigger>
+                   <AccordionContent className="p-0">
+                      <Card className="rounded-t-none border-t-0">
+                         <CardContent className="pt-4">
+                            <div className="space-y-4">
+                              {futureFollowUps.map((followUp) => (
+                                <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
+                                  <Checkbox
+                                    id={followUp.id}
+                                    checked={followUp.completed}
+                                    onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
+                                    className="mt-1"
+                                  />
+                                  <div className="space-y-1 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <label htmlFor={followUp.id} className="font-medium cursor-pointer">
+                                        {followUp.content}
+                                      </label>
+                                      {followUp.isRecurring && (
+                                        <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
+                                          <Repeat className="h-3 w-3" />
+                                          {getRecurringPatternText(followUp.recurringPattern)}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <User className="h-3 w-3" />
+                                        <span>{getPersonNameById(followUp.personId)}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="flex items-center gap-1">
+                                          <Calendar className="h-3 w-3" />
+                                          {formatDate(followUp.dueDate.toDate())}
+                                        </Badge>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() => openEditDialog(followUp)}
+                                        >
+                                          <CalendarPlus className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                         </CardContent>
+                      </Card>
+                   </AccordionContent>
+                 </AccordionItem>
+              )}
+              
+              {noDateFollowUps.length > 0 && (
+                 <AccordionItem value="no-date">
+                   <AccordionTrigger className="p-3 bg-card border rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                      <div className="flex items-center gap-2 text-lg font-medium">
+                         <span>No Date Assigned</span>
+                         <Badge variant="outline">{noDateFollowUps.length}</Badge>
+                      </div>
+                   </AccordionTrigger>
+                   <AccordionContent className="p-0">
+                      <Card className="rounded-t-none border-t-0">
+                         <CardContent className="pt-4">
+                            <div className="space-y-4">
+                              {noDateFollowUps.map((followUp) => (
+                                <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
+                                  <Checkbox
+                                    id={followUp.id}
+                                    checked={followUp.completed}
+                                    onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
+                                    className="mt-1"
+                                  />
+                                  <div className="space-y-1 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <label htmlFor={followUp.id} className="font-medium cursor-pointer">
+                                        {followUp.content}
+                                      </label>
+                                      {followUp.isRecurring && (
+                                        <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
+                                          <Repeat className="h-3 w-3" />
+                                          {getRecurringPatternText(followUp.recurringPattern)}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                      <User className="h-3 w-3" />
+                                      <span>{getPersonNameById(followUp.personId)}</span>
+                                    </div>
+                                  </div>
+                                  <Button variant="outline" size="sm" onClick={() => setDateForFollowUp(followUp.id)}>
+                                    Set Date
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                         </CardContent>
+                      </Card>
+                   </AccordionContent>
+                 </AccordionItem>
+              )}
+           </Accordion>
 
-          {overdueFollowUps.length === 0 && upcomingFollowUps.length === 0 && noDateFollowUps.length === 0 && (
-            <div className="text-center py-12">
-              <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium">No active follow-ups</h3>
-              <p className="text-muted-foreground mt-1">All your follow-ups are completed!</p>
-              <Button className="mt-4 bg-shrub hover:bg-shrub/90" onClick={() => setIsAddDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Follow-up
-              </Button>
-            </div>
-          )}
+           {overdueFollowUps.length === 0 && thisWeekFollowUps.length === 0 && futureFollowUps.length === 0 && noDateFollowUps.length === 0 && (
+             <div className="text-center py-12">
+               <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+               <h3 className="text-lg font-medium">No active follow-ups</h3>
+               <p className="text-muted-foreground mt-1">All your follow-ups are completed!</p>
+               <Button className="mt-4 bg-shrub hover:bg-shrub/90" onClick={() => setIsAddDialogOpen(true)}>
+                 <Plus className="mr-2 h-4 w-4" />
+                 Add Follow-up
+               </Button>
+             </div>
+           )}
         </TabsContent>
 
         <TabsContent value="completed">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Check className="h-5 w-5 text-primary" />
-                <span>Completed</span>
-                <Badge variant="outline">{completedFollowUps.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {completedFollowUps.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>No completed follow-ups yet</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {completedFollowUps.map((followUp) => (
-                    <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                      <Checkbox
-                        id={followUp.id}
-                        checked={followUp.completed}
-                        onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                        className="mt-1"
-                      />
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <label htmlFor={followUp.id} className="line-through text-muted-foreground cursor-pointer">
-                            {followUp.content}
-                          </label>
-                          {followUp.isRecurring && (
-                            <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                              <Repeat className="h-3 w-3" />
-                              {getRecurringPatternText(followUp.recurringPattern)}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <User className="h-3 w-3" />
-                            <span>{getPersonNameById(followUp.personId)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+           <Card>
+             <CardHeader className="pb-3">
+               <CardTitle className="text-lg flex items-center gap-2">
+                  <Check className="h-5 w-5 text-primary" />
+                  <span>Completed</span>
+                  <Badge variant="outline">{completedFollowUps.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                 {completedFollowUps.length === 0 ? (
+                   <div className="text-center py-8 text-muted-foreground">
+                     <p>No completed follow-ups yet</p>
+                   </div>
+                 ) : (
+                   <div className="space-y-4">
+                     {completedFollowUps.map((followUp) => (
+                       <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
+                         <Checkbox
+                           id={followUp.id}
+                           checked={followUp.completed}
+                           onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
+                           className="mt-1"
+                         />
+                         <div className="space-y-1 flex-1">
+                           <div className="flex items-center gap-2">
+                             <label htmlFor={followUp.id} className="line-through text-muted-foreground cursor-pointer">
+                               {followUp.content}
+                             </label>
+                             {followUp.isRecurring && (
+                               <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
+                                 <Repeat className="h-3 w-3" />
+                                 {getRecurringPatternText(followUp.recurringPattern)}
+                               </Badge>
+                             )}
+                           </div>
+                           <div className="flex items-center justify-between">
+                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                               <User className="h-3 w-3" />
+                               <span>{getPersonNameById(followUp.personId)}</span>
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+              </CardContent>
+            </Card>
         </TabsContent>
       </Tabs>
     </div>
