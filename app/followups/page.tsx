@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +20,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { useAuth } from "@/context/AuthContext"
+import { db } from "@/lib/firebaseConfig"
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  updateDoc,
+  addDoc,
+  Timestamp,
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore"
+import { Textarea } from "@/components/ui/textarea"
 
 // Types
 type Person = {
@@ -36,22 +51,23 @@ type FollowUp = {
   id: string
   personId: string
   content: string
-  dueDate: Date
+  dueDate: Timestamp
   completed: boolean
   isRecurring?: boolean
   recurringPattern?: RecurringPattern
 }
 
 export default function FollowupsPage() {
-  // Initialize state with empty arrays
-  const [people, setPeople] = useState<Person[]>([]) 
-  const [followUps, setFollowUps] = useState<FollowUp[]>([]) 
+  // State for data
+  const [peopleMap, setPeopleMap] = useState<Record<string, string>>({})
+  const [followUps, setFollowUps] = useState<FollowUp[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   // Initialize newFollowUp with default/empty values
   const [newFollowUp, setNewFollowUp] = useState<Partial<FollowUp>>({
     content: "",
     personId: "",
-    dueDate: new Date(), // Or null/undefined if appropriate
+    dueDate: Timestamp.now(),
     completed: false,
     isRecurring: false,
     recurringPattern: {
@@ -63,130 +79,154 @@ export default function FollowupsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
-  // useEffect hook will be needed here to fetch people and followUps from Firestore
-  // useEffect(() => {
-  //   // Fetch data based on logged-in user
-  // }, []);
+  const { user } = useAuth()
 
-  // Get person by ID - potentially update to use fetched people state
-  const getPersonById = (personId: string) => {
-    return people.find((person) => person.id === personId)
+  // --- Data Fetching --- //
+  useEffect(() => {
+    if (!user) {
+      console.log("No user logged in, skipping data fetch.")
+      setFollowUps([])
+      setPeopleMap({})
+      setIsLoading(false)
+      return
+    }
+
+    const fetchData = async () => {
+      console.log("Fetching data for user:", user.uid)
+      setIsLoading(true)
+      try {
+        // 1. Fetch People created by this user
+        const peopleQuery = query(
+          collection(db, "persons"),
+          where("createdBy", "==", user.uid)
+        )
+        const peopleSnapshot = await getDocs(peopleQuery)
+        const fetchedPeople: Person[] = []
+        const tempPeopleMap: Record<string, string> = {}
+        peopleSnapshot.forEach((doc) => {
+          const personData = doc.data() as Omit<Person, "id">
+          fetchedPeople.push({ id: doc.id, ...personData })
+          tempPeopleMap[doc.id] = personData.name
+        })
+        setPeopleMap(tempPeopleMap)
+        console.log("Fetched people map:", tempPeopleMap)
+
+        // 2. Fetch FollowUps for each person
+        let allFollowUps: FollowUp[] = []
+        for (const person of fetchedPeople) {
+          // Consider adding orderBy('dueDate') or similar if needed
+          const followUpsQuery = query(collection(db, "persons", person.id, "followUps"))
+          const followUpsSnapshot = await getDocs(followUpsQuery)
+          followUpsSnapshot.forEach((doc) => {
+            // Type assertion, assuming data matches FollowUp structure
+            allFollowUps.push({ id: doc.id, ...(doc.data() as Omit<FollowUp, "id">) })
+          })
+        }
+        setFollowUps(allFollowUps)
+        console.log("Fetched follow-ups count:", allFollowUps.length)
+
+      } catch (error) {
+        console.error("Error fetching data: ", error)
+        // Optionally set an error state here
+      } finally {
+        setIsLoading(false)
+        console.log("Data fetching complete.")
+      }
+    }
+
+    fetchData()
+
+    // No cleanup needed for getDocs, but would be for onSnapshot
+  }, [user])
+  // --- End Data Fetching --- //
+
+  // Get person name by ID using the map
+  const getPersonNameById = (personId: string): string => {
+    return peopleMap[personId] || "Unknown Person"
   }
 
   // Toggle follow-up completion
-  const toggleFollowUpCompletion = (followUpId: string) => {
-    // Comment out original logic to fix linter errors
-    /*
-    setFollowUps((prev) =>
-      prev.map((followUp) => (followUp.id === followUpId ? { ...followUp, completed: !followUp.completed } : followUp)),
-    )
-    */
-    console.log("Toggling follow up completion (needs Firestore implementation):", followUpId);
-  }
-
-  // Format date for display
-  const formatDate = (date: Date) => {
-    if (date.getTime() === 0) return "No date"
-
-    const today = new Date()
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-
-    const isToday = date.toDateString() === today.toDateString()
-    const isTomorrow = date.toDateString() === tomorrow.toDateString()
-
-    if (isToday) return "Today"
-    if (isTomorrow) return "Tomorrow"
-
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-  }
-
-  // Format date for input
-  const formatDateForInput = (date: Date) => {
-    if (date.getTime() === 0) return ""
-
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-
-    return `${year}-${month}-${day}`
-  }
-
-  // Handle adding a new follow-up - will need modification to save to Firestore
-  const handleAddFollowUp = () => {
-    // Comment out original logic to fix linter errors
-    /*
-    if (!newFollowUp.content || !newFollowUp.personId) return
-    const newId = `f${Date.now()}`
-    setFollowUps((prev) => [
-      ...prev,
-      {
-        id: newId,
-        personId: newFollowUp.personId || "",
-        content: newFollowUp.content || "",
-        dueDate: newFollowUp.dueDate || new Date(),
-        completed: false,
-        isRecurring: newFollowUp.isRecurring,
-        recurringPattern: newFollowUp.isRecurring ? newFollowUp.recurringPattern : undefined,
-      },
-    ])
-    */
-    console.log("Adding new follow up (needs Firestore implementation):", newFollowUp);
-    // Reset form (can stay)
-    setNewFollowUp({
-      content: "",
-      personId: "",
-      dueDate: new Date(), // Or null/undefined if appropriate
-      completed: false,
-      isRecurring: false,
-      recurringPattern: {
-        type: "weekly",
-        interval: 1,
-      },
-    })
-    setIsAddDialogOpen(false)
-  }
-
-  // Handle editing a follow-up - will need modification to update in Firestore
-  const handleEditFollowUp = () => {
-    // Comment out original logic to fix linter errors
-    /*
-    if (!editingFollowUp) return
-    setFollowUps((prev) => prev.map((followUp) => (followUp.id === editingFollowUp.id ? editingFollowUp : followUp)))
-    */
-    console.log("Updating follow up (needs Firestore implementation):", editingFollowUp);
-    setEditingFollowUp(null)
-    setIsEditDialogOpen(false)
-  }
-
-  // Open edit dialog for a follow-up
-  const openEditDialog = (followUp: FollowUp) => {
-    setEditingFollowUp(followUp)
-    setIsEditDialogOpen(true)
-  }
-
-  // Set date for a follow-up with no date
-  const setDateForFollowUp = (followUpId: string) => {
-    const followUp = followUps.find((f) => f.id === followUpId)
-    if (followUp) {
-      setEditingFollowUp(followUp)
-      setIsEditDialogOpen(true)
+  const toggleFollowUpCompletion = async (followUpId: string) => {
+    console.log(`Toggling completion for follow-up ID: ${followUpId}`);
+    // Find the full followUp object to get the personId
+    const followUpToUpdate = followUps.find(fu => fu.id === followUpId);
+    if (!followUpToUpdate) {
+      console.error("Could not find follow-up to toggle.");
+      return;
     }
+
+    const docRef = doc(db, "persons", followUpToUpdate.personId, "followUps", followUpId);
+    try {
+      await updateDoc(docRef, {
+        completed: !followUpToUpdate.completed,
+        // Optionally add completedAt timestamp
+        // completedAt: !followUpToUpdate.completed ? serverTimestamp() : null 
+      });
+      console.log("Toggle successful.");
+      // Update local state immediately for responsiveness
+      setFollowUps(prev => prev.map(fu => 
+        fu.id === followUpId ? { ...fu, completed: !fu.completed } : fu
+      ));
+    } catch (error) {
+      console.error("Error toggling follow-up completion:", error);
+      alert("Failed to update follow-up status. Please try again.");
+    }
+  };
+
+  // Format date for display - needs to accept Timestamp
+  const formatDate = (date: Timestamp | Date): string => {
+    // Convert Timestamp to Date if necessary
+    const jsDate = date instanceof Timestamp ? date.toDate() : date;
+    if (jsDate.getTime() === 0) return "No date";
+
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const isToday = jsDate.toDateString() === today.toDateString();
+    const isTomorrow = jsDate.toDateString() === tomorrow.toDateString();
+
+    if (isToday) return "Today";
+    if (isTomorrow) return "Tomorrow";
+
+    return jsDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
-  // Get overdue follow-ups
+  // Format date for input - needs to accept Timestamp
+  const formatDateForInput = (date: Timestamp | Date): string => {
+    const jsDate = date instanceof Timestamp ? date.toDate() : date;
+    if (jsDate.getTime() === 0) return "";
+
+    const year = jsDate.getFullYear();
+    const month = String(jsDate.getMonth() + 1).padStart(2, "0");
+    const day = String(jsDate.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  // Get current time as a Timestamp for comparisons
+  const now = Timestamp.now();
+  const epochZeroTimestamp = Timestamp.fromDate(new Date(0));
+
+  // Filter logic using Timestamps
   const overdueFollowUps = followUps.filter(
-    (followUp) => !followUp.completed && followUp.dueDate < new Date() && followUp.dueDate.getTime() !== 0,
-  )
+    (followUp) =>
+      !followUp.completed &&
+      followUp.dueDate < now &&
+      followUp.dueDate.seconds !== epochZeroTimestamp.seconds // Check against epoch zero
+  );
 
-  // Get upcoming follow-ups
-  const upcomingFollowUps = followUps.filter((followUp) => !followUp.completed && followUp.dueDate >= new Date())
+  const upcomingFollowUps = followUps.filter(
+    (followUp) => !followUp.completed && followUp.dueDate >= now
+  );
 
-  // Get follow-ups with no date
-  const noDateFollowUps = followUps.filter((followUp) => !followUp.completed && followUp.dueDate.getTime() === 0)
+  const noDateFollowUps = followUps.filter(
+    (followUp) =>
+      !followUp.completed &&
+      followUp.dueDate.seconds === epochZeroTimestamp.seconds // Check against epoch zero
+  );
 
-  // Get completed follow-ups
-  const completedFollowUps = followUps.filter((followUp) => followUp.completed)
+  const completedFollowUps = followUps.filter((followUp) => followUp.completed);
 
   // Get recurring pattern text
   const getRecurringPatternText = (pattern?: RecurringPattern) => {
@@ -206,6 +246,105 @@ export default function FollowupsPage() {
     }
   }
 
+  // Handle adding a new follow-up - will need modification to save to Firestore
+  const handleAddFollowUp = async () => {
+    if (!newFollowUp.content || !newFollowUp.personId) {
+      alert("Please select a person and enter content for the follow-up.");
+      return;
+    }
+    if (!user) {
+      alert("You must be logged in to add a follow-up.")
+      return;
+    }
+
+    console.log("Adding new follow-up:", newFollowUp);
+    const collectionRef = collection(db, "persons", newFollowUp.personId, "followUps");
+    
+    try {
+      const docToAdd = {
+        personId: newFollowUp.personId,
+        content: newFollowUp.content,
+        // Ensure dueDate is a Timestamp, default to epoch 0 if needed
+        dueDate: newFollowUp.dueDate instanceof Timestamp ? newFollowUp.dueDate : Timestamp.fromDate(new Date(0)), 
+        completed: false,
+        createdBy: user.uid, // Add createdBy field
+        createdAt: serverTimestamp(), // Add createdAt timestamp
+        isRecurring: newFollowUp.isRecurring,
+        recurringPattern: newFollowUp.isRecurring ? newFollowUp.recurringPattern : undefined,
+      };
+      
+      const docRef = await addDoc(collectionRef, docToAdd);
+      console.log("Follow-up added successfully with ID:", docRef.id);
+
+      // Add to local state for responsiveness
+      setFollowUps(prev => [...prev, { id: docRef.id, ...docToAdd }]);
+
+      // Reset form and close dialog
+      setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false, isRecurring: false, recurringPattern: { type: "weekly", interval: 1 } });
+      setIsAddDialogOpen(false);
+
+    } catch (error) {
+      console.error("Error adding follow-up:", error);
+      alert("Failed to add follow-up. Please try again.");
+    }
+  };
+
+  // Handle editing a follow-up - will need modification to update in Firestore
+  const handleEditFollowUp = async () => {
+    if (!editingFollowUp || !editingFollowUp.id || !editingFollowUp.personId) {
+        console.error("Invalid editing follow-up state.");
+        alert("Cannot save changes, invalid data.");
+        return;
+    }
+
+    console.log("Saving edits for follow-up:", editingFollowUp);
+    const docRef = doc(db, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id);
+
+    try {
+      const dataToUpdate = {
+        content: editingFollowUp.content,
+        // Ensure dueDate is a Timestamp, default to epoch 0 if needed
+        dueDate: editingFollowUp.dueDate instanceof Timestamp ? editingFollowUp.dueDate : Timestamp.fromDate(new Date(0)),
+        isRecurring: editingFollowUp.isRecurring,
+        recurringPattern: editingFollowUp.isRecurring ? editingFollowUp.recurringPattern : undefined,
+        // Note: completed status is toggled separately
+      };
+      await updateDoc(docRef, dataToUpdate);
+      console.log("Follow-up updated successfully.");
+
+      // Update local state for responsiveness
+      setFollowUps(prev => prev.map(fu => 
+         fu.id === editingFollowUp!.id ? { ...fu, ...dataToUpdate } : fu
+      ));
+
+      setEditingFollowUp(null);
+      setIsEditDialogOpen(false);
+
+    } catch (error) {
+      console.error("Error updating follow-up:", error);
+      alert("Failed to save changes. Please try again.");
+    }
+  };
+
+  // Open edit dialog for a follow-up
+  const openEditDialog = (followUp: FollowUp) => {
+    setEditingFollowUp(followUp)
+    setIsEditDialogOpen(true)
+  }
+
+  // Set date for a follow-up with no date
+  const setDateForFollowUp = (followUpId: string) => {
+    const followUp = followUps.find((f) => f.id === followUpId)
+    if (followUp) {
+      setEditingFollowUp(followUp)
+      setIsEditDialogOpen(true)
+    }
+  }
+
+  if (isLoading) {
+    return <div className="flex justify-center items-center min-h-screen"><p>Loading Follow-ups...</p></div>
+  }
+
   return (
     <div className="mobile-container pb-16 md:pb-6">
       <div className="mb-4 md:mb-6 flex items-center justify-between">
@@ -215,15 +354,15 @@ export default function FollowupsPage() {
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-shrub hover:bg-shrub/90">
-              <Plus className="mr-2 h-4 w-4" />
-              New Follow-up
+            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90">
+              <Plus className="h-4 w-4" />
+              Add Follow-up
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Add New Follow-up</DialogTitle>
-              <DialogDescription>Create a new follow-up item to track</DialogDescription>
+              <DialogDescription>Enter the details for the new follow-up item.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
@@ -245,23 +384,24 @@ export default function FollowupsPage() {
                     <SelectValue placeholder="Select a person" />
                   </SelectTrigger>
                   <SelectContent>
-                    {people.map((person) => (
-                      <SelectItem key={person.id} value={person.id}>
-                        {person.name}
+                    {Object.entries(peopleMap).map(([id, name]) => (
+                      <SelectItem key={id} value={id}>
+                        {name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="dueDate">Due Date</Label>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="dueDate" className="text-right">Due Date</Label>
                 <Input
                   id="dueDate"
                   type="date"
-                  value={formatDateForInput(newFollowUp.dueDate || new Date())}
+                  className="col-span-3"
+                  value={formatDateForInput(newFollowUp.dueDate?.toDate() || Timestamp.now().toDate())}
                   onChange={(e) => {
-                    const date = e.target.value ? new Date(e.target.value) : new Date(0)
-                    setNewFollowUp({ ...newFollowUp, dueDate: date })
+                    const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.fromDate(new Date(0));
+                    setNewFollowUp({ ...newFollowUp, dueDate: dateValue })
                   }}
                 />
               </div>
@@ -323,12 +463,7 @@ export default function FollowupsPage() {
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddFollowUp} className="bg-shrub hover:bg-shrub/90">
-                Add Follow-up
-              </Button>
+              <Button onClick={handleAddFollowUp}>Save Follow-up</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -336,124 +471,70 @@ export default function FollowupsPage() {
         {/* Edit Follow-up Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Edit Follow-up</DialogTitle>
-              <DialogDescription>Update the follow-up details</DialogDescription>
-            </DialogHeader>
             {editingFollowUp && (
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-content">Follow-up Item</Label>
-                  <Input
-                    id="edit-content"
-                    value={editingFollowUp.content}
-                    onChange={(e) => setEditingFollowUp({ ...editingFollowUp, content: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-person">Person</Label>
-                  <Select
-                    value={editingFollowUp.personId}
-                    onValueChange={(value) => setEditingFollowUp({ ...editingFollowUp, personId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a person" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {people.map((person) => (
-                        <SelectItem key={person.id} value={person.id}>
-                          {person.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-dueDate">Due Date</Label>
-                  <Input
-                    id="edit-dueDate"
-                    type="date"
-                    value={formatDateForInput(editingFollowUp.dueDate)}
-                    onChange={(e) => {
-                      const date = e.target.value ? new Date(e.target.value) : new Date(0)
-                      setEditingFollowUp({ ...editingFollowUp, dueDate: date })
-                    }}
-                  />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="edit-recurring"
-                    checked={editingFollowUp.isRecurring}
-                    onCheckedChange={(checked) => {
-                      setEditingFollowUp({
-                        ...editingFollowUp,
-                        isRecurring: checked,
-                        recurringPattern: checked
-                          ? editingFollowUp.recurringPattern || { type: "weekly", interval: 1 }
-                          : undefined,
-                      })
-                    }}
-                  />
-                  <Label htmlFor="edit-recurring">Recurring Follow-up</Label>
-                </div>
-
-                {editingFollowUp.isRecurring && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="edit-recurringType">Frequency</Label>
-                      <Select
-                        value={editingFollowUp.recurringPattern?.type || "weekly"}
-                        onValueChange={(value: "daily" | "weekly" | "monthly" | "yearly") =>
-                          setEditingFollowUp({
-                            ...editingFollowUp,
-                            recurringPattern: {
-                              ...(editingFollowUp.recurringPattern as RecurringPattern),
-                              type: value,
-                            },
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select frequency" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="yearly">Yearly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="edit-interval">Every</Label>
-                      <Input
-                        id="edit-interval"
-                        type="number"
-                        min="1"
-                        value={editingFollowUp.recurringPattern?.interval || 1}
-                        onChange={(e) =>
-                          setEditingFollowUp({
-                            ...editingFollowUp,
-                            recurringPattern: {
-                              ...(editingFollowUp.recurringPattern as RecurringPattern),
-                              interval: Number.parseInt(e.target.value) || 1,
-                            },
-                          })
-                        }
-                      />
-                    </div>
+              <>
+                <DialogHeader>
+                  <DialogTitle>Edit Follow-up</DialogTitle>
+                  <DialogDescription>Update the details for this follow-up item.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  {/* Person (Readonly or Select) */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                     <Label className="text-right">Person</Label>
+                     <Input className="col-span-3" readOnly value={getPersonNameById(editingFollowUp.personId)} />
                   </div>
-                )}
-              </div>
+                  {/* Content Textarea */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="edit-content" className="text-right">Content</Label>
+                    <Textarea
+                      id="edit-content"
+                      className="col-span-3"
+                      value={editingFollowUp.content}
+                      onChange={(e) => {
+                        if (!editingFollowUp) return;
+                        setEditingFollowUp({ ...editingFollowUp, content: e.target.value })
+                      }}
+                    />
+                  </div>
+                  {/* Due Date Input */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="edit-dueDate" className="text-right">Due Date</Label>
+                    <Input
+                      id="edit-dueDate"
+                      type="date"
+                      className="col-span-3"
+                      value={formatDateForInput(editingFollowUp.dueDate)}
+                      onChange={(e) => {
+                        if (!editingFollowUp) return;
+                        const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.fromDate(new Date(0));
+                        setEditingFollowUp({ ...editingFollowUp, dueDate: dateValue })
+                      }}
+                    />
+                  </div>
+                  {/* Recurring Switch/Settings */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="edit-recurring" className="text-right">Recurring</Label>
+                    <Switch
+                      id="edit-recurring"
+                      checked={editingFollowUp.isRecurring}
+                      onCheckedChange={(checked) => {
+                        if (!editingFollowUp) return;
+                        setEditingFollowUp({
+                          ...editingFollowUp,
+                          isRecurring: checked,
+                          recurringPattern: checked ? editingFollowUp.recurringPattern || { type: "weekly", interval: 1 } : undefined,
+                        })
+                      }}
+                    />
+                  </div>
+                  {/* Add inputs for recurringPattern if isRecurring is true - TBD if needed */}
+
+                </div>
+                <DialogFooter>
+                  <Button onClick={handleEditFollowUp}>Save Changes</Button>
+                </DialogFooter>
+              </>
             )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleEditFollowUp} className="bg-shrub hover:bg-shrub/90">
-                Save Changes
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -500,12 +581,12 @@ export default function FollowupsPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <User className="h-3 w-3" />
-                            <span>{getPersonById(followUp.personId)?.name}</span>
+                            <span>{getPersonNameById(followUp.personId)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge variant="destructive" className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {formatDate(followUp.dueDate)}
+                              {formatDate(followUp.dueDate.toDate())}
                             </Badge>
                             <Button
                               variant="ghost"
@@ -560,12 +641,12 @@ export default function FollowupsPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <User className="h-3 w-3" />
-                            <span>{getPersonById(followUp.personId)?.name}</span>
+                            <span>{getPersonNameById(followUp.personId)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {formatDate(followUp.dueDate)}
+                              {formatDate(followUp.dueDate.toDate())}
                             </Badge>
                             <Button
                               variant="ghost"
@@ -618,7 +699,7 @@ export default function FollowupsPage() {
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <User className="h-3 w-3" />
-                          <span>{getPersonById(followUp.personId)?.name}</span>
+                          <span>{getPersonNameById(followUp.personId)}</span>
                         </div>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => setDateForFollowUp(followUp.id)}>
@@ -683,7 +764,7 @@ export default function FollowupsPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <User className="h-3 w-3" />
-                            <span>{getPersonById(followUp.personId)?.name}</span>
+                            <span>{getPersonNameById(followUp.personId)}</span>
                           </div>
                         </div>
                       </div>
