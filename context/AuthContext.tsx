@@ -9,7 +9,10 @@ interface AuthContextType {
   loading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
+// Default context value matches the type
+const defaultAuthContextValue: AuthContextType = { user: null, loading: true };
+
+const AuthContext = createContext<AuthContextType>(defaultAuthContextValue);
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -20,28 +23,40 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Ensure auth is initialized before subscribing
+    if (!auth) {
+        console.error("Firebase Auth is not initialized, cannot subscribe to state changes.");
+        setLoading(false); // Set loading to false as we can't determine state
+        return;
+    }
+
+    console.log("Setting up Firebase Auth listener...");
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
-      console.log('Auth state changed, user:', currentUser?.uid || 'null'); // Add logging
+      console.log('Auth state changed, user:', currentUser?.uid || 'null');
+    }, (error) => {
+      // Add error handling for the listener itself
+      console.error("Error in onAuthStateChanged listener:", error);
+      setLoading(false);
     });
 
     // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, []);
+    return () => {
+        console.log("Cleaning up Firebase Auth listener.");
+        unsubscribe();
+    }
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   const value = {
     user,
     loading,
   };
 
-  // Avoid rendering children until auth state is determined
-  // This prevents potential flashes of content meant for logged-in/out users
-  // return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
-  // Update: Render children immediately but provide loading state
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// Custom hook to use the auth context
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {

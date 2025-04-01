@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebaseConfig';
@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { useEffect } from 'react';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -22,13 +21,14 @@ export default function SignupPage() {
   const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    // Redirect if user is already logged in and auth state is determined
+    // Redirect authenticated users away from signup page
     if (!authLoading && user) {
+      console.log("User already logged in, redirecting from /signup");
       router.push('/');
     }
   }, [user, authLoading, router]);
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -36,100 +36,77 @@ export default function SignupPage() {
       setError("Passwords do not match.");
       return;
     }
-
     if (!email || !password) {
-      setError("Please enter both email and password.");
+      setError("Please enter email and password.");
       return;
     }
 
     setLoading(true);
 
+    // Check if auth is initialized
+    if (!auth) {
+        setError("Authentication service is not available. Please try again later.");
+        console.error("Signup attempt failed: Firebase Auth not initialized.")
+        setLoading(false);
+        return;
+    }
+
+    console.log("Attempting signup for:", email);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      router.push('/'); // Redirect to homepage on success
+      console.log("Signup successful, redirecting...");
+      router.push('/');
     } catch (err: any) {
-      console.error("Firebase Signup Error:", err);
-      // Provide more user-friendly errors based on Firebase error codes
-      switch (err.code) {
-        case 'auth/invalid-email':
-          setError('Invalid email address format.');
-          break;
-        case 'auth/email-already-in-use':
-          setError('This email address is already registered.');
-          break;
-        case 'auth/weak-password':
-          setError('Password is too weak. Please use a stronger password.');
-          break;
-        default:
-          setError('Failed to create account. Please try again.');
+      console.error("Firebase Signup Error:", err.code, err.message);
+      if (err.code === 'auth/email-already-in-use') {
+        setError("This email address is already registered.");
+      } else if (err.code === 'auth/weak-password') {
+        setError("Password is too weak (must be at least 6 characters).");
+      } else {
+        setError("Failed to create account. Please try again.");
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Don't render the form if auth is still loading or user is already logged in
-  if (authLoading || user) {
-     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>; // Or a spinner component
+  // Show loading state while checking auth status
+  if (authLoading || user) { // Also check for user to prevent flash before redirect
+     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
   }
 
   return (
-    <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]"> {/* Adjust height calculation if navbar height changes */}
+    <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Sign Up</CardTitle>
-          <CardDescription>
-            Create your account by entering your email and password below.
-          </CardDescription>
+          <CardDescription>Create your account below.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="grid gap-4">
+            {/* Email Input */}
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="m@example.com"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-              />
+              <Input id="email" type="email" placeholder="m@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} />
             </div>
+            {/* Password Input */}
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
+              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading} />
             </div>
-             <div className="grid gap-2">
+            {/* Confirm Password Input */}
+            <div className="grid gap-2">
               <Label htmlFor="confirm-password">Confirm Password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={loading}
-              />
+              <Input id="confirm-password" type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={loading} />
             </div>
+            {/* Error Display */}
             {error && <p className="text-red-500 text-sm">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col items-start gap-2">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Creating Account...' : 'Create Account'}
-            </Button>
-            <div className="text-sm w-full text-center">
-              Already have an account?{" "}
-              <Link href="/login" className="underline">
-                Log in
-              </Link>
-            </div>
+            {/* Submit Button */}
+            <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Creating Account...' : 'Create Account'}</Button>
+            {/* Link to Login */}
+            <div className="text-sm w-full text-center">Already have an account? <Link href="/login" className="underline">Log in</Link></div>
           </CardFooter>
         </form>
       </Card>

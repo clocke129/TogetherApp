@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebaseConfig';
@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { useEffect } from 'react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,13 +20,14 @@ export default function LoginPage() {
   const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    // Redirect if user is already logged in and auth state is determined
+    // Redirect authenticated users away from login page
     if (!authLoading && user) {
+      console.log("User already logged in, redirecting from /login");
       router.push('/');
     }
   }, [user, authLoading, router]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -38,85 +38,60 @@ export default function LoginPage() {
       return;
     }
 
+    // Check if auth is initialized
+    if (!auth) {
+        setError("Authentication service is not available. Please try again later.");
+        console.error("Login attempt failed: Firebase Auth not initialized.")
+        setLoading(false);
+        return;
+    }
+
+    console.log("Attempting login for:", email);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push('/'); // Redirect to homepage on success
+      console.log("Login successful, redirecting...");
+      router.push('/');
     } catch (err: any) {
-      console.error("Firebase Login Error:", err);
-      // Provide more user-friendly errors based on Firebase error codes
-      switch (err.code) {
-        case 'auth/invalid-email':
-          setError('Invalid email address format.');
-          break;
-        case 'auth/user-disabled':
-          setError('This user account has been disabled.');
-          break;
-        case 'auth/user-not-found':
-        case 'auth/wrong-password': // Combine user not found and wrong password for security
-          setError('Invalid email or password.');
-          break;
-        case 'auth/invalid-credential': // More generic error for newer SDK versions
-           setError('Invalid email or password.');
-           break;
-        default:
-          setError('Failed to log in. Please try again.');
-      }
+      console.error("Firebase Login Error:", err.code, err.message);
+      // Simplified error message for security
+      setError('Invalid email or password.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Don't render the form if auth is still loading or user is already logged in
-  if (authLoading || user) {
-     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>; // Or a spinner component
+  // Show loading state while checking auth status
+  if (authLoading || user) { // Also check for user to prevent flash before redirect
+     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
   }
 
   return (
-    <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]"> {/* Adjust height calculation if navbar height changes */}
+    <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>
-            Enter your email below to login to your account.
-          </CardDescription>
+          <CardDescription>Enter your email below to login.</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="grid gap-4">
+            {/* Email Input */}
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="m@example.com"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-              />
+              <Input id="email" type="email" placeholder="m@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} />
             </div>
+            {/* Password Input */}
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
+              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading} />
             </div>
+            {/* Error Display */}
             {error && <p className="text-red-500 text-sm">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col items-start gap-2">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing In...' : 'Sign In'}
-            </Button>
-             <div className="text-sm w-full text-center">
-              Don't have an account?{" "}
-              <Link href="/signup" className="underline">
-                Sign up
-              </Link>
-            </div>
+            {/* Submit Button */}
+            <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Signing In...' : 'Sign In'}</Button>
+            {/* Link to Signup */}
+            <div className="text-sm w-full text-center">Don't have an account? <Link href="/signup" className="underline">Sign up</Link></div>
           </CardFooter>
         </form>
       </Card>

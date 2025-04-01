@@ -1,13 +1,13 @@
-"use client"
+'use client' // Needs to be a client component for hooks and interaction
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { FileText, Calendar, Users, Settings, Heart, LogOut, User as UserIcon, LogIn } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation" // Add useRouter back
+import { FileText, Calendar, Users, Settings, Heart, LogOut, User as UserIcon, LogIn } from "lucide-react" // Add icons back
 import { cn } from "@/lib/utils"
 import { ModeToggle } from "@/components/mode-toggle"
-import { useAuth } from "@/context/AuthContext"
-import { auth } from "@/lib/firebaseConfig"
-import { signOut } from "firebase/auth"
+import { useAuth } from "@/context/AuthContext" // Import useAuth
+import { auth } from "@/lib/firebaseConfig" // Import auth
+import { signOut } from "firebase/auth" // Import signOut
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import type { LucideIcon } from "lucide-react"
+import type { LucideIcon } from "lucide-react";
 
 // Define an interface for nav items
 interface NavItem {
@@ -29,8 +29,8 @@ interface NavItem {
 
 export default function Navbar() {
   const pathname = usePathname()
-  const router = useRouter()
-  const { user, loading } = useAuth()
+  const router = useRouter() // Add router hook back
+  const { user, loading } = useAuth() // Get user and loading state
 
   // Apply the type to the array
   const navItems: NavItem[] = [
@@ -56,20 +56,30 @@ export default function Navbar() {
     },
   ]
 
+  // Re-add handleLogout function
   const handleLogout = async () => {
+    if (!auth) {
+      console.error("Logout failed: Firebase Auth not initialized.");
+      return; // Prevent logout if auth isn't ready
+    }
     try {
+      console.log("Logging out...");
       await signOut(auth);
-      router.push('/');
+      console.log("Logout successful, redirecting...");
+      router.push('/'); // Optional: redirect
     } catch (error) {
       console.error("Error signing out: ", error);
     }
   };
 
+  // Re-add renderUserAuth function
   const renderUserAuth = () => {
+    // Show loading indicator
     if (loading) {
       return <div className="h-8 w-8 animate-pulse rounded-full bg-muted"></div>;
     }
 
+    // Show User Dropdown if logged in
     if (user) {
       return (
         <DropdownMenu>
@@ -84,12 +94,8 @@ export default function Navbar() {
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">
-                  {user.displayName || "User"}
-                </p>
-                <p className="text-xs leading-none text-muted-foreground">
-                  {user.email}
-                </p>
+                <p className="text-sm font-medium leading-none">{user.displayName || "User"}</p>
+                <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -100,7 +106,9 @@ export default function Navbar() {
           </DropdownMenuContent>
         </DropdownMenu>
       );
-    } else {
+    }
+    // Show Login button if logged out
+    else {
       return (
         <Link href="/login">
           <Button variant="ghost">
@@ -145,9 +153,6 @@ export default function Navbar() {
         <div className="flex flex-1 items-center justify-end space-x-2">
           {renderUserAuth()}
           <ModeToggle />
-          <nav className="flex items-center">
-            <ModeToggle />
-          </nav>
         </div>
       </div>
 

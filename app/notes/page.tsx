@@ -7,10 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { User, Calendar, Maximize2, Minimize2, Eye, Edit } from "lucide-react"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { User, Calendar, Maximize2, Minimize2, Eye, Edit, Save } from "lucide-react"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useMobile } from "@/hooks/use-mobile"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import { collection, addDoc, serverTimestamp, doc, writeBatch, query, where, getDocs, Timestamp } from "firebase/firestore"
+import { useAuth } from "@/context/AuthContext"
+import { db } from "@/lib/firebaseConfig"
 
 // Types for our data models
 type Person = {
@@ -42,9 +46,11 @@ export default function NotesPage() {
   const [cursorPosition, setCursorPosition] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor")
+  const [isSaving, setIsSaving] = useState(false)
 
   const isMobile = useMobile()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { user } = useAuth()
 
   // Parse the text to extract people, prayer requests, and follow-ups
   useEffect(() => {
@@ -149,6 +155,103 @@ export default function NotesPage() {
     setActiveTab(activeTab === "editor" ? "preview" : "editor")
   }
 
+  // --- Restore Original Save Notes Functionality --- //
+  const handleSaveNotes = async () => {
+    if (!user) {
+      alert("Please log in to save notes.");
+      return;
+    }
+    // Check if there is actually parsed data from the notes
+    if (parsedData.length === 0) {
+      alert("No prayer requests or follow-ups found in the notes to save.");
+      return;
+    }
+
+    setIsSaving(true);
+    console.log("Starting batch write for parsed notes...");
+    const batch = writeBatch(db);
+    const personsRef = collection(db, "persons");
+
+    try {
+      // --- Original Batch Logic (Uncommented) --- 
+      for (const person of parsedData) {
+        let personRef;
+        console.log(`Processing person: ${person.name}`);
+
+        // Check if person already exists for this user
+        const q = query(
+          personsRef,
+          where("name", "==", person.name),
+          where("createdBy", "==", user.uid)
+        );
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          // Person exists, use the existing document reference
+          personRef = querySnapshot.docs[0].ref;
+          console.log(`Found existing person: ${person.name} (ID: ${personRef.id})`);
+        } else {
+          // Person does not exist, create a new document reference and add set operation
+          personRef = doc(personsRef); // Generate new ID
+          batch.set(personRef, {
+            name: person.name,
+            createdBy: user.uid,
+            createdAt: serverTimestamp(),
+            // groupIds: [], // Initialize if needed
+          });
+          console.log(`Creating new person: ${person.name} (New ID: ${personRef.id})`);
+        }
+
+        // Add prayer requests to subcollection
+        if (person.prayerRequests.length > 0) {
+          const requestsRef = collection(personRef, "prayerRequests");
+          person.prayerRequests.forEach((request) => {
+            const newRequestRef = doc(requestsRef);
+            batch.set(newRequestRef, {
+              content: request.content,
+              createdAt: serverTimestamp(),
+              personId: personRef.id, // Store parent person ID for potential denormalization/queries
+              // prayedForDates: [] // Initialize if needed
+            });
+          });
+          console.log(`Adding ${person.prayerRequests.length} request(s) for ${person.name}`);
+        }
+
+        // Add follow-ups to subcollection
+        if (person.followUps.length > 0) {
+          const followUpsRef = collection(personRef, "followUps");
+          person.followUps.forEach((followUp) => {
+            const newFollowUpRef = doc(followUpsRef);
+            batch.set(newFollowUpRef, {
+              content: followUp.content,
+              dueDate: Timestamp.fromDate(followUp.dueDate), // Convert JS Date to Firestore Timestamp
+              completed: followUp.completed,
+              personId: personRef.id, // Store parent person ID
+              // isRecurring, recurringPattern if needed
+            });
+          });
+          console.log(`Adding ${person.followUps.length} follow-up(s) for ${person.name}`);
+        }
+      }
+      // --- End Original Batch Logic --- 
+
+      // Commit all operations in the batch
+      console.log("Committing batch...");
+      await batch.commit();
+      console.log("Batch commit successful!");
+      alert("Notes saved successfully!");
+      setText(""); // Clear the textarea on successful save
+      setParsedData([]); // Clear the parsed data as well
+
+    } catch (error) {
+      console.error("Error saving notes: ", error);
+      alert("An error occurred while saving notes. Please check the console.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  // --- End Save Notes Functionality --- //
+
   // Render the editor component
   const renderEditor = () => (
     <div className="relative">
@@ -220,83 +323,65 @@ export default function NotesPage() {
   // Render desktop layout
   const renderDesktopLayout = () => (
     <div className="grid gap-4 md:gap-6 md:grid-cols-2">
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle>Note Editor</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(!isFullscreen)} className="h-8 w-8 p-0">
-                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {renderEditor()}
-            <div className="mt-4 flex justify-end">
-              <Button>Save Notes</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Preview</CardTitle>
-          </CardHeader>
-          <CardContent>{renderPreview()}</CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-lg">Note Editor</CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {renderEditor()}
+        </CardContent>
+        <div className="p-4 border-t flex justify-end">
+          <Button onClick={handleSaveNotes} disabled={isSaving}>
+            {isSaving ? (
+                <>Saving...</>
+            ) : (
+                <><Save className="mr-2 h-4 w-4" /> Save Notes</>
+            )}
+          </Button>
+        </div>
+      </Card>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Preview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {renderPreview()}
+        </CardContent>
+      </Card>
     </div>
   )
 
-  // Render mobile layout
+  // Render mobile layout (FIRST DEFINITION - KEEP THIS ONE)
   const renderMobileLayout = () => (
-    <div className="space-y-4">
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "editor" | "preview")} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="editor" className="flex items-center gap-2">
-            <Edit className="h-4 w-4" />
-            Editor
-          </TabsTrigger>
-          <TabsTrigger value="preview" className="flex items-center gap-2">
-            <Eye className="h-4 w-4" />
-            Preview
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="editor" className="mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle>Note Editor</CardTitle>
-                <Button variant="ghost" size="sm" onClick={toggleMobileView} className="h-8 w-8 p-0">
-                  <Eye className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {renderEditor()}
-              <div className="mt-4 flex justify-end">
-                <Button>Save Notes</Button>
-              </div>
-            </CardContent>
-          </Card>
+     <div className="flex flex-col h-[calc(100vh-10rem)]">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "editor" | "preview")} className="flex-1 flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b">
+            <TabsList className="grid w-[calc(100%-50px)] grid-cols-2">
+                <TabsTrigger value="editor">Editor</TabsTrigger>
+                <TabsTrigger value="preview">Preview</TabsTrigger>
+            </TabsList>
+            <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
+                <Maximize2 className="h-4 w-4" />
+            </Button>
+        </div>
+        <TabsContent value="editor" className="flex-1 overflow-auto p-4">
+          {renderEditor()}
         </TabsContent>
-
-        <TabsContent value="preview" className="mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle>Preview</CardTitle>
-                <Button variant="ghost" size="sm" onClick={toggleMobileView} className="h-8 w-8 p-0">
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>{renderPreview()}</CardContent>
-          </Card>
+        <TabsContent value="preview" className="flex-1 overflow-auto p-4">
+          {renderPreview()}
         </TabsContent>
+        <div className="p-4 border-t flex justify-end">
+           <Button onClick={handleSaveNotes} disabled={isSaving} className="w-full md:w-auto">
+             {isSaving ? (
+                 <>Saving...</>
+             ) : (
+                 <><Save className="mr-2 h-4 w-4" /> Save Notes</>
+             )}
+           </Button>
+        </div>
       </Tabs>
     </div>
   )
@@ -312,6 +397,9 @@ export default function NotesPage() {
 
       <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>
         <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0">
+          <VisuallyHidden>
+            <DialogTitle>Fullscreen Note Editor</DialogTitle>
+          </VisuallyHidden>
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4 border-b">
               <h2 className="text-lg font-semibold">Note Editor (Fullscreen)</h2>
@@ -324,11 +412,18 @@ export default function NotesPage() {
                 value={text}
                 onChange={handleTextChange}
                 placeholder="Start typing... Use @name for people and #MMDD for follow-up dates"
-                className="min-h-[calc(90vh-120px)] w-full font-mono resize-none"
+                className="min-h-[calc(90vh-120px)] w-full font-mono resize-none border-0 shadow-none focus-visible:ring-0 p-0"
               />
             </div>
-            <div className="p-4 border-t flex justify-end">
-              <Button>Save Notes</Button>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setIsFullscreen(false)}>Cancel</Button>
+              <Button onClick={handleSaveNotes} disabled={isSaving}>
+                {isSaving ? (
+                    <>Saving...</>
+                ) : (
+                    <><Save className="mr-2 h-4 w-4" /> Save Notes & Close</>
+                )}
+              </Button>
             </div>
           </div>
         </DialogContent>
