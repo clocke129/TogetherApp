@@ -73,6 +73,7 @@ export default function AssignmentsPage() {
   const [isAddingGroup, setIsAddingGroup] = useState(false);
 
   const [isAssigningPerson, setIsAssigningPerson] = useState<string | null>(null); // Store personId being assigned
+  const [isUpdatingDays, setIsUpdatingDays] = useState<string | null>(null); // Store groupId being updated
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -125,10 +126,55 @@ export default function AssignmentsPage() {
   }
 
   // Toggle day for group - Needs Firestore update
-  const toggleDayForGroup = (groupId: string, dayIndex: number) => {
-    // TODO: Replace with Firestore updateDoc for the specific group
-    console.log(`Toggled day ${dayIndex} for group ${groupId} (needs Firestore implementation)`);
-  }
+  const toggleDayForGroup = async (groupId: string, dayIndex: number) => {
+    if (!user || isUpdatingDays === groupId) return; // Prevent concurrent updates for the same group
+
+    console.log(`Toggling day ${dayIndex} for group ${groupId}`);
+    setIsUpdatingDays(groupId); // Set loading state for this group
+    setError(null);
+
+    // Find the current group's data
+    const group = groups.find(g => g.id === groupId);
+    if (!group) {
+        console.error("Group not found locally!");
+        setError("Could not update days: Group not found.");
+        setIsUpdatingDays(null);
+        return;
+    }
+
+    // Determine the new prayerDays array
+    const currentDays = group.prayerDays || [];
+    let newPrayerDays: number[];
+    if (currentDays.includes(dayIndex)) {
+      // Remove the day
+      newPrayerDays = currentDays.filter(day => day !== dayIndex);
+    } else {
+      // Add the day and sort for consistency
+      newPrayerDays = [...currentDays, dayIndex].sort((a, b) => a - b);
+    }
+
+    try {
+      const groupRef = doc(db, "groups", groupId);
+      await updateDoc(groupRef, {
+        prayerDays: newPrayerDays
+      });
+
+      // Optimistic UI Update: Update local group state
+      setGroups(prevGroups =>
+        prevGroups.map(g =>
+          g.id === groupId ? { ...g, prayerDays: newPrayerDays } : g
+        )
+      );
+      console.log(`Prayer days updated for group ${groupId}.`);
+
+    } catch (err) {
+      console.error("Error updating prayer days:", err);
+      setError(`Failed to update prayer days for ${group.name}. Please try again.`);
+      // Optionally revert optimistic update here if needed
+    } finally {
+      setIsUpdatingDays(null); // Clear loading state
+    }
+  };
 
   // Toggle selection type for group - Needs Firestore update
   const toggleSelectionType = (groupId: string, type: "random" | "recent" | "all") => {
@@ -261,7 +307,7 @@ export default function AssignmentsPage() {
       <Tabs defaultValue="people" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="people">People & Groups</TabsTrigger>
-          <TabsTrigger value="days">Groups & Days</TabsTrigger>
+          <TabsTrigger value="groups-days">Groups & Days</TabsTrigger>
         </TabsList>
 
         <TabsContent value="people" className="space-y-6">
@@ -492,88 +538,48 @@ export default function AssignmentsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="days" className="space-y-6">
+        <TabsContent value="groups-days" className="space-y-6">
           {isLoading ? (
             <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
           ) : groups.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-8">
-              Create groups first to assign prayer days
-            </div>
+            <Card>
+              <CardContent className="text-sm text-muted-foreground text-center py-8">
+                Create groups first to assign prayer days.
+              </CardContent>
+            </Card>
           ) : (
             groups.map((group) => (
               <Card key={group.id} className="mb-4">
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-5 w-5 text-primary" />
-                      <CardTitle className="text-base">{group.name}</CardTitle>
-                    </div>
-                    <Badge variant="outline">{getPeopleInGroup(group.id).length} people</Badge>
-                  </div>
+                  <CardTitle className="text-lg">{group.name}</CardTitle>
+                  {/* Optional: Add group description or settings summary here */}
                 </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium mb-2">Prayer Days:</h3>
-                    <div className="flex gap-2">
-                      {DAYS_OF_WEEK.map((day, index) => (
-                        <Button
-                          key={index}
-                          variant={group.prayerDays.includes(index) ? "default" : "outline"}
-                          size="sm"
-                          className={cn(
-                            "h-9 w-9 p-0 md:h-10 md:w-10",
-                            group.prayerDays.includes(index) && "bg-shrub hover:bg-shrub/90",
-                          )}
-                          onClick={() => toggleDayForGroup(group.id, index)}
-                        >
-                          {day.charAt(0)}
-                        </Button>
-                      ))}
+                <CardContent>
+                   <p className="text-sm text-muted-foreground mb-3">Select prayer days:</p>
+                   <div className="flex flex-wrap gap-2">
+                      {DAYS_OF_WEEK.map((day, index) => {
+                        const isSelected = group.prayerDays?.includes(index);
+                        const isUpdatingThisGroup = isUpdatingDays === group.id;
+                        return (
+                          <Button
+                            key={index}
+                            variant={isSelected ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => toggleDayForGroup(group.id, index)}
+                            disabled={isLoading || isUpdatingThisGroup}
+                            className={cn(
+                               "w-12", // Fixed width for consistency
+                               isSelected && "bg-shrub hover:bg-shrub/90", // Specific style for selected
+                               isUpdatingThisGroup && "opacity-50 cursor-not-allowed" // Indicate loading
+                            )}
+                          >
+                            {day}
+                          </Button>
+                        );
+                      })}
                     </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-medium mb-2">Selection Method:</h3>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={group.prayerSettings.type === "all" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => toggleSelectionType(group.id, "all")}
-                      >
-                        All
-                      </Button>
-                      <Button
-                        variant={group.prayerSettings.type === "random" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => toggleSelectionType(group.id, "random")}
-                      >
-                        Random
-                      </Button>
-                      <Button
-                        variant={group.prayerSettings.type === "recent" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => toggleSelectionType(group.id, "recent")}
-                      >
-                        Least Recent
-                      </Button>
-                    </div>
-                  </div>
-
-                  {group.prayerSettings.type === "random" && (
-                    <div>
-                      <h3 className="text-sm font-medium mb-2">People per day:</h3>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" className="h-8 w-8">
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                        <span className="w-8 text-center">{group.prayerSettings.count || 1}</span>
-                        <Button variant="outline" size="icon" className="h-8 w-8">
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                    {isUpdatingDays === group.id && <p className="text-xs text-muted-foreground mt-2">Updating...</p>}
+                    {/* TODO: Add Prayer Settings UI (Type, Count) later */}
                 </CardContent>
               </Card>
             ))
