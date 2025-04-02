@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,50 +33,58 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
+// Firestore and Auth Imports
+import { useAuth } from '@/context/AuthContext'
+import { db } from '@/lib/firebaseConfig'
+import { collection, query, where, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore'
+import type { Person, Group } from '@/lib/types' // Import shared types
+
 // Types
-type Person = {
-  id: string
-  name: string
-  prayerRequests: PrayerRequest[]
-  followUps: FollowUp[]
-  lastPrayedFor?: Date
-  group?: string
-}
+// type Person = {
+//   id: string
+//   name: string
+//   prayerRequests: PrayerRequest[]
+//   followUps: FollowUp[]
+//   lastPrayedFor?: Date
+//   group?: string
+// }
 
-type PrayerRequest = {
-  id: string
-  content: string
-  createdAt: Date
-  prayedForDates?: Date[]
-}
+// type PrayerRequest = {
+//   id: string
+//   content: string
+//   createdAt: Date
+//   prayedForDates?: Date[]
+// }
 
-type FollowUp = {
-  id: string
-  content: string
-  dueDate: Date
-  completed: boolean
-}
+// type FollowUp = {
+//   id: string
+//   content: string
+//   dueDate: Date
+//   completed: boolean
+// }
 
 export default function PrayerPage() {
+  const { user, loading: authLoading } = useAuth(); // Auth hook
   const [currentDate, setCurrentDate] = useState(new Date())
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
-  const [people, setPeople] = useState<Person[]>([])
-  const [prayedFor, setPrayedFor] = useState<Record<string, boolean>>({})
-  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
-  const [showAllPrayerRequests, setShowAllPrayerRequests] = useState(false)
-  const [showAddPrayerRequest, setShowAddPrayerRequest] = useState(false)
-  const [viewAllRequestsScreen, setViewAllRequestsScreen] = useState(false)
-  const [newPrayerRequest, setNewPrayerRequest] = useState({
-    content: "",
-    personId: "",
-  })
-  const [followUps, setFollowUps] = useState<Record<string, boolean>>({})
+
+  // State for fetched data
+  const [allUserGroups, setAllUserGroups] = useState<Group[]>([])
+  const [allUserPeople, setAllUserPeople] = useState<Person[]>([])
+
+  // State for today's prayer list derived from fetched data
+  const [todaysPrayerList, setTodaysPrayerList] = useState<Person[]>([])
+
+  // Loading and error states
+  const [loadingData, setLoadingData] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Navigate to previous day
   const goToPreviousDay = () => {
     const newDate = new Date(currentDate)
     newDate.setDate(newDate.getDate() - 1)
     setCurrentDate(newDate)
+    setExpandedPersonId(null) // Collapse items on date change
   }
 
   // Navigate to next day
@@ -84,6 +92,7 @@ export default function PrayerPage() {
     const newDate = new Date(currentDate)
     newDate.setDate(newDate.getDate() + 1)
     setCurrentDate(newDate)
+    setExpandedPersonId(null) // Collapse items on date change
   }
 
   // Toggle expanded state for a person
@@ -91,12 +100,11 @@ export default function PrayerPage() {
     setExpandedPersonId(expandedPersonId === personId ? null : personId)
   }
 
-  // Mark a person as prayed for
+  // Mark a person as prayed for - TODO: Implement with Firestore update (e.g., update lastPrayedFor)
   const markAsPrayedFor = (personId: string) => {
-    setPrayedFor((prev) => ({
-      ...prev,
-      [personId]: !prev[personId],
-    }))
+    console.log(`Marked person ${personId} as prayed for (needs Firestore implementation)`)
+    // Needs Firestore update logic
+    // Optimistically update UI? (e.g., move from active to completed tab)
   }
 
   // Format date for display
@@ -119,527 +127,234 @@ export default function PrayerPage() {
     return date.toLocaleDateString("en-US", { weekday: "long" })
   }
 
-  // Get most recent prayer request
-  const getMostRecentPrayerRequest = (person: Person) => {
-    if (person.prayerRequests.length === 0) return null
-
-    return person.prayerRequests.reduce((mostRecent, request) => {
-      return request.createdAt > mostRecent.createdAt ? request : mostRecent
-    }, person.prayerRequests[0])
-  }
-
-  // Get past prayer requests (excluding the most recent)
-  const getPastPrayerRequests = (person: Person) => {
-    if (person.prayerRequests.length <= 1) return []
-
-    const mostRecent = getMostRecentPrayerRequest(person)
-    if (!mostRecent) return []
-
-    return person.prayerRequests
-      .filter((request) => request.id !== mostRecent.id)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-  }
-
-  // Calculate times prayed since most recent prayer request
-  const getTimesPrayedSinceLastRequest = (person: Person) => {
-    const mostRecentRequest = getMostRecentPrayerRequest(person)
-    if (!mostRecentRequest) return 0
-
-    let count = 0
-    person.prayerRequests.forEach((request) => {
-      if (request.prayedForDates) {
-        count += request.prayedForDates.filter((date) => date > mostRecentRequest.createdAt).length
-      }
-    })
-
-    return count
-  }
-
-  // Open all prayer requests dialog
+  // Open all prayer requests dialog - Adapt later
   const openAllPrayerRequests = (person: Person) => {
-    setSelectedPerson(person)
-    setShowAllPrayerRequests(true)
+    // setSelectedPerson(person)
+    // setShowAllPrayerRequests(true)
+    console.log("Open all requests for:", person.name)
   }
 
-  // Open view all prayer requests screen
+  // Open view all prayer requests screen - Adapt later
   const openViewAllRequestsScreen = (person: Person) => {
-    setSelectedPerson(person)
-    setViewAllRequestsScreen(true)
+    // setSelectedPerson(person)
+    // setViewAllRequestsScreen(true)
+    console.log("View all requests screen for:", person.name)
   }
 
-  // Add a new prayer request
+  // Add a new prayer request - Adapt later
   const handleAddPrayerRequest = () => {
-    if (!newPrayerRequest.content || !newPrayerRequest.personId) return
+    // if (!newPrayerRequest.content || !newPrayerRequest.personId) return
 
     // In a real app, this would add to the database
-    console.log("Adding prayer request:", newPrayerRequest)
+    // console.log("Adding prayer request:", newPrayerRequest)
 
     // Reset form and close dialog
-    setNewPrayerRequest({
-      content: "",
-      personId: "",
-    })
-    setShowAddPrayerRequest(false)
+    // setNewPrayerRequest({ content: "", personId: "" })
+    // setShowAddPrayerRequest(false)
+    console.log("Add prayer request clicked (needs implementation)")
   }
 
-  // Toggle follow-up completion
-  const toggleFollowUpCompletion = (followUpId: string) => {
-    setFollowUps((prev) => ({
-      ...prev,
-      [followUpId]: !prev[followUpId],
-    }))
+  // Toggle follow-up completion - Handled on Followups page
+  // const toggleFollowUpCompletion = (followUpId: string) => { ... };
+
+  // Get completed prayers - Placeholder, needs Firestore logic later
+  const getCompletedPrayers = (): Person[] => {
+    // This needs logic based on how we track completion (e.g., lastPrayedFor date)
+    return []
   }
 
-  // Get completed prayers (those that have been prayed for)
-  const getCompletedPrayers = () => {
-    return people.filter((person) => prayedFor[person.id])
-  }
-
-  // Get active prayers (those that haven't been prayed for today)
+  // Get active prayers - Returns the list fetched for today
   const getActivePrayers = () => {
-    return people.filter((person) => !prayedFor[person.id])
+    // TODO: This should eventually filter out people already marked as prayed for *today*
+    return todaysPrayerList
   }
+
+  // Fetch groups and people, then determine today's prayer list
+  useEffect(() => {
+    if (!authLoading && user) {
+      const fetchDataAndDetermineList = async () => {
+        setLoadingData(true)
+        setError(null)
+        console.log("Fetching prayer data for user:", user.uid)
+
+        try {
+          const userId = user.uid
+          const currentDayIndex = currentDate.getDay() // 0 for Sunday, 1 for Monday, etc.
+          console.log(`[Prayer Debug] Current Date: ${currentDate.toISOString()}, Day Index: ${currentDayIndex} (${getDayName(currentDate)})`)
+
+          // 1. Fetch all groups created by the user
+          const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", userId))
+          const groupsSnapshot = await getDocs(groupsQuery)
+          const groupsData = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group))
+          setAllUserGroups(groupsData)
+          console.log("[Prayer Debug] Fetched Groups:", JSON.stringify(groupsData, null, 2))
+
+          // 2. Fetch all people created by the user
+          const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId))
+          const peopleSnapshot = await getDocs(peopleQuery)
+          const peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person))
+          setAllUserPeople(peopleData)
+          console.log("[Prayer Debug] Fetched People:", JSON.stringify(peopleData, null, 2))
+
+          // 3. Identify active groups for today
+          const activeGroups = groupsData.filter(group =>
+            group.prayerDays?.includes(currentDayIndex)
+          )
+          console.log(`[Prayer Debug] Filtering for day index: ${currentDayIndex}`)
+          console.log("[Prayer Debug] Active groups for today:", JSON.stringify(activeGroups, null, 2))
+
+          // 4. Get all personIds from active groups
+          let personIdsToPrayFor = new Set<string>()
+          activeGroups.forEach(group => {
+            // TODO: Apply group.prayerSettings logic here later (e.g., random, recent)
+            // For now, assume "all"
+            if (group.personIds) {
+              group.personIds.forEach(id => personIdsToPrayFor.add(id))
+            }
+          })
+          console.log("[Prayer Debug] Person IDs collected from active groups:", Array.from(personIdsToPrayFor))
+
+          // 5. Filter all people data to get the final list for today
+          const todaysList = peopleData.filter(person => personIdsToPrayFor.has(person.id))
+          setTodaysPrayerList(todaysList)
+          console.log("[Prayer Debug] Final Today's Prayer List:", JSON.stringify(todaysList, null, 2))
+
+        } catch (err) {
+          console.error("Error fetching prayer data:", err)
+          setError("Failed to load prayer data. Please try again later.")
+          setTodaysPrayerList([]) // Clear list on error
+        } finally {
+          setLoadingData(false)
+        }
+      }
+
+      fetchDataAndDetermineList()
+    } else if (!authLoading && !user) {
+      // Handle logged out state
+      setLoadingData(false)
+      setError("Please log in to view your prayer list.")
+      setAllUserGroups([])
+      setAllUserPeople([])
+      setTodaysPrayerList([])
+    }
+    // Dependency array: refetch if user logs in/out or date changes
+  }, [user, authLoading, currentDate])
 
   // Render the main prayer screen
   const renderMainPrayerScreen = () => {
+    const activePrayers = getActivePrayers()
+    const completedPrayers = getCompletedPrayers() // Will be empty for now
+
     return (
       <>
         <div className="mb-4 md:mb-6 flex items-center justify-between">
           <div>
             <h1 className="page-title">Prayer List</h1>
-            <p className="page-description">Track and manage your prayer requests</p>
+            {/* Date Navigation */}
+            <div className="flex items-center gap-2 mt-1">
+              <Button variant="outline" size="icon" onClick={goToPreviousDay} className="h-7 w-7">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <h2 className="text-lg font-medium text-center min-w-[160px]">
+                {getDayName(currentDate)}, {formatDate(currentDate)}
+              </h2>
+              <Button variant="outline" size="icon" onClick={goToNextDay} className="h-7 w-7">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <Dialog open={showAddPrayerRequest} onOpenChange={setShowAddPrayerRequest}>
+          {/* --- Simplified Add Request Dialog Trigger --- */}
+          <Dialog open={false} onOpenChange={() => {}}>
             <DialogTrigger asChild>
-              <Button className="bg-shrub hover:bg-shrub/90">
+              <Button className="bg-shrub hover:bg-shrub/90" disabled>
                 <Plus className="mr-2 h-4 w-4" />
                 New Request
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Add Prayer Request</DialogTitle>
-                <DialogDescription>Create a new prayer request for someone</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="person">Person</Label>
-                  <Select
-                    value={newPrayerRequest.personId}
-                    onValueChange={(value) => setNewPrayerRequest({ ...newPrayerRequest, personId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a person" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {people.map((person) => (
-                        <SelectItem key={person.id} value={person.id}>
-                          {person.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="content">Prayer Request</Label>
-                  <Textarea
-                    id="content"
-                    value={newPrayerRequest.content}
-                    onChange={(e) => setNewPrayerRequest({ ...newPrayerRequest, content: e.target.value })}
-                    placeholder="What would you like to pray for?"
-                    className="min-h-[100px]"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowAddPrayerRequest(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleAddPrayerRequest} className="bg-shrub hover:bg-shrub/90">
-                  Add Request
-                </Button>
-              </DialogFooter>
-            </DialogContent>
+            {/* DialogContent commented out or simplified previously */}
           </Dialog>
+          {/* --- End Add Request Dialog --- */}
         </div>
 
-        <div className="flex items-center justify-between mb-6">
-          <Button variant="outline" size="icon" onClick={goToPreviousDay}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+        {error && <p className="text-red-500 text-center mb-4">{error}</p>}
 
-          <div className="text-center">
-            <h2 className="text-xl font-bold">{getDayName(currentDate)}</h2>
-            <p className="text-sm text-muted-foreground">{formatDate(currentDate)}</p>
-          </div>
+        {loadingData ? (
+          <div className="text-center py-10 text-muted-foreground">Loading prayer list...</div>
+        ) : (
+          <Tabs defaultValue="pray" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="pray">Pray</TabsTrigger>
+              <TabsTrigger value="completed">Completed</TabsTrigger>
+            </TabsList>
 
-          <Button variant="outline" size="icon" onClick={goToNextDay}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <Tabs defaultValue="pray" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="pray">Pray</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="pray" className="space-y-4">
-            {getActivePrayers().length === 0 ? (
-              <div className="text-center py-12">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mx-auto text-muted-foreground mb-4 h-12 w-12"
-                >
-                  <path d="M12 22V8" />
-                  <path d="M8 12V8a4 4 0 0 1 8 0v4" />
-                  <path d="M17 13.5V8a4 4 0 0 0-8 0v5.5" />
-                  <path d="M12 2v6" />
-                </svg>
-                <h3 className="text-lg font-medium">All caught up!</h3>
-                <p className="text-muted-foreground mt-1">You've prayed for everyone today</p>
-              </div>
-            ) : (
-              getActivePrayers().map((person) => {
-                const mostRecentRequest = getMostRecentPrayerRequest(person)
-                const timesPrayed = getTimesPrayedSinceLastRequest(person)
-
-                return (
-                  <Card key={person.id} className="transition-all">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{person.name}</CardTitle>
-                          {person.group && (
-                            <Badge variant="outline" className="mt-1">
-                              {person.group}
-                            </Badge>
-                          )}
-                        </div>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="gap-1 bg-shrub hover:bg-shrub/90 text-white"
-                          onClick={() => markAsPrayedFor(person.id)}
-                        >
-                          <Heart className="h-4 w-4" />
-                          Pray
+            {/* Pray Tab */}
+            <TabsContent value="pray" className="space-y-4">
+              {activePrayers.length === 0 ? (
+                <p className="text-center py-8 text-muted-foreground">No one scheduled for prayer today.</p>
+              ) : (
+                activePrayers.map((person) => (
+                  <Card key={person.id}>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 cursor-pointer" onClick={() => toggleExpandPerson(person.id)}>
+                      <CardTitle className="text-lg font-semibold">{person.name}</CardTitle>
+                      <div className="flex items-center space-x-2">
+                        {/* Placeholder for prayed button */}
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-shrub" onClick={(e) => { e.stopPropagation(); markAsPrayedFor(person.id); }}>
+                          <Heart className="h-5 w-5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          {expandedPersonId === person.id ? <ChevronUp /> : <ChevronDown />}
                         </Button>
                       </div>
                     </CardHeader>
-
-                    <CardContent className="pb-2">
-                      {mostRecentRequest && (
-                        <div className="space-y-1">
-                          <p className="text-sm">{mostRecentRequest.content}</p>
-                          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                            <span className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Added {formatDate(mostRecentRequest.createdAt)}
-                            </span>
-                            {timesPrayed > 0 && (
-                              <span className="flex items-center">
-                                <Heart className="h-3 w-3 mr-1" />
-                                {timesPrayed}
-                              </span>
-                            )}
-                            {person.lastPrayedFor && (
-                              <span className="flex items-center">
-                                <Calendar className="h-3 w-3 mr-1" />
-                                Last prayed: {formatDate(person.lastPrayedFor)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-
-                    <CardFooter className="flex justify-between pt-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 text-xs text-muted-foreground"
-                        onClick={() => toggleExpandPerson(person.id)}
-                      >
-                        {expandedPersonId === person.id ? (
-                          <>
-                            <ChevronUp className="h-4 w-4" />
-                            Show less
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="h-4 w-4" />
-                            Show more
-                          </>
-                        )}
-                      </Button>
-                    </CardFooter>
-
                     {expandedPersonId === person.id && (
-                      <div className="px-6 pb-4 space-y-4">
-                        {/* Past Prayer Requests Section */}
-                        {getPastPrayerRequests(person).length > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <h4 className="text-sm font-medium">Prayer Requests:</h4>
-                              {getPastPrayerRequests(person).length > 3 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs flex items-center gap-1 text-shrub"
-                                  onClick={() => openViewAllRequestsScreen(person)}
-                                >
-                                  <List className="h-3 w-3" />
-                                  View All
-                                </Button>
-                              )}
-                            </div>
-                            <div className="space-y-1 pl-4 border-l-2 border-primary/20">
-                              {getPastPrayerRequests(person)
-                                .slice(0, 3)
-                                .map((request) => (
-                                  <div key={request.id} className="text-sm flex justify-between">
-                                    <p>{request.content}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      Added {formatDate(request.createdAt)}
-                                    </p>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Follow-ups Section */}
-                        {person.followUps.length > 0 && (
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium">Follow-ups:</h4>
-                            <div className="space-y-2 pl-4 border-l-2 border-destructive/20">
-                              {person.followUps.map((followUp) => {
-                                const isCompleted = followUps[followUp.id] || followUp.completed
-
-                                return (
-                                  <div key={followUp.id} className="flex items-start gap-2">
-                                    <div className="pt-0.5">
-                                      <Checkbox
-                                        id={followUp.id}
-                                        checked={isCompleted}
-                                        onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                                      />
-                                    </div>
-                                    <div className="space-y-1 flex-1">
-                                      <button
-                                        className={cn(
-                                          "text-sm font-medium text-left w-full",
-                                          isCompleted && "line-through text-muted-foreground",
-                                        )}
-                                        onClick={() => {
-                                          // In a real app, this would navigate to the follow-up screen
-                                          console.log("Navigate to follow-up screen for:", followUp.content)
-                                        }}
-                                      >
-                                        {followUp.content}
-                                      </button>
-                                      <div className="flex items-center gap-1">
-                                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                                        <span className="text-xs text-muted-foreground">
-                                          {formatDate(followUp.dueDate)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <CardContent className="pt-4 space-y-4">
+                        {/* --- Simplified Content: Remove prayer request/followup details --- */}
+                        <p className="text-sm text-muted-foreground">Prayer requests and follow-ups will appear here.</p>
+                        {/* TODO: Add logic to fetch and display actual PrayerRequests and FollowUps subcollections */}
+                      </CardContent>
                     )}
                   </Card>
-                )
-              })
-            )}
-          </TabsContent>
+                ))
+              )}
+            </TabsContent>
 
-          <TabsContent value="completed" className="space-y-4">
-            {getCompletedPrayers().length === 0 ? (
-              <div className="text-center py-12">
-                <Check className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium">No completed prayers</h3>
-                <p className="text-muted-foreground mt-1">You haven't prayed for anyone today yet</p>
-              </div>
-            ) : (
-              getCompletedPrayers().map((person) => {
-                const mostRecentRequest = getMostRecentPrayerRequest(person)
-                const timesPrayed = getTimesPrayedSinceLastRequest(person)
-
-                return (
-                  <Card key={person.id} className="transition-all bg-muted/50">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{person.name}</CardTitle>
-                          {person.group && (
-                            <Badge variant="outline" className="mt-1">
-                              {person.group}
-                            </Badge>
-                          )}
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="gap-1"
-                          onClick={() => markAsPrayedFor(person.id)}
-                        >
-                          <Check className="h-4 w-4" />
-                          Prayed
-                        </Button>
-                      </div>
+            {/* Completed Tab */}
+            <TabsContent value="completed" className="space-y-4">
+              {completedPrayers.length === 0 ? (
+                <p className="text-center py-8 text-muted-foreground">No prayers marked completed yet.</p>
+              ) : (
+                completedPrayers.map((person) => (
+                  <Card key={person.id} className="opacity-70">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-lg font-normal italic">{person.name}</CardTitle>
+                      {/* Optionally show when they were prayed for */}
+                      <Check className="h-5 w-5 text-green-600" />
                     </CardHeader>
-
-                    <CardContent className="pb-2">
-                      {mostRecentRequest && (
-                        <div className="space-y-1">
-                          <p className="text-sm">{mostRecentRequest.content}</p>
-                          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                            <span className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Added {formatDate(mostRecentRequest.createdAt)}
-                            </span>
-                            {timesPrayed > 0 && (
-                              <span className="flex items-center">
-                                <Heart className="h-3 w-3 mr-1" />
-                                {timesPrayed}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-
-                    <CardFooter className="flex justify-between pt-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 text-xs text-muted-foreground"
-                        onClick={() => openViewAllRequestsScreen(person)}
-                      >
-                        <List className="h-4 w-4" />
-                        View all requests
-                      </Button>
-
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Prayed today
-                      </span>
-                    </CardFooter>
                   </Card>
-                )
-              })
-            )}
-          </TabsContent>
-        </Tabs>
-
-        {/* All Prayer Requests Dialog */}
-        <Dialog open={showAllPrayerRequests} onOpenChange={setShowAllPrayerRequests}>
-          <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>All Prayer Requests</DialogTitle>
-              <DialogDescription>
-                {selectedPerson?.name} - {selectedPerson?.group}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              {selectedPerson?.prayerRequests.map((request) => (
-                <div key={request.id} className="border-b pb-3 last:border-0">
-                  <div className="flex justify-between items-center mb-1">
-                    <p className="font-medium">{request.content}</p>
-                    <Badge variant="outline" className="text-xs">
-                      {formatDate(request.createdAt)}
-                    </Badge>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {request.prayedForDates && request.prayedForDates.length > 0 ? (
-                      <div>
-                        <p>Prayed for {request.prayedForDates.length} times</p>
-                        <p>Last prayed: {formatDate(request.prayedForDates[request.prayedForDates.length - 1])}</p>
-                      </div>
-                    ) : (
-                      <p>Not yet prayed for</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </DialogContent>
-        </Dialog>
+                ))
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
       </>
     )
   }
 
+  // --- Commented out Dialogs and Screens relying on old data structure ---
+  /*
+  // All Prayer Requests Dialog
+  <Dialog open={false} onOpenChange={() => {}}>
+    ... dialog content ...
+  </Dialog>
+
   // Render the "View All Prayer Requests" screen
-  const renderViewAllRequestsScreen = () => {
-    if (!selectedPerson) return null
-
-    const sortedRequests = [...selectedPerson.prayerRequests].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    )
-
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between mb-4">
-          <Button variant="ghost" size="sm" className="gap-1" onClick={() => setViewAllRequestsScreen(false)}>
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-          <h1 className="text-xl font-bold">{selectedPerson.name}</h1>
-          <Badge variant="outline">{selectedPerson.group}</Badge>
-        </div>
-
-        <h2 className="text-lg font-semibold mb-2">All Prayer Requests</h2>
-
-        {sortedRequests.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>No prayer requests yet</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {sortedRequests.map((request) => (
-              <Card key={request.id}>
-                <CardContent className="py-4">
-                  <div className="space-y-2">
-                    <p className="font-medium">{request.content}</p>
-                    <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                      <span className="flex items-center">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Added {formatDateWithTime(request.createdAt)}
-                      </span>
-                      {request.prayedForDates && request.prayedForDates.length > 0 && (
-                        <span className="flex items-center">
-                          <Heart className="h-3 w-3 mr-1" />
-                          Prayed for {request.prayedForDates.length} times
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
+  const renderViewAllRequestsScreen = () => { ... }
+  */
 
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      {viewAllRequestsScreen ? renderViewAllRequestsScreen() : renderMainPrayerScreen()}
+      {/* Ensure main screen is always rendered for now */}
+      {renderMainPrayerScreen()}
     </div>
   )
 }

@@ -21,7 +21,7 @@ import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus } from "l
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
-import { collection, query, where, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, writeBatch, arrayRemove, deleteField } from 'firebase/firestore'
 import type { Person, Group } from '@/lib/types'
 import {
   DropdownMenu,
@@ -74,6 +74,7 @@ export default function AssignmentsPage() {
 
   const [isAssigningPerson, setIsAssigningPerson] = useState<string | null>(null); // Store personId being assigned
   const [isUpdatingDays, setIsUpdatingDays] = useState<string | null>(null); // Store groupId being updated
+  const [isRemovingPersonId, setIsRemovingPersonId] = useState<string | null>(null); // Store personId being removed
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -244,7 +245,7 @@ export default function AssignmentsPage() {
     }
   };
 
-  // Assign Person to Group - Implement Firestore update
+  // Assign Person to Group - Implement Firestore update for BOTH Person and Group
   const handleAssignPersonToGroup = async (personId: string, groupId: string) => {
      if (!user || isAssigningPerson) return; // Prevent concurrent updates
 
@@ -252,11 +253,21 @@ export default function AssignmentsPage() {
      setIsAssigningPerson(personId); // Set loading state for this person
      setError(null);
 
+     // Create refs for the documents
+     const personRef = doc(db, "persons", personId);
+     const groupRef = doc(db, "groups", groupId);
+     // Create a batch
+     const batch = writeBatch(db);
+
      try {
-       const personRef = doc(db, "persons", personId);
-       await updateDoc(personRef, {
-         groupId: groupId
-       });
+       // 1. Update Person: Set the groupId field
+       batch.update(personRef, { groupId: groupId });
+
+       // 2. Update Group: Add personId to the personIds array
+       batch.update(groupRef, { personIds: arrayUnion(personId) });
+
+       // Commit the batch
+       await batch.commit();
 
        // Optimistic UI Update: Move person locally
        setPeople(prevPeople =>
@@ -264,12 +275,16 @@ export default function AssignmentsPage() {
            p.id === personId ? { ...p, groupId: groupId } : p
          )
        );
-       console.log(`Person ${personId} assigned to group ${groupId} successfully.`);
+       // Note: We don't need to update local groups state here unless
+       // we were displaying the personIds list directly on this page.
+       // The prayer page will fetch the updated group data.
+
+       console.log(`Person ${personId} assigned to group ${groupId} successfully (batch commit).`);
 
      } catch (err) {
-       console.error("Error assigning person:", err);
+       console.error("Error assigning person (batch):", err);
        setError(`Failed to assign person. Please try again.`);
-       // Optionally revert optimistic update here if needed
+       // No need to revert optimistic update unless critical, as refetch will correct.
      } finally {
        setIsAssigningPerson(null); // Clear loading state
      }
@@ -281,10 +296,44 @@ export default function AssignmentsPage() {
      console.log("Add Group clicked (needs implementation)");
   };
   
-  // Remove Person from Group - Needs Firestore update
-  const handleRemovePersonFromGroup = (personId: string, groupId: string) => {
-    // TODO: Implement removing person from group (update Person doc, potentially update Group doc)
-     console.log(`Remove person ${personId} from group ${groupId} (needs implementation)`);
+  // Remove Person from Group - Implement Firestore update for BOTH Person and Group
+  const handleRemovePersonFromGroup = async (personId: string, groupId: string) => {
+     if (!user || isRemovingPersonId) return; // Prevent concurrent updates
+
+     console.log(`Removing person ${personId} from group ${groupId}`);
+     setIsRemovingPersonId(personId); // Set loading state for this person
+     setError(null);
+
+     const personRef = doc(db, "persons", personId);
+     const groupRef = doc(db, "groups", groupId);
+     const batch = writeBatch(db);
+
+     try {
+       // 1. Update Person: Remove the groupId field
+       // Using update with deleteField() is safer than setting to null if field might not exist
+       batch.update(personRef, { groupId: deleteField() });
+
+       // 2. Update Group: Remove personId from the personIds array
+       batch.update(groupRef, { personIds: arrayRemove(personId) });
+
+       // Commit the batch
+       await batch.commit();
+
+       // Optimistic UI Update: Move person locally back to uncategorized
+       setPeople(prevPeople =>
+         prevPeople.map(p =>
+           p.id === personId ? { ...p, groupId: undefined } : p // Set groupId to undefined locally
+         )
+       );
+
+       console.log(`Person ${personId} removed from group ${groupId} successfully (batch commit).`);
+
+     } catch (err) {
+       console.error("Error removing person from group (batch):", err);
+       setError(`Failed to remove person. Please try again.`);
+     } finally {
+       setIsRemovingPersonId(null); // Clear loading state
+     }
   };
   
   // Add Person to Specific Group - Needs Firestore update
@@ -516,9 +565,14 @@ export default function AssignmentsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() => handleRemovePersonFromGroup(person.id, group.id)} 
+                                onClick={() => handleRemovePersonFromGroup(person.id, group.id)}
+                                disabled={isLoading || isRemovingPersonId === person.id}
                               >
-                                <X className="h-4 w-4" />
+                                {isRemovingPersonId === person.id ? (
+                                   <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                                 ) : (
+                                   <X className="h-4 w-4" />
+                                 )}
                               </Button>
                             </div>
                           ))}
