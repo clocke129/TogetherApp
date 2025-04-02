@@ -21,8 +21,16 @@ import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus } from "l
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
-import { collection, query, where, getDocs, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore'
 import type { Person, Group } from '@/lib/types'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 // Types (Keep local types for now to avoid potential import issues until resolved)
 // type Person = {
@@ -58,6 +66,13 @@ export default function AssignmentsPage() {
   const [isAddPersonDialogOpen, setIsAddPersonDialogOpen] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
   const [isAddingPerson, setIsAddingPerson] = useState(false); // Loading state for submission
+
+  // State for Add Group Dialog
+  const [isAddGroupDialogOpen, setIsAddGroupDialogOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
+
+  const [isAssigningPerson, setIsAssigningPerson] = useState<string | null>(null); // Store personId being assigned
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -152,10 +167,66 @@ export default function AssignmentsPage() {
     }
   };
 
-  // Assign Person to Group - Needs Firestore update
-  const handleAssignPerson = (personId: string, groupId: string) => {
-     // TODO: Implement assigning person to group (update Person doc, potentially update Group doc)
-     console.log(`Assign person ${personId} to group ${groupId} (needs implementation)`);
+  // Add Group Submit Handler
+  const handleAddGroupSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim() || !user) return;
+
+    setIsAddingGroup(true);
+    setError(null);
+
+    try {
+      const newGroupData = {
+        name: newGroupName.trim(),
+        createdBy: user.uid,
+        personIds: [], // Start with no people
+        prayerDays: [], // Start with no days assigned
+        prayerSettings: { type: "all" }, // Default setting
+        createdAt: serverTimestamp(),
+      };
+      const docRef = await addDoc(collection(db, "groups"), newGroupData);
+      // Add the new group to local state
+      setGroups(prev => [...prev, { id: docRef.id, ...newGroupData, createdAt: Timestamp.now() } as unknown as Group]); // Use type assertion carefully
+      setNewGroupName(""); // Clear input
+      setIsAddGroupDialogOpen(false); // Close dialog
+      console.log("Group added with ID: ", docRef.id);
+    } catch (err) {
+      console.error("Error adding group:", err);
+      setError("Failed to add group. Please try again.");
+    } finally {
+      setIsAddingGroup(false);
+    }
+  };
+
+  // Assign Person to Group - Implement Firestore update
+  const handleAssignPersonToGroup = async (personId: string, groupId: string) => {
+     if (!user || isAssigningPerson) return; // Prevent concurrent updates
+
+     console.log(`Assigning person ${personId} to group ${groupId}`);
+     setIsAssigningPerson(personId); // Set loading state for this person
+     setError(null);
+
+     try {
+       const personRef = doc(db, "persons", personId);
+       await updateDoc(personRef, {
+         groupId: groupId
+       });
+
+       // Optimistic UI Update: Move person locally
+       setPeople(prevPeople =>
+         prevPeople.map(p =>
+           p.id === personId ? { ...p, groupId: groupId } : p
+         )
+       );
+       console.log(`Person ${personId} assigned to group ${groupId} successfully.`);
+
+     } catch (err) {
+       console.error("Error assigning person:", err);
+       setError(`Failed to assign person. Please try again.`);
+       // Optionally revert optimistic update here if needed
+     } finally {
+       setIsAssigningPerson(null); // Clear loading state
+     }
   };
   
   // Add Group - Needs Firestore add
@@ -254,16 +325,48 @@ export default function AssignmentsPage() {
                 </div>
               ) : (
                 <div className="space-y-2 pt-4">
+                  {/* Display uncategorized people */}
                   {uncategorizedPeople.map((person) => (
                     <div key={person.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-muted-foreground" />
                         <span>{person.name}</span>
                       </div>
-                      {/* TODO: Add actual assign functionality - maybe dropdown with groups? */}
-                      <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => console.log('Assign clicked for', person.id)} disabled={groups.length === 0}>
-                        Assign to Group
-                      </Button>
+
+                      {/* --- Assign to Group Dropdown --- */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-xs"
+                            disabled={groups.length === 0 || isLoading || isAssigningPerson === person.id}
+                          >
+                            {isAssigningPerson === person.id ? "Assigning..." : "Assign to Group"}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {groups.length === 0 ? (
+                             <DropdownMenuLabel>No groups available</DropdownMenuLabel>
+                          ) : (
+                            <>
+                              <DropdownMenuLabel>Assign to:</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              {groups.map((group) => (
+                                <DropdownMenuItem
+                                  key={group.id}
+                                  onSelect={() => handleAssignPersonToGroup(person.id, group.id)}
+                                  disabled={isAssigningPerson === person.id}
+                                >
+                                  {group.name}
+                                </DropdownMenuItem>
+                              ))}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {/* --- End Assign to Group Dropdown --- */}
+
                     </div>
                   ))}
                 </div>
@@ -274,11 +377,50 @@ export default function AssignmentsPage() {
           {/* Groups Section */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Groups</h2>
-            {/* Connect handleAddGroup */}
-            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90" onClick={handleAddGroup} disabled={isLoading || !user}>
-              <Plus className="h-4 w-4" />
-              New Group
-            </Button>
+            {/* --- Add Group Dialog Trigger --- */}
+            <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
+              <DialogTrigger asChild>
+                 <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90" disabled={isLoading || !user}>
+                  <Plus className="h-4 w-4" />
+                  New Group
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                 <form onSubmit={handleAddGroupSubmit}>
+                  <DialogHeader>
+                    <DialogTitle>Create New Group</DialogTitle>
+                    <DialogDescription>
+                      Enter a name for your new prayer group.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="group-name" className="text-right">
+                        Name
+                      </Label>
+                      <Input
+                        id="group-name"
+                        value={newGroupName}
+                        onChange={(e) => setNewGroupName(e.target.value)}
+                        className="col-span-3"
+                        placeholder="Group name"
+                        required
+                        disabled={isAddingGroup}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                     <DialogClose asChild>
+                       <Button type="button" variant="outline" disabled={isAddingGroup}>Cancel</Button>
+                    </DialogClose>
+                    <Button type="submit" disabled={isAddingGroup || !newGroupName.trim()}>
+                       {isAddingGroup ? "Creating..." : "Create Group"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+            {/* --- End Add Group Dialog --- */}
           </div>
 
           {isLoading ? (
