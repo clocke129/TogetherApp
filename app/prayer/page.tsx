@@ -376,11 +376,13 @@ export default function PrayerPage() {
 
     return (
       <>
-        <div className="mb-4 md:mb-6 flex items-center justify-between">
-          <div>
+        {/* Responsive Header: Stacks and centers below md, row layout above md */}
+        <div className="mb-4 md:mb-6 flex flex-col items-center md:flex-row md:justify-between">
+          {/* Title and Date Nav Container - Centered text/items below md, aligned start above md */}
+          <div className="flex flex-col items-center md:items-start">
             <h1 className="page-title">Prayer List</h1>
-            {/* Date Navigation */}
-            <div className="flex items-center gap-2 mt-1">
+            {/* Date Navigation - Keep centered horizontally within its own container */}
+            <div className="flex items-center justify-center gap-2 mt-1">
               <Button variant="outline" size="icon" onClick={goToPreviousDay} className="h-7 w-7">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -392,17 +394,17 @@ export default function PrayerPage() {
               </Button>
             </div>
           </div>
-          {/* --- Simplified Add Request Dialog Trigger --- */}
+          {/* Action Button - Full width below md, auto width above md, margin top added for spacing when stacked */}
           <Dialog open={false} onOpenChange={() => {}}>
             <DialogTrigger asChild>
-              <Button className="bg-shrub hover:bg-shrub/90" disabled>
+              {/* Removed w-full, ensured size=sm */}
+              <Button size="sm" className="bg-shrub hover:bg-shrub/90 md:w-auto mt-3 md:mt-0" disabled>
                 <Plus className="mr-2 h-4 w-4" />
                 New Request
               </Button>
             </DialogTrigger>
             {/* DialogContent commented out or simplified previously */}
           </Dialog>
-          {/* --- End Add Request Dialog --- */}
         </div>
 
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
@@ -447,17 +449,17 @@ export default function PrayerPage() {
               )}
             </TabsContent>
 
-            {/* Completed Tab */}
+            {/* Completed Tab */} 
             <TabsContent value="completed" className="space-y-4">
               {completedPrayers.length === 0 ? (
                 <p className="text-center py-8 text-muted-foreground">No prayers completed today.</p>
               ) : (
                 completedPrayers.map((person) => {
-                  const groupName = getGroupName(person.groupId);
+                   const groupName = getGroupName(person.groupId);
                   const isExpanded = expandedPersonId === person.id;
 
                   // USE PrayerListItem Component here too
-                  return (
+                   return (
                      <PrayerListItem
                       key={person.id}
                       person={person}

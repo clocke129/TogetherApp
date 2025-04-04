@@ -167,18 +167,19 @@ export function PrayerListItem({
       )}
 
       {/* CardFooter for Show More/Less */}
-      <CardFooter className="pt-0 pb-3">
+      <CardFooter className="pt-0 pb-3 flex justify-center"> {/* Center the button */}
          <Button
             variant="ghost"
-            size="sm"
-            className="w-full justify-center text-xs h-auto py-1"
+            size="icon" // Use icon size for a smaller, square button
+            className="h-7 w-7" // Make it small
             onClick={handleToggleExpand}
           >
             {isExpanded ? (
-              <><ChevronUp className="h-4 w-4 mr-1" /> Show less</>
+              <ChevronUp className="h-4 w-4" /> // Icon only
             ) : (
-              <><ChevronDown className="h-4 w-4 mr-1" /> Show more</>
+              <ChevronDown className="h-4 w-4" /> // Icon only
             )}
+            <span className="sr-only">{isExpanded ? "Show less" : "Show more"}</span> {/* Keep text for screen readers */}
          </Button>
       </CardFooter>
     </Card>

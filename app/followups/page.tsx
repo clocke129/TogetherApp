@@ -400,14 +400,18 @@ export default function FollowupsPage() {
 
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      <div className="mb-4 md:mb-6 flex items-center justify-between">
-        <div>
+      {/* Responsive Header: Stacks and centers below md, row layout above md */}
+      <div className="mb-4 md:mb-6 flex flex-col items-center md:flex-row md:justify-between">
+        {/* Title Container - Centered text below md, aligned start above md */}
+        <div className="text-center md:text-left">
           <h1 className="page-title">Follow-ups</h1>
-          <p className="page-description">Track and manage your follow-up items</p>
+          {/* <p className="page-description">Track and manage your follow-up items</p> */} {/* Removed subheader */}
         </div>
+        {/* Action Button - Full width below md, auto width above md, margin top added for spacing when stacked */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90">
+             {/* Removed w-full */}
+            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90 md:w-auto mt-3 md:mt-0">
               <Plus className="h-4 w-4" />
               Add Follow-up
             </Button>
