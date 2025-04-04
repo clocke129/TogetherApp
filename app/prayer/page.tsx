@@ -32,58 +32,40 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { PrayerListItem } from "./PrayerListItem"
+import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
+import { formatDate } from "@/lib/utils"
 
 // Firestore and Auth Imports
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
-import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, serverTimestamp, orderBy, deleteField } from 'firebase/firestore'
-import type { Person, Group, PrayerRequest } from '@/lib/types' // Import shared types
-
-// Types
-// type Person = {
-//   id: string
-//   name: string
-//   prayerRequests: PrayerRequest[]
-//   followUps: FollowUp[]
-//   lastPrayedFor?: Date
-//   group?: string
-// }
-
-// type PrayerRequest = {
-//   id: string
-//   content: string
-//   createdAt: Date
-//   prayedForDates?: Date[]
-// }
-
-// type FollowUp = {
-//   id: string
-//   content: string
-//   dueDate: Date
-//   completed: boolean
-// }
+import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, serverTimestamp, orderBy, deleteField, limit } from 'firebase/firestore'
 
 export default function PrayerPage() {
   const { user, loading: authLoading } = useAuth(); // Auth hook
   const [currentDate, setCurrentDate] = useState(new Date())
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
 
+  // NEW State to hold detailed data for the EXPANDED person
+  const [expandedData, setExpandedData] = useState<{
+    requests: PrayerRequest[];
+    followUps: FollowUp[];
+    loading: boolean;
+    error: string | null;
+  }>({ requests: [], followUps: [], loading: false, error: null });
+
   // State for fetched data
   const [allUserGroups, setAllUserGroups] = useState<Group[]>([])
-  const [allUserPeople, setAllUserPeople] = useState<Person[]>([])
+  const [allUserPeople, setAllUserPeople] = useState<Array<Person & { mostRecentRequest?: PrayerRequest }>>([])
 
   // State for today's prayer list derived from fetched data
-  const [todaysPrayerList, setTodaysPrayerList] = useState<Person[]>([])
+  const [todaysPrayerList, setTodaysPrayerList] = useState<Array<Person & { mostRecentRequest?: PrayerRequest }>>([])
 
   // Loading and error states
   const [loadingData, setLoadingData] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isMarkingPrayedId, setIsMarkingPrayedId] = useState<string | null>(null) // Loading state for marking prayed
-
-  // State for expanded person's prayer requests
-  const [expandedPersonRequests, setExpandedPersonRequests] = useState<PrayerRequest[]>([])
-  const [loadingRequests, setLoadingRequests] = useState(false)
-  const [requestError, setRequestError] = useState<string | null>(null)
+  const [isMarkingPrayedId, setIsMarkingPrayedId] = useState<string | null>(null)
+  const [isCompletingFollowUpId, setIsCompletingFollowUpId] = useState<string | null>(null); // Loading state for follow-up completion
 
   // Navigate to previous day
   const goToPreviousDay = () => {
@@ -101,19 +83,17 @@ export default function PrayerPage() {
     setExpandedPersonId(null) // Collapse items on date change
   }
 
-  // Toggle expanded state for a person
+  // Toggle expanded state and fetch/clear details
   const toggleExpandPerson = (personId: string) => {
     const currentlyExpanded = expandedPersonId === personId
     if (currentlyExpanded) {
-      // Collapse: Clear requests and ID
       setExpandedPersonId(null)
-      setExpandedPersonRequests([])
-      setRequestError(null)
-      setLoadingRequests(false)
+      // Clear expanded data
+      setExpandedData({ requests: [], followUps: [], loading: false, error: null })
     } else {
-      // Expand: Set ID and fetch requests
       setExpandedPersonId(personId)
-      fetchPrayerRequests(personId) // Trigger fetch
+      // Fetch details for the newly expanded person
+      fetchExpandedDetails(personId)
     }
   }
 
@@ -174,13 +154,9 @@ export default function PrayerPage() {
     }
   };
 
-  // Format date for display
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-  }
-
   // Format date with time for display
-  const formatDateWithTime = (date: Date) => {
+  const formatDateWithTime = (date: Date | undefined) => {
+    if (!date) return "";
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -221,22 +197,48 @@ export default function PrayerPage() {
     console.log("Add prayer request clicked (needs implementation)")
   }
 
-  // Toggle follow-up completion - Handled on Followups page
-  // const toggleFollowUpCompletion = (followUpId: string) => { ... };
+  // NEW: Function to mark a follow-up as complete
+  const handleCompleteFollowUp = async (personId: string, followUpId: string) => {
+    if (isCompletingFollowUpId) return; // Prevent double clicks
+    console.log(`Completing follow-up ${followUpId} for person ${personId}`);
+    setIsCompletingFollowUpId(followUpId); // Set loading state for this specific follow-up
+
+    try {
+      const followUpRef = doc(db, "persons", personId, "followUps", followUpId);
+      await updateDoc(followUpRef, {
+        completed: true,
+        completedAt: serverTimestamp()
+      });
+
+      // Optimistic UI update: Update the follow-up in the expandedData state
+      setExpandedData(prevData => ({
+        ...prevData,
+        followUps: prevData.followUps.map(fu =>
+          fu.id === followUpId ? { ...fu, completed: true } : fu
+        )
+      }));
+      console.log(`Follow-up ${followUpId} marked as complete.`);
+
+    } catch (err) {
+      console.error("Error completing follow-up:", err);
+      // Consider adding specific error state for the expanded item
+      setExpandedData(prevData => ({ ...prevData, error: "Failed to update follow-up." }));
+    } finally {
+      setIsCompletingFollowUpId(null); // Clear loading state
+    }
+  };
 
   // Get completed prayers - Filter based on lastPrayedFor date
-  const getCompletedPrayers = (): Person[] => {
-    // Filters todaysPrayerList for people whose lastPrayedFor is today
+  const getCompletedPrayers = (): Array<Person & { mostRecentRequest?: PrayerRequest }> => {
     return todaysPrayerList.filter(person => isSameDay(person.lastPrayedFor, currentDate));
   };
 
   // Get active prayers - Filter based on lastPrayedFor date
-  const getActivePrayers = (): Person[] => {
-    // Filters todaysPrayerList for people whose lastPrayedFor is NOT today
+  const getActivePrayers = (): Array<Person & { mostRecentRequest?: PrayerRequest }> => {
     return todaysPrayerList.filter(person => !isSameDay(person.lastPrayedFor, currentDate));
   };
 
-  // Fetch groups and people, then determine today's prayer list
+  // Fetch initial data (groups, people, and determine today's list)
   useEffect(() => {
     if (!authLoading && user) {
       const fetchDataAndDetermineList = async () => {
@@ -259,18 +261,33 @@ export default function PrayerPage() {
           // 2. Fetch all people created by the user
           const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId))
           const peopleSnapshot = await getDocs(peopleQuery)
-          const peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person))
-          setAllUserPeople(peopleData)
-          console.log("[Prayer Debug] Fetched People:", JSON.stringify(peopleData, null, 2))
+          let peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
 
-          // 3. Identify active groups for today
+          // 3. Fetch the MOST RECENT prayer request for EACH person (for collapsed view)
+          // This adds extra reads but simplifies the list item component
+          const peopleWithRecentRequestPromises = peopleData.map(async (person) => {
+            const requestsQuery = query(
+              collection(db, "persons", person.id, "prayerRequests"),
+              orderBy("createdAt", "desc"),
+              limit(1) // Only get the most recent one
+            );
+            const requestSnapshot = await getDocs(requestsQuery);
+            const mostRecentRequest = requestSnapshot.empty ? undefined : { id: requestSnapshot.docs[0].id, ...requestSnapshot.docs[0].data() } as PrayerRequest;
+            return { ...person, mostRecentRequest }; // Add it to the person object
+          });
+
+          const peopleWithRecentRequests = await Promise.all(peopleWithRecentRequestPromises);
+          setAllUserPeople(peopleWithRecentRequests); // Update state with enhanced person data
+          console.log("[Prayer Debug] Fetched People with recent request:", JSON.stringify(peopleWithRecentRequests, null, 2))
+
+          // 4. Identify active groups for today
           const activeGroups = groupsData.filter(group =>
             group.prayerDays?.includes(currentDayIndex)
           )
           console.log(`[Prayer Debug] Filtering for day index: ${currentDayIndex}`)
           console.log("[Prayer Debug] Active groups for today:", JSON.stringify(activeGroups, null, 2))
 
-          // 4. Get all personIds from active groups
+          // 5. Get all personIds from active groups
           let personIdsToPrayFor = new Set<string>()
           activeGroups.forEach(group => {
             // TODO: Apply group.prayerSettings logic here later (e.g., random, recent)
@@ -281,15 +298,16 @@ export default function PrayerPage() {
           })
           console.log("[Prayer Debug] Person IDs collected from active groups:", Array.from(personIdsToPrayFor))
 
-          // 5. Filter all people data to get the final list for today
-          const todaysList = peopleData.filter(person => personIdsToPrayFor.has(person.id))
+          // 6. Filter all ENHANCED people data to get today's list
+          const todaysList = peopleWithRecentRequests.filter(person => personIdsToPrayFor.has(person.id))
           setTodaysPrayerList(todaysList)
-          console.log("[Prayer Debug] Final Today's Prayer List:", JSON.stringify(todaysList, null, 2))
+          console.log("[Prayer Debug] Final Today's Prayer List (with recent request):", JSON.stringify(todaysList, null, 2))
 
         } catch (err) {
           console.error("Error fetching prayer data:", err)
           setError("Failed to load prayer data. Please try again later.")
           setTodaysPrayerList([]) // Clear list on error
+          setAllUserPeople([])
         } finally {
           setLoadingData(false)
         }
@@ -307,28 +325,42 @@ export default function PrayerPage() {
     // Dependency array: refetch if user logs in/out or date changes
   }, [user, authLoading, currentDate])
 
-  // Fetch Prayer Requests for a specific person
-  const fetchPrayerRequests = async (personId: string) => {
+  // NEW: Fetch expanded details (Prayer Requests & Follow-ups) for a specific person
+  const fetchExpandedDetails = async (personId: string) => {
     if (!personId) return;
-    console.log(`Fetching prayer requests for person ${personId}...`);
-    setLoadingRequests(true);
-    setRequestError(null);
-    setExpandedPersonRequests([]); // Clear previous requests
+    console.log(`Fetching expanded details for person ${personId}...`);
+    setExpandedData({ requests: [], followUps: [], loading: true, error: null });
 
     try {
+      // Fetch Prayer Requests (ordered by newest)
       const requestsQuery = query(
         collection(db, "persons", personId, "prayerRequests"),
-        orderBy("createdAt", "desc") // Order by newest first
+        orderBy("createdAt", "desc")
       );
       const requestsSnapshot = await getDocs(requestsQuery);
       const requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrayerRequest));
-      setExpandedPersonRequests(requestsData);
-      console.log(`Fetched ${requestsData.length} requests for ${personId}.`);
+
+      // Fetch Follow-ups (consider ordering if needed, e.g., by dueDate)
+      const followUpsQuery = query(
+        collection(db, "persons", personId, "followUps")
+        // Add orderBy("dueDate", "asc") if desired
+      );
+      const followUpsSnapshot = await getDocs(followUpsQuery);
+      const followUpsData = followUpsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FollowUp));
+
+      setExpandedData({
+        requests: requestsData,
+        followUps: followUpsData,
+        loading: false,
+        error: null
+      });
+      console.log(`Fetched ${requestsData.length} requests and ${followUpsData.length} follow-ups for ${personId}.`);
+
     } catch (err) {
-      console.error("Error fetching prayer requests:", err);
-      setRequestError("Could not load prayer requests.");
+      console.error("Error fetching expanded details:", err);
+      setExpandedData({ requests: [], followUps: [], loading: false, error: "Could not load details." });
     } finally {
-      setLoadingRequests(false);
+      // loading is already set to false inside try/catch
     }
   };
 
@@ -337,7 +369,6 @@ export default function PrayerPage() {
     const activePrayers = getActivePrayers()
     const completedPrayers = getCompletedPrayers()
 
-    // Helper to find group name
     const getGroupName = (groupId?: string): string | undefined => {
       if (!groupId) return undefined;
       return allUserGroups.find(g => g.id === groupId)?.name;
@@ -391,162 +422,57 @@ export default function PrayerPage() {
                 <p className="text-center py-8 text-muted-foreground">No one scheduled for prayer today.</p>
               ) : (
                 activePrayers.map((person) => {
-                  // Find the most recent prayer request for collapsed view (if already fetched)
-                  // This assumes requests are fetched on expand, might need adjustment if prefetched
-                  const mostRecentRequest = expandedPersonId === person.id 
-                                             ? expandedPersonRequests[0] // Use fetched if expanded
-                                             : undefined; // Or fetch separately later
                   const groupName = getGroupName(person.groupId);
                   const isExpanded = expandedPersonId === person.id;
 
                   return (
-                    <Card key={person.id}>
-                      <CardHeader className="flex flex-row items-start justify-between space-x-4 pb-2">
-                        <div className="flex-1 space-y-1">
-                          <CardTitle className="text-lg font-semibold">{person.name}</CardTitle>
-                          {groupName && (
-                            <Badge variant="outline">{groupName}</Badge>
-                          )}
-                          {/* Display recent request content if not expanded */}
-                          {!isExpanded && mostRecentRequest && (
-                             <p className="text-sm text-muted-foreground pt-1">{mostRecentRequest.content}</p>
-                          )}
-                          {/* Metadata Line */}
-                          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground pt-1">
-                             {mostRecentRequest?.createdAt && (
-                               <span className="flex items-center">
-                                 <Clock className="h-3 w-3 mr-1" />
-                                 Added {formatDate(mostRecentRequest.createdAt.toDate())}
-                               </span>
-                             )}
-                             {/* Heart count placeholder - requires prayedForDates logic */} 
-                             {/* {mostRecentRequest?.prayedForDates && mostRecentRequest.prayedForDates.length > 0 && (
-                               <span className="flex items-center">
-                                 <Heart className="h-3 w-3 mr-1" />
-                                 {mostRecentRequest.prayedForDates.length}
-                               </span>
-                             )} */}                              
-                           </div>
-                        </div>
-                        {/* Pray Button */}                       
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="gap-1 bg-shrub hover:bg-shrub/90 text-white min-w-[80px]"
-                          onClick={() => markAsPrayedFor(person)}
-                          disabled={isMarkingPrayedId === person.id}
-                        >
-                          {isMarkingPrayedId === person.id ? (
-                            <span className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full" />
-                          ) : (
-                            <><Heart className="h-4 w-4" /> Pray</>
-                          )}
-                        </Button>
-                      </CardHeader>
-
-                      {/* Collapsible Content Trigger */} 
-                      <CardFooter className="pt-0 pb-3">
-                         <Button 
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs text-muted-foreground hover:text-foreground gap-1"
-                            onClick={() => toggleExpandPerson(person.id)}
-                         >
-                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            {isExpanded ? "Show less" : "Show more"}
-                         </Button>
-                      </CardFooter>
-                      
-                      {/* Expanded Content */} 
-                      {isExpanded && (
-                        <CardContent className="pt-0 pb-4 border-t">
-                           <div className="pt-4 space-y-4">
-                              {/* Display Prayer Requests List */} 
-                              <h4 className="text-sm font-medium text-muted-foreground">Prayer Requests:</h4>
-                              {loadingRequests ? (
-                                <p className="text-sm text-muted-foreground">Loading requests...</p>
-                              ) : requestError ? (
-                                <p className="text-sm text-red-500">{requestError}</p>
-                              ) : expandedPersonRequests.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">No prayer requests found.</p>
-                              ) : (
-                                <ul className="space-y-3 pl-1 text-sm">
-                                  {expandedPersonRequests.map((request) => (
-                                    <li key={request.id} className="border-b pb-2 last:border-b-0">
-                                       <p>{request.content}</p>
-                                       <p className="text-xs text-muted-foreground mt-1">Added: {formatDate(request.createdAt.toDate())}</p>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              {/* --- End Display Prayer Requests --- */}
-                              
-                              {/* TODO: Add Follow-up display logic similarly later */}                           
-                           </div>
-                        </CardContent>
-                      )}
-                    </Card>
-                  )
+                    // USE PrayerListItem Component
+                    <PrayerListItem
+                      key={person.id}
+                      person={person}
+                      mostRecentRequest={person.mostRecentRequest} // Passed from fetched data
+                      groupName={groupName}
+                      isExpanded={isExpanded}
+                      isLoadingExpanded={isExpanded && expandedData.loading} // Only loading if this item is expanded
+                      expandedRequests={isExpanded ? expandedData.requests : []} // Pass data only if expanded
+                      expandedFollowUps={isExpanded ? expandedData.followUps : []} // Pass data only if expanded
+                      onToggleExpand={toggleExpandPerson}
+                      onMarkPrayed={markAsPrayedFor}
+                      onCompleteFollowUp={handleCompleteFollowUp} // Pass the new handler
+                      isMarkingPrayed={isMarkingPrayedId === person.id}
+                      // TODO: Pass expanded error state if needed for display within the item
+                    />
+                  );
                 })
               )}
             </TabsContent>
 
-            {/* Completed Tab */} 
+            {/* Completed Tab */}
             <TabsContent value="completed" className="space-y-4">
               {completedPrayers.length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">No prayers marked completed yet.</p>
+                <p className="text-center py-8 text-muted-foreground">No prayers completed today.</p>
               ) : (
                 completedPrayers.map((person) => {
-                   const groupName = getGroupName(person.groupId);
-                   // Find the most recent prayer request for display 
-                   // Note: This assumes requests were fetched if the card was expanded previously.
-                   // A more robust solution might involve fetching requests here too if needed.
-                   const mostRecentRequest = expandedPersonRequests.find(req => req.id === person.id) 
-                                             ? expandedPersonRequests[0] // Simplified: Just show first loaded if any
-                                             : undefined;
-                   return (
-                     <Card key={person.id} className="bg-muted/50">
-                        <CardHeader className="flex flex-row items-start justify-between space-x-4 pb-2">
-                           <div className="flex-1 space-y-1">
-                              <CardTitle className="text-lg font-normal">{person.name}</CardTitle>
-                              {groupName && (
-                                 <Badge variant="secondary">{groupName}</Badge>
-                              )}
-                              {/* Optionally show recent request content */}
-                              {mostRecentRequest && (
-                                 <p className="text-sm text-muted-foreground pt-1">{mostRecentRequest.content}</p>
-                              )}
-                              {/* Metadata Line */} 
-                              <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground pt-1">
-                                 {mostRecentRequest?.createdAt && (
-                                    <span className="flex items-center">
-                                       <Clock className="h-3 w-3 mr-1" />
-                                       Added {formatDate(mostRecentRequest.createdAt.toDate())}
-                                    </span>
-                                 )}
-                                 {/* Heart count placeholder */} 
-                              </div>
-                           </div>
-                           {/* Prayed Button (Undo) */} 
-                           <Button
-                              variant="secondary"
-                              size="sm"
-                              className="gap-1 min-w-[80px]"
-                              onClick={() => markAsPrayedFor(person)}
-                              disabled={isMarkingPrayedId === person.id}
-                           >
-                              {isMarkingPrayedId === person.id ? (
-                                 <span className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-                              ) : (
-                                 <><Check className="h-4 w-4" /> Prayed</>
-                              )}
-                           </Button>
-                        </CardHeader>
-                        <CardFooter className="pt-0 pb-3 text-xs text-muted-foreground">
-                           Prayed today
-                        </CardFooter>
-                     </Card>
-                  )
+                  const groupName = getGroupName(person.groupId);
+                  const isExpanded = expandedPersonId === person.id;
+
+                  // USE PrayerListItem Component here too
+                  return (
+                     <PrayerListItem
+                      key={person.id}
+                      person={person}
+                      mostRecentRequest={person.mostRecentRequest}
+                      groupName={groupName}
+                      isExpanded={isExpanded}
+                      isLoadingExpanded={isExpanded && expandedData.loading}
+                      expandedRequests={isExpanded ? expandedData.requests : []}
+                      expandedFollowUps={isExpanded ? expandedData.followUps : []}
+                      onToggleExpand={toggleExpandPerson}
+                      onMarkPrayed={markAsPrayedFor} // Use the same function to 'un-complete'
+                      onCompleteFollowUp={handleCompleteFollowUp}
+                      isMarkingPrayed={isMarkingPrayedId === person.id} // Reflects loading state for toggle
+                    />
+                  );
                 })
               )}
             </TabsContent>
@@ -568,7 +494,7 @@ export default function PrayerPage() {
   */
 
   return (
-    <div className="mobile-container pb-16 md:pb-6">
+    <div className="container mx-auto px-4 py-6 md:py-8">
       {/* Ensure main screen is always rendered for now */}
       {renderMainPrayerScreen()}
     </div>

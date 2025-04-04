@@ -34,3 +34,13 @@ export interface PrayerRequest {
   updatedAt?: Timestamp; // Firestore server timestamp (optional)
   prayedForDates?: Timestamp[]; // Array of Firestore server timestamps (optional)
 }
+
+// Follow-up Type (Subcollection of Person)
+export interface FollowUp {
+  id: string; // Firestore document ID
+  content: string;
+  dueDate?: Timestamp; // Optional due date
+  completed: boolean; // Status of the follow-up
+  createdAt?: Timestamp; // Firestore server timestamp (optional)
+  completedAt?: Timestamp; // Firestore server timestamp (optional)
+}
