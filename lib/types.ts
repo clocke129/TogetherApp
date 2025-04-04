@@ -24,3 +24,13 @@ export interface Group {
 
 // Firestore Timestamp type for convenience if needed elsewhere
 export { Timestamp };
+
+// Prayer Request Type (Subcollection of Person)
+export interface PrayerRequest {
+  id: string; // Firestore document ID
+  // personId: string; // Not needed if fetched via subcollection path
+  content: string;
+  createdAt: Timestamp; // Firestore server timestamp
+  updatedAt?: Timestamp; // Firestore server timestamp (optional)
+  prayedForDates?: Timestamp[]; // Array of Firestore server timestamps (optional)
+}
