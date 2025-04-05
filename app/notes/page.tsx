@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import TextareaAutosize from 'react-textarea-autosize'
 import { Badge } from "@/components/ui/badge"
 import { User, Calendar, Maximize2, Minimize2, Eye, Edit, Save } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -255,12 +255,13 @@ export default function NotesPage() {
   // Render the editor component
   const renderEditor = () => (
     <div className="relative">
-      <Textarea
+      <TextareaAutosize
         ref={textareaRef}
         value={text}
         onChange={handleTextChange}
         placeholder="Start typing... Use @name for people and #MMDD for follow-up dates"
-        className="min-h-[200px] md:min-h-[300px] font-mono"
+        className="w-full resize-none appearance-none overflow-hidden bg-transparent focus:outline-none focus:ring-0 border rounded-md border-input p-2 font-mono min-h-[200px] md:min-h-[300px]"
+        minRows={5}
       />
     </div>
   )
@@ -396,11 +397,11 @@ export default function NotesPage() {
               </Button>
             </div>
             <div className="relative flex-1 p-4">
-              <Textarea
+              <TextareaAutosize
                 value={text}
                 onChange={handleTextChange}
                 placeholder="Start typing... Use @name for people and #MMDD for follow-up dates"
-                className="min-h-[calc(90vh-120px)] w-full font-mono resize-none border-0 shadow-none focus-visible:ring-0 p-0"
+                className="w-full resize-none appearance-none overflow-hidden bg-transparent focus:outline-none focus:ring-0 border-0 p-0 font-mono min-h-[calc(90vh-120px)]"
               />
             </div>
             <div className="p-4 border-t flex justify-end gap-2">
