@@ -400,20 +400,16 @@ export default function FollowupsPage() {
 
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      {/* Responsive Header: Stacks and centers below md, row layout above md */}
-      <div className="mb-4 md:mb-6 flex flex-col items-center md:flex-row md:justify-between">
-        {/* Title Container - Centered text below md, aligned start above md */}
-        <div className="text-center md:text-left">
-          <h1 className="page-title">Follow-ups</h1>
-          {/* <p className="page-description">Track and manage your follow-up items</p> */} {/* Removed subheader */}
-        </div>
-        {/* Action Button - Full width below md, auto width above md, margin top added for spacing when stacked */}
+      {/* Simplified Header: Always row layout */}
+      <div className="mb-4 md:mb-6 flex items-center justify-between">
+        {/* Title */}
+        <h1 className="page-title">Follow-ups</h1>
+        {/* Action Button */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-             {/* Removed w-full */}
-            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90 md:w-auto mt-3 md:mt-0">
+            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90">
               <Plus className="h-4 w-4" />
-              Add Follow-up
+              Action
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
@@ -522,126 +518,6 @@ export default function FollowupsPage() {
             <DialogFooter>
               <Button onClick={handleAddFollowUp}>Save Follow-up</Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Edit Follow-up Dialog - ADD RECURRING INPUTS */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            {editingFollowUp && (
-              <>
-                <DialogHeader>
-                  <DialogTitle>Edit Follow-up</DialogTitle>
-                  <DialogDescription>Update the details for this follow-up item.</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  {/* Person (Readonly or Select) */}
-                  <div className="grid grid-cols-4 items-center gap-4">
-                     <Label className="text-right">Person</Label>
-                     <Input className="col-span-3" readOnly value={getPersonNameById(editingFollowUp.personId)} />
-                  </div>
-                  {/* Content Textarea */}
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="edit-content" className="text-right">Content</Label>
-                    <Textarea
-                      id="edit-content"
-                      className="col-span-3"
-                      value={editingFollowUp.content}
-                      onChange={(e) => {
-                        if (!editingFollowUp) return;
-                        setEditingFollowUp({ ...editingFollowUp, content: e.target.value })
-                      }}
-                    />
-                  </div>
-                  {/* Due Date Input */}
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="edit-dueDate" className="text-right">Due Date</Label>
-                    <Input
-                      id="edit-dueDate"
-                      type="date"
-                      className="col-span-3"
-                      value={formatDateForInput(editingFollowUp.dueDate)}
-                      onChange={(e) => {
-                        if (!editingFollowUp) return;
-                        const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.fromDate(new Date(0));
-                        setEditingFollowUp({ ...editingFollowUp, dueDate: dateValue })
-                      }}
-                    />
-                  </div>
-                  {/* Recurring Switch */}
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="edit-recurring" className="text-right">Recurring</Label>
-                    <Switch
-                      id="edit-recurring"
-                      checked={editingFollowUp.isRecurring ?? false} // Default checked state to false if undefined
-                      onCheckedChange={(checked) => {
-                        if (!editingFollowUp) return;
-                        setEditingFollowUp({
-                          ...editingFollowUp,
-                          isRecurring: checked,
-                          recurringPattern: checked ? editingFollowUp.recurringPattern || { type: "weekly", interval: 1 } : undefined,
-                        })
-                      }}
-                    />
-                  </div>
-                  
-                  {/* ADD Conditional Recurring Pattern Inputs */} 
-                  {(editingFollowUp.isRecurring ?? false) && (
-                    <div className="grid grid-cols-2 gap-4 pl-10 col-span-4"> {/* Indent slightly */} 
-                      <div className="grid gap-2">
-                        <Label htmlFor="edit-recurringType">Frequency</Label>
-                        <Select
-                          value={editingFollowUp.recurringPattern?.type || "weekly"}
-                          onValueChange={(value: "daily" | "weekly" | "monthly" | "yearly") => {
-                            if (!editingFollowUp) return;
-                            setEditingFollowUp({
-                              ...editingFollowUp,
-                              recurringPattern: {
-                                ...(editingFollowUp.recurringPattern as RecurringPattern || { interval: 1 }), // Ensure interval exists
-                                type: value,
-                              },
-                            })
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select frequency" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="daily">Daily</SelectItem>
-                            <SelectItem value="weekly">Weekly</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
-                            <SelectItem value="yearly">Yearly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="edit-interval">Every</Label>
-                        <Input
-                          id="edit-interval"
-                          type="number"
-                          min="1"
-                          value={editingFollowUp.recurringPattern?.interval || 1}
-                          onChange={(e) => {
-                            if (!editingFollowUp) return;
-                            setEditingFollowUp({
-                              ...editingFollowUp,
-                              recurringPattern: {
-                                ...(editingFollowUp.recurringPattern as RecurringPattern || { type: "weekly" }), // Ensure type exists
-                                interval: Number.parseInt(e.target.value) || 1,
-                              },
-                            })
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-                <DialogFooter>
-                  <Button onClick={handleEditFollowUp}>Save Changes</Button>
-                </DialogFooter>
-              </>
-            )}
           </DialogContent>
         </Dialog>
       </div>

@@ -35,7 +35,7 @@ export default function Navbar() {
   // Apply the type to the array
   const navItems: NavItem[] = [
     {
-      name: "Listen",
+      name: "Note",
       href: "/notes",
       icon: FileText,
     },
@@ -172,16 +172,6 @@ export default function Navbar() {
               <span>{item.name}</span>
             </Link>
           ))}
-          <Link
-            href="/settings"
-            className={cn(
-              "flex flex-1 flex-col items-center py-3 text-xs font-medium transition-colors hover:text-foreground/80",
-              pathname === "/settings" ? "text-shrub font-semibold" : "text-foreground/60",
-            )}
-          >
-            <Settings className={cn("h-5 w-5", pathname === "/settings" ? "stroke-[2.5px]" : "")} />
-            <span>Settings</span>
-          </Link>
         </nav>
       </div>
     </header>

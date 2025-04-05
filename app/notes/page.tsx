@@ -333,15 +333,6 @@ export default function NotesPage() {
         <CardContent>
           {renderEditor()}
         </CardContent>
-        <div className="p-4 border-t flex justify-end">
-          <Button onClick={handleSaveNotes} disabled={isSaving}>
-            {isSaving ? (
-                <>Saving...</>
-            ) : (
-                <><Save className="mr-2 h-4 w-4" /> Save Notes</>
-            )}
-          </Button>
-        </div>
       </Card>
       <Card>
         <CardHeader className="pb-3">
@@ -373,24 +364,21 @@ export default function NotesPage() {
         <TabsContent value="preview" className="flex-1 overflow-auto p-4">
           {renderPreview()}
         </TabsContent>
-        <div className="p-4 border-t flex justify-end">
-           <Button onClick={handleSaveNotes} disabled={isSaving} className="w-full md:w-auto">
-             {isSaving ? (
-                 <>Saving...</>
-             ) : (
-                 <><Save className="mr-2 h-4 w-4" /> Save Notes</>
-             )}
-           </Button>
-        </div>
       </Tabs>
     </div>
   )
 
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      <div className="mb-4 md:mb-6">
-        <h1 className="page-title">Prayer Notes</h1>
-        <p className="page-description">Capture prayer requests with special syntax</p>
+      <div className="mb-4 md:mb-6 flex items-center justify-between">
+        <h1 className="page-title">Notes</h1>
+        <Button onClick={handleSaveNotes} disabled={isSaving} size="sm">
+          {isSaving ? (
+              <>Saving...</>
+          ) : (
+              <><Save className="mr-2 h-4 w-4" /> Save Note</>
+          )}
+        </Button>
       </div>
 
       {isMobile ? renderMobileLayout() : renderDesktopLayout()}
@@ -421,7 +409,7 @@ export default function NotesPage() {
                 {isSaving ? (
                     <>Saving...</>
                 ) : (
-                    <><Save className="mr-2 h-4 w-4" /> Save Notes & Close</>
+                    <><Save className="mr-2 h-4 w-4" /> Save Note & Close</>
                 )}
               </Button>
             </div>

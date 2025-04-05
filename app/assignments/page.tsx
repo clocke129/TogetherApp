@@ -346,10 +346,54 @@ export default function AssignmentsPage() {
 
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      <div className="mb-4 md:mb-6">
-        <h1 className="page-title">Prayer Assignments</h1>
-        <p className="page-description">Manage groups and prayer day assignments</p>
+      {/* NEW Consistent Header */}
+      <div className="mb-4 md:mb-6 flex items-center justify-between">
+        <h1 className="page-title">Assignments</h1>
+        {/* MOVED Add Group Dialog Trigger and Content Here */}
+        <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
+          <DialogTrigger asChild>
+             <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90" disabled={isLoading || !user}>
+              <Plus className="h-4 w-4" />
+              Group
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+             <form onSubmit={handleAddGroupSubmit}>
+              <DialogHeader>
+                <DialogTitle>Create New Group</DialogTitle>
+                <DialogDescription>
+                  Enter a name for your new prayer group.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="group-name" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="group-name"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    className="col-span-3"
+                    placeholder="Group name"
+                    required
+                    disabled={isAddingGroup}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                 <DialogClose asChild>
+                   <Button type="button" variant="outline" disabled={isAddingGroup}>Cancel</Button>
+                </DialogClose>
+                <Button type="submit" disabled={isAddingGroup || !newGroupName.trim()}>
+                   {isAddingGroup ? "Creating..." : "Create Group"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
+      {/* REMOVED Old Header Div */}
 
       {error && <p className="text-red-500">{error}</p>}
 
@@ -470,54 +514,6 @@ export default function AssignmentsPage() {
           </Card>
 
           {/* Groups Section */}
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Groups</h2>
-            {/* --- Add Group Dialog Trigger --- */}
-            <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
-              <DialogTrigger asChild>
-                 <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90" disabled={isLoading || !user}>
-                  <Plus className="h-4 w-4" />
-                  New Group
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                 <form onSubmit={handleAddGroupSubmit}>
-                  <DialogHeader>
-                    <DialogTitle>Create New Group</DialogTitle>
-                    <DialogDescription>
-                      Enter a name for your new prayer group.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="group-name" className="text-right">
-                        Name
-                      </Label>
-                      <Input
-                        id="group-name"
-                        value={newGroupName}
-                        onChange={(e) => setNewGroupName(e.target.value)}
-                        className="col-span-3"
-                        placeholder="Group name"
-                        required
-                        disabled={isAddingGroup}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                     <DialogClose asChild>
-                       <Button type="button" variant="outline" disabled={isAddingGroup}>Cancel</Button>
-                    </DialogClose>
-                    <Button type="submit" disabled={isAddingGroup || !newGroupName.trim()}>
-                       {isAddingGroup ? "Creating..." : "Create Group"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-            {/* --- End Add Group Dialog --- */}
-          </div>
-
           {isLoading ? (
             <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
           ) : groups.length === 0 ? (

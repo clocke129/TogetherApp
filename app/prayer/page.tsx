@@ -376,31 +376,18 @@ export default function PrayerPage() {
 
     return (
       <>
-        {/* Responsive Header: Stacks and centers below md, row layout above md */}
-        <div className="mb-4 md:mb-6 flex flex-col items-center md:flex-row md:justify-between">
-          {/* Title and Date Nav Container - Centered text/items below md, aligned start above md */}
-          <div className="flex flex-col items-center md:items-start">
-            <h1 className="page-title">Prayer List</h1>
-            {/* Date Navigation - Keep centered horizontally within its own container */}
-            <div className="flex items-center justify-center gap-2 mt-1">
-              <Button variant="outline" size="icon" onClick={goToPreviousDay} className="h-7 w-7">
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <h2 className="text-lg font-medium text-center min-w-[160px]">
-                {getDayName(currentDate)}, {formatDate(currentDate)}
-              </h2>
-              <Button variant="outline" size="icon" onClick={goToNextDay} className="h-7 w-7">
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          {/* Action Button - Full width below md, auto width above md, margin top added for spacing when stacked */}
+        {/* Simplified Header: Always row layout */}
+        <div className="mb-4 md:mb-6 flex items-center justify-between">
+          {/* Title */}
+          <h1 className="page-title">Prayer List</h1>
+          {/* Removed Date Navigation */}
+
+          {/* Action Button */}
           <Dialog open={false} onOpenChange={() => {}}>
             <DialogTrigger asChild>
-              {/* Removed w-full, ensured size=sm */}
-              <Button size="sm" className="bg-shrub hover:bg-shrub/90 md:w-auto mt-3 md:mt-0" disabled>
+              <Button size="sm" className="bg-shrub hover:bg-shrub/90" disabled>
                 <Plus className="mr-2 h-4 w-4" />
-                New Request
+                Request
               </Button>
             </DialogTrigger>
             {/* DialogContent commented out or simplified previously */}
