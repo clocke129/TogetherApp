@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, Clock, AlertTriangle, User, Check, Plus, Repeat, CalendarPlus } from "lucide-react"
+import { Calendar, Clock, AlertTriangle, User, Check, Plus, CalendarPlus } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/context/AuthContext"
 import { db } from "@/lib/firebaseConfig"
 import {
@@ -33,8 +32,6 @@ import {
   Timestamp,
   orderBy,
   serverTimestamp,
-  deleteField,
-  FieldValue,
 } from "firebase/firestore"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -50,19 +47,12 @@ type Person = {
   name: string
 }
 
-type RecurringPattern = {
-  type: "daily" | "weekly" | "monthly" | "yearly"
-  interval: number
-}
-
 type FollowUp = {
   id: string
   personId: string
   content: string
   dueDate: Timestamp
   completed: boolean
-  isRecurring?: boolean
-  recurringPattern?: RecurringPattern
 }
 
 export default function FollowupsPage() {
@@ -77,11 +67,6 @@ export default function FollowupsPage() {
     personId: "",
     dueDate: Timestamp.now(),
     completed: false,
-    isRecurring: false,
-    recurringPattern: {
-      type: "weekly",
-      interval: 1,
-    },
   })
   const [editingFollowUp, setEditingFollowUp] = useState<FollowUp | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -256,24 +241,6 @@ export default function FollowupsPage() {
   
    // --- End Filtering and Sorting --- //
 
-  // Get recurring pattern text
-  const getRecurringPatternText = (pattern?: RecurringPattern) => {
-    if (!pattern) return ""
-
-    switch (pattern.type) {
-      case "daily":
-        return pattern.interval === 1 ? "Daily" : `Every ${pattern.interval} days`
-      case "weekly":
-        return pattern.interval === 1 ? "Weekly" : `Every ${pattern.interval} weeks`
-      case "monthly":
-        return pattern.interval === 1 ? "Monthly" : `Every ${pattern.interval} months`
-      case "yearly":
-        return pattern.interval === 1 ? "Yearly" : `Every ${pattern.interval} years`
-      default:
-        return ""
-    }
-  }
-
   // Handle adding a new follow-up - will need modification to save to Firestore
   const handleAddFollowUp = async () => {
     if (!newFollowUp.content || !newFollowUp.personId) {
@@ -297,8 +264,6 @@ export default function FollowupsPage() {
         completed: false,
         createdBy: user.uid, // Add createdBy field
         createdAt: serverTimestamp(), // Add createdAt timestamp
-        isRecurring: newFollowUp.isRecurring,
-        recurringPattern: newFollowUp.isRecurring ? newFollowUp.recurringPattern : undefined,
       };
       
       const docRef = await addDoc(collectionRef, docToAdd);
@@ -308,7 +273,7 @@ export default function FollowupsPage() {
       setFollowUps(prev => [...prev, { id: docRef.id, ...docToAdd }]);
 
       // Reset form and close dialog
-      setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false, isRecurring: false, recurringPattern: { type: "weekly", interval: 1 } });
+      setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false });
       setIsAddDialogOpen(false);
 
     } catch (error) {
@@ -329,17 +294,12 @@ export default function FollowupsPage() {
     const docRef = doc(db, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id);
 
     try {
-      const isRecurring = editingFollowUp.isRecurring ?? false;
       const dataToUpdate: {
           content: string;
           dueDate: Timestamp;
-          isRecurring: boolean;
-          recurringPattern?: RecurringPattern | FieldValue;
       } = {
         content: editingFollowUp.content,
         dueDate: editingFollowUp.dueDate instanceof Timestamp ? editingFollowUp.dueDate : Timestamp.fromDate(new Date(0)),
-        isRecurring: isRecurring,
-        recurringPattern: isRecurring ? (editingFollowUp.recurringPattern || { type: "weekly", interval: 1 }) : deleteField(),
       };
       
       await updateDoc(docRef, dataToUpdate);
@@ -353,16 +313,7 @@ export default function FollowupsPage() {
                 ...editingFollowUp!,
                 content: dataToUpdate.content, // Update fields from dataToUpdate
                 dueDate: dataToUpdate.dueDate,
-                isRecurring: dataToUpdate.isRecurring,
-                // Handle recurringPattern separately for local state
-                recurringPattern: dataToUpdate.isRecurring 
-                                     ? (dataToUpdate.recurringPattern as RecurringPattern) // Assume it's RecurringPattern if isRecurring is true
-                                     : undefined // Set to undefined locally if not recurring
             };
-             // Ensure recurringPattern exists if isRecurring is true (can happen if toggled on in dialog)
-             if (updatedFollowUp.isRecurring && !updatedFollowUp.recurringPattern) {
-                  updatedFollowUp.recurringPattern = { type: "weekly", interval: 1 }; 
-             }
             return updatedFollowUp;
          } else {
             return fu;
@@ -458,62 +409,6 @@ export default function FollowupsPage() {
                   }}
                 />
               </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="recurring"
-                  checked={newFollowUp.isRecurring}
-                  onCheckedChange={(checked) => setNewFollowUp({ ...newFollowUp, isRecurring: checked })}
-                />
-                <Label htmlFor="recurring">Recurring Follow-up</Label>
-              </div>
-
-              {newFollowUp.isRecurring && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="recurringType">Frequency</Label>
-                    <Select
-                      value={newFollowUp.recurringPattern?.type}
-                      onValueChange={(value: "daily" | "weekly" | "monthly" | "yearly") =>
-                        setNewFollowUp({
-                          ...newFollowUp,
-                          recurringPattern: {
-                            ...(newFollowUp.recurringPattern as RecurringPattern),
-                            type: value,
-                          },
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select frequency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="yearly">Yearly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="interval">Every</Label>
-                    <Input
-                      id="interval"
-                      type="number"
-                      min="1"
-                      value={newFollowUp.recurringPattern?.interval || 1}
-                      onChange={(e) =>
-                        setNewFollowUp({
-                          ...newFollowUp,
-                          recurringPattern: {
-                            ...(newFollowUp.recurringPattern as RecurringPattern),
-                            interval: Number.parseInt(e.target.value) || 1,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              )}
             </div>
             <DialogFooter>
               <Button onClick={handleAddFollowUp}>Save Follow-up</Button>
@@ -556,12 +451,6 @@ export default function FollowupsPage() {
                                     <label htmlFor={followUp.id} className="font-medium cursor-pointer">
                                       {followUp.content}
                                     </label>
-                                    {followUp.isRecurring && (
-                                      <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                                        <Repeat className="h-3 w-3" />
-                                        {getRecurringPatternText(followUp.recurringPattern)}
-                                      </Badge>
-                                    )}
                                   </div>
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -619,12 +508,6 @@ export default function FollowupsPage() {
                                       <label htmlFor={followUp.id} className="font-medium cursor-pointer">
                                         {followUp.content}
                                       </label>
-                                      {followUp.isRecurring && (
-                                        <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                                          <Repeat className="h-3 w-3" />
-                                          {getRecurringPatternText(followUp.recurringPattern)}
-                                        </Badge>
-                                      )}
                                     </div>
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -682,12 +565,6 @@ export default function FollowupsPage() {
                                       <label htmlFor={followUp.id} className="font-medium cursor-pointer">
                                         {followUp.content}
                                       </label>
-                                      {followUp.isRecurring && (
-                                        <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                                          <Repeat className="h-3 w-3" />
-                                          {getRecurringPatternText(followUp.recurringPattern)}
-                                        </Badge>
-                                      )}
                                     </div>
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -744,12 +621,6 @@ export default function FollowupsPage() {
                                       <label htmlFor={followUp.id} className="font-medium cursor-pointer">
                                         {followUp.content}
                                       </label>
-                                      {followUp.isRecurring && (
-                                        <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                                          <Repeat className="h-3 w-3" />
-                                          {getRecurringPatternText(followUp.recurringPattern)}
-                                        </Badge>
-                                      )}
                                     </div>
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                       <User className="h-3 w-3" />
@@ -811,12 +682,6 @@ export default function FollowupsPage() {
                              <label htmlFor={followUp.id} className="line-through text-muted-foreground cursor-pointer">
                                {followUp.content}
                              </label>
-                             {followUp.isRecurring && (
-                               <Badge variant="outline" className="flex items-center gap-1 bg-birchwood/20">
-                                 <Repeat className="h-3 w-3" />
-                                 {getRecurringPatternText(followUp.recurringPattern)}
-                               </Badge>
-                             )}
                            </div>
                            <div className="flex items-center justify-between">
                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -833,6 +698,45 @@ export default function FollowupsPage() {
             </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog for Editing Follow-up - needs modification */} 
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}> 
+         <DialogContent className="sm:max-w-[425px]"> 
+           <DialogHeader> 
+             <DialogTitle>Edit Follow-up</DialogTitle> 
+             <DialogDescription>Update the details for this follow-up.</DialogDescription> 
+           </DialogHeader> 
+           {editingFollowUp && ( 
+             <div className="grid gap-4 py-4"> 
+               <div className="grid gap-2"> 
+                 <Label htmlFor="edit-content">Follow-up Item</Label> 
+                 <Input 
+                   id="edit-content" 
+                   value={editingFollowUp.content} 
+                   onChange={(e) => setEditingFollowUp({ ...editingFollowUp, content: e.target.value })} 
+                 /> 
+               </div> 
+               <div className="grid grid-cols-4 items-center gap-4"> 
+                 <Label htmlFor="edit-dueDate" className="text-right">Due Date</Label> 
+                 <Input 
+                   id="edit-dueDate" 
+                   type="date" 
+                   className="col-span-3" 
+                   value={formatDateForInput(editingFollowUp.dueDate)} 
+                   onChange={(e) => { 
+                     const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.fromDate(new Date(0)); 
+                     setEditingFollowUp({ ...editingFollowUp, dueDate: dateValue })
+                   }} 
+                 /> 
+               </div> 
+             </div> 
+           )} 
+           <DialogFooter> 
+             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button> 
+             <Button onClick={handleEditFollowUp}>Save Changes</Button> 
+           </DialogFooter> 
+         </DialogContent> 
+       </Dialog> 
     </div>
   )
 }

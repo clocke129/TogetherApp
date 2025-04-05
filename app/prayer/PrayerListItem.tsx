@@ -4,7 +4,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ChevronDown, ChevronUp, Heart, Clock, Check } from "lucide-react"
+import { ChevronDown, ChevronUp, Heart, Clock, Check, Calendar } from "lucide-react"
 import { Person, PrayerRequest, FollowUp } from "@/lib/types" // Assuming types are in lib/types
 import { Timestamp } from "firebase/firestore"
 import { formatDate } from "@/lib/utils" // Assuming formatDate is shareable
@@ -71,20 +71,14 @@ export function PrayerListItem({
           {/* Collapsed View: Most Recent Request Content & Date */}
           {!isExpanded && mostRecentRequest && (
             <div className="pt-1 space-y-1">
-              <p className="text-sm text-muted-foreground line-clamp-2"> {/* Limit lines */}
+              <p className="text-sm text-muted-foreground line-clamp-2">
                 {mostRecentRequest.content}
               </p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
-                <span className="flex items-center">
-                  <Clock className="h-3 w-3 mr-1" />
-                  Added {formatDate(mostRecentRequest.createdAt.toDate())}
+              <div className="flex items-center text-xs text-muted-foreground pt-1">
+                <span className="flex items-center flex-shrink-0">
+                  <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+                  {formatDate(mostRecentRequest.createdAt.toDate())}
                 </span>
-                {/* Placeholder for per-request prayed count - Data model doesn't support this yet */}
-                {/* {mostRecentRequest.prayedCount > 0 && (
-                  <span className="flex items-center">
-                    <Heart className="h-3 w-3 mr-1 text-red-500 fill-current" /> {mostRecentRequest.prayedCount}
-                  </span>
-                )} */}
               </div>
             </div>
           )}
@@ -117,23 +111,24 @@ export function PrayerListItem({
             <>
               {/* Prayer Requests Section */}
               <div>
-                <h4 className="text-sm font-medium mb-1">Prayer Requests:</h4>
+                <h4 className="text-sm font-medium mb-2">Prayer Requests:</h4>
                 {expandedRequests.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="space-y-1 pl-4">
                     {expandedRequests.slice(0, 3).map((req) => (
-                      <li key={req.id} className="text-sm text-muted-foreground">
-                        <p className="line-clamp-3">{req.content}</p> {/* Truncate */}
-                        <span className="text-xs block mt-0.5">
-                          Added {formatDate(req.createdAt.toDate())}
+                      <li key={req.id} className="text-xs py-1 flex justify-between items-start gap-4">
+                        <p className="text-foreground flex-1"><span className="mr-2">•</span>{req.content}</p>
+                        <span className="flex items-center text-muted-foreground flex-shrink-0">
+                          <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+                          {formatDate(req.createdAt.toDate())}
                         </span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">No prayer requests found.</p>
+                  <p className="text-sm text-muted-foreground italic pl-4">No prayer requests found.</p>
                 )}
                 {expandedRequests.length > 3 && (
-                   <Button variant="link" size="sm" className="h-auto p-0 mt-1 text-xs">
+                   <Button variant="link" size="sm" className="h-auto p-0 mt-1 text-xs pl-4">
                      View all {expandedRequests.length} requests... {/* TODO: Implement Modal */}
                    </Button>
                 )}
@@ -144,22 +139,23 @@ export function PrayerListItem({
                 <h4 className="text-sm font-medium mb-2">Follow-ups:</h4>
                  {/* Filter for active follow-ups before mapping */}
                 {expandedFollowUps.filter(fu => !fu.completed).length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="space-y-1 pl-4">
                     {expandedFollowUps.filter(fu => !fu.completed).map((fu) => (
-                      <li key={fu.id} className="flex items-center gap-2">
+                      <li key={fu.id} className="flex items-center gap-2 py-1">
                         <Checkbox
                            id={`followup-${fu.id}`}
                            onCheckedChange={() => handleCheckboxChange(fu.id)}
-                           // Add disabled state while updating if needed
+                           className="flex-shrink-0"
                         />
-                        <label htmlFor={`followup-${fu.id}`} className="text-sm text-muted-foreground flex-1">
+                        <label htmlFor={`followup-${fu.id}`} className="text-xs text-muted-foreground">
                           {fu.content}
-                          {fu.dueDate && ( // Display due date if available
-                             <span className="text-xs block text-gray-500">
-                               Due {formatDate(fu.dueDate.toDate())}
-                             </span>
-                          )}
                         </label>
+                        {fu.dueDate && ( // Display due date if available
+                           <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0 whitespace-nowrap">
+                             <Calendar className="h-3 w-3" />
+                             {formatDate(fu.dueDate.toDate())}
+                           </span>
+                        )}
                       </li>
                     ))}
                   </ul>
