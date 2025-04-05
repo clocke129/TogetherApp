@@ -4,10 +4,11 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ChevronDown, ChevronUp, Heart, Clock } from "lucide-react"
+import { ChevronDown, ChevronUp, Heart, Clock, Check } from "lucide-react"
 import { Person, PrayerRequest, FollowUp } from "@/lib/types" // Assuming types are in lib/types
 import { Timestamp } from "firebase/firestore"
 import { formatDate } from "@/lib/utils" // Assuming formatDate is shareable
+import { cn } from "@/lib/utils"
 
 // Define Props for the component
 interface PrayerListItemProps {
@@ -22,6 +23,7 @@ interface PrayerListItemProps {
   onMarkPrayed: (person: Person) => void
   onCompleteFollowUp: (personId: string, followUpId: string) => void
   isMarkingPrayed: boolean // To disable pray button
+  isPrayedToday: boolean // NEW: Indicates if prayed for today
   // Add any other necessary props like error states later
 }
 
@@ -37,6 +39,7 @@ export function PrayerListItem({
   onMarkPrayed,
   onCompleteFollowUp,
   isMarkingPrayed,
+  isPrayedToday,
 }: PrayerListItemProps) {
 
   const handleToggleExpand = () => {
@@ -88,16 +91,19 @@ export function PrayerListItem({
         </div>
         {/* Pray Button */}
         <Button
-          variant="default"
+          variant={isPrayedToday ? "outline" : "default"}
           size="sm"
-          className="gap-1 bg-shrub hover:bg-shrub/90 text-white min-w-[80px]"
+          className={cn(
+            "gap-1 min-w-[90px]",
+            !isPrayedToday && "bg-shrub hover:bg-shrub/90 text-white"
+          )}
           onClick={handleMarkPrayed}
           disabled={isMarkingPrayed}
         >
           {isMarkingPrayed ? (
             <span className="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full" />
           ) : (
-            <><Heart className="h-4 w-4" /> Pray</>
+            <>{isPrayedToday ? <Check className="h-4 w-4" /> : <Heart className="h-4 w-4" />} {isPrayedToday ? "Prayed" : "Pray"}</>
           )}
         </Button>
       </CardHeader>

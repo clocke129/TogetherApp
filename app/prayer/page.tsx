@@ -429,6 +429,7 @@ export default function PrayerPage() {
                       onMarkPrayed={markAsPrayedFor}
                       onCompleteFollowUp={handleCompleteFollowUp} // Pass the new handler
                       isMarkingPrayed={isMarkingPrayedId === person.id}
+                      isPrayedToday={false} // Explicitly false for active list
                       // TODO: Pass expanded error state if needed for display within the item
                     />
                   );
@@ -460,6 +461,7 @@ export default function PrayerPage() {
                       onMarkPrayed={markAsPrayedFor} // Use the same function to 'un-complete'
                       onCompleteFollowUp={handleCompleteFollowUp}
                       isMarkingPrayed={isMarkingPrayedId === person.id} // Reflects loading state for toggle
+                      isPrayedToday={true} // Explicitly true for completed list
                     />
                   );
                 })

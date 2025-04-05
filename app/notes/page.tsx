@@ -327,9 +327,9 @@ export default function NotesPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-lg">Note Editor</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
+          {/* <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
             <Maximize2 className="h-4 w-4" />
-          </Button>
+          </Button> */}
         </CardHeader>
         <CardContent>
           {renderEditor()}
@@ -350,14 +350,14 @@ export default function NotesPage() {
   const renderMobileLayout = () => (
      <div className="flex flex-col h-[calc(100vh-10rem)]">
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "editor" | "preview")} className="flex-1 flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b">
-            <TabsList className="grid w-[calc(100%-50px)] grid-cols-2">
+        <div className="p-4 border-b">
+            <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="editor">Editor</TabsTrigger>
                 <TabsTrigger value="preview">Preview</TabsTrigger>
             </TabsList>
-            <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
+            {/* <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
                 <Maximize2 className="h-4 w-4" />
-            </Button>
+            </Button> */}
         </div>
         <TabsContent value="editor" className="flex-1 overflow-auto p-4">
           {renderEditor()}
@@ -384,7 +384,7 @@ export default function NotesPage() {
 
       {isMobile ? renderMobileLayout() : renderDesktopLayout()}
 
-      <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>
+      {/* <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>
         <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0">
           <VisuallyHidden>
             <DialogTitle>Fullscreen Note Editor</DialogTitle>
@@ -416,7 +416,7 @@ export default function NotesPage() {
             </div>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
     </div>
   )
 }

@@ -661,7 +661,7 @@ export default function FollowupsPage() {
                    <AccordionTrigger className="p-3 bg-card border rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
                       <div className="flex items-center gap-2 text-lg font-medium">
                         <Calendar className="h-5 w-5 text-shrub" />
-                        <span>Future</span>
+                        <span>Scheduled</span>
                         <Badge variant="outline">{futureFollowUps.length}</Badge>
                       </div>
                    </AccordionTrigger>
