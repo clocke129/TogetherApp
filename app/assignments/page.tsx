@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
@@ -30,7 +30,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu"
+import { useMobile } from "@/hooks/use-mobile"
 
 // Types (Keep local types for now to avoid potential import issues until resolved)
 // type Person = {
@@ -53,14 +57,20 @@ import {
 
 // Day names
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const DAYS_OF_WEEK_MOBILE = ["Su", "M", "T", "W", "Th", "F", "Sa"]
 
 export default function AssignmentsPage() {
   const { user, loading: authLoading } = useAuth()
+  const isMobile = useMobile()
   const [people, setPeople] = useState<Person[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
   const [loadingData, setLoadingData] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Local state for number per day inputs, keyed by groupId (now stores number | null)
+  const [localNumPerDaySettings, setLocalNumPerDaySettings] = useState<Record<string, number | null>>({});
+  const [isSavingNumPerDay, setIsSavingNumPerDay] = useState<string | null>(null); // groupId being saved
 
   // State for Add Person Dialog
   const [isAddPersonDialogOpen, setIsAddPersonDialogOpen] = useState(false);
@@ -97,6 +107,16 @@ export default function AssignmentsPage() {
           const groupsData = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group))
           setGroups(groupsData)
           console.log("Fetched Groups:", groupsData)
+
+          // --- Initialize local state for numPerDay inputs (handles null) ---
+          const initialNumPerDay: Record<string, number | null> = {};
+          groupsData.forEach(group => {
+            // Default to null (All) if prayerSettings or numPerDay is missing/undefined
+            initialNumPerDay[group.id] = group.prayerSettings?.numPerDay ?? null;
+          });
+          setLocalNumPerDaySettings(initialNumPerDay);
+          // --- End initialization ---
+
         } catch (err) {
           console.error("Error fetching data:", err)
           setError("Failed to load assignment data. Please try again later.")
@@ -110,6 +130,9 @@ export default function AssignmentsPage() {
       setLoadingData(false)
       setError("Please log in to view assignments.")
       // Optionally redirect to login page
+      setPeople([])
+      setGroups([])
+      setLocalNumPerDaySettings({}) // Clear settings if logged out
     }
   }, [user, authLoading])
 
@@ -184,7 +207,7 @@ export default function AssignmentsPage() {
   }
   
   // Add Person Submit Handler
-  const handleAddPersonSubmit = async (e: FormEvent) => {
+  const handleAddPersonSubmit = async (e: FormEvent, groupIdToAssign?: string) => {
     e.preventDefault();
     if (!newPersonName.trim() || !user) return;
 
@@ -192,23 +215,40 @@ export default function AssignmentsPage() {
     setError(null);
 
     try {
-      const newPersonData = {
+      const newPersonData: { name: string; createdBy: string; createdAt: any; groupId?: string } = {
         name: newPersonName.trim(),
         createdBy: user.uid,
-        createdAt: serverTimestamp(), // Add creation timestamp
-        // groupId is initially undefined/null for uncategorized
+        createdAt: serverTimestamp(),
       };
+
+      // If assigning to a specific group immediately
+      if (groupIdToAssign) {
+        newPersonData.groupId = groupIdToAssign;
+      }
+
       const docRef = await addDoc(collection(db, "persons"), newPersonData);
-      // Add the new person to local state immediately for UI update
-      // Note: createdAt won't be available immediately, but we have the ID
-      setPeople(prev => [...prev, { id: docRef.id, ...newPersonData, createdAt: Timestamp.now() } as unknown as Person]); // Use type assertion carefully
+
+      // If assigned to group, update group's personIds array
+      if (groupIdToAssign) {
+        const groupRef = doc(db, "groups", groupIdToAssign);
+        await updateDoc(groupRef, {
+          personIds: arrayUnion(docRef.id)
+        });
+        console.log(`Also added person ${docRef.id} to group ${groupIdToAssign}`);
+      }
+
+      // Add the new person to local state
+      setPeople(prev => [
+        ...prev,
+        { id: docRef.id, ...newPersonData, createdAt: Timestamp.now() } as Person
+      ]);
       setNewPersonName(""); // Clear input
       setIsAddPersonDialogOpen(false); // Close dialog
       console.log("Person added with ID: ", docRef.id);
+
     } catch (err) {
       console.error("Error adding person:", err);
       setError("Failed to add person. Please try again.");
-      // Keep dialog open on error?
     } finally {
       setIsAddingPerson(false);
     }
@@ -228,12 +268,17 @@ export default function AssignmentsPage() {
         createdBy: user.uid,
         personIds: [], // Start with no people
         prayerDays: [], // Start with no days assigned
-        prayerSettings: { type: "all" }, // Default setting
+        // Use the updated prayerSettings structure with defaults
+        prayerSettings: {
+          strategy: "sequential",
+          numPerDay: 1,
+          nextIndex: 0
+        },
         createdAt: serverTimestamp(),
       };
       const docRef = await addDoc(collection(db, "groups"), newGroupData);
       // Add the new group to local state
-      setGroups(prev => [...prev, { id: docRef.id, ...newGroupData, createdAt: Timestamp.now() } as unknown as Group]); // Use type assertion carefully
+      setGroups(prev => [...prev, { id: docRef.id, ...newGroupData, createdAt: Timestamp.now() } as Group]); // Use type assertion carefully
       setNewGroupName(""); // Clear input
       setIsAddGroupDialogOpen(false); // Close dialog
       console.log("Group added with ID: ", docRef.id);
@@ -253,6 +298,10 @@ export default function AssignmentsPage() {
      setIsAssigningPerson(personId); // Set loading state for this person
      setError(null);
 
+     // Check if person already has a group and remove from old group if necessary
+     const person = people.find(p => p.id === personId);
+     const oldGroupId = person?.groupId;
+
      // Create refs for the documents
      const personRef = doc(db, "persons", personId);
      const groupRef = doc(db, "groups", groupId);
@@ -263,21 +312,45 @@ export default function AssignmentsPage() {
        // 1. Update Person: Set the groupId field
        batch.update(personRef, { groupId: groupId });
 
-       // 2. Update Group: Add personId to the personIds array
+       // 2. Update New Group: Add personId to the personIds array
        batch.update(groupRef, { personIds: arrayUnion(personId) });
+
+       // 3. Update Old Group (if exists): Remove personId from personIds array
+       if (oldGroupId && oldGroupId !== groupId) {
+         const oldGroupRef = doc(db, "groups", oldGroupId);
+         batch.update(oldGroupRef, { personIds: arrayRemove(personId) });
+         console.log(`Also removing person ${personId} from old group ${oldGroupId}`);
+       }
 
        // Commit the batch
        await batch.commit();
 
-       // Optimistic UI Update: Move person locally
+       // Optimistic UI Update: Update person locally
        setPeople(prevPeople =>
          prevPeople.map(p =>
            p.id === personId ? { ...p, groupId: groupId } : p
          )
        );
-       // Note: We don't need to update local groups state here unless
-       // we were displaying the personIds list directly on this page.
-       // The prayer page will fetch the updated group data.
+       // Note: Update local groups state for personIds if needed for immediate UI consistency
+       if (oldGroupId && oldGroupId !== groupId) {
+         setGroups(prevGroups => prevGroups.map(g => {
+           if (g.id === oldGroupId) {
+             return { ...g, personIds: g.personIds.filter(id => id !== personId) };
+           }
+           if (g.id === groupId) {
+             // Ensure personId is added if not already (though arrayUnion should handle)
+             return { ...g, personIds: [...new Set([...g.personIds, personId])] };
+           }
+           return g;
+         }));
+       } else if (groupId) {
+          setGroups(prevGroups => prevGroups.map(g => {
+            if (g.id === groupId) {
+              return { ...g, personIds: [...new Set([...g.personIds, personId])] };
+            }
+            return g;
+         }));
+       }
 
        console.log(`Person ${personId} assigned to group ${groupId} successfully (batch commit).`);
 
@@ -342,6 +415,69 @@ export default function AssignmentsPage() {
      console.log(`Add Person to group ${groupId} clicked (needs implementation)`);
   };
 
+  // NEW: Update numPerDay setting for a group (handles null for "All")
+  const handleNumPerDayChange = async (groupId: string, newValue: number | null) => {
+    if (!user || isSavingNumPerDay) return;
+
+    const originalGroup = groups.find(g => g.id === groupId);
+    // Default to null (All) if setting doesn't exist
+    const originalValue = originalGroup?.prayerSettings?.numPerDay ?? null;
+
+    // Validate only if it's a number, otherwise keep null
+    let validatedValue: number | null = null;
+    if (newValue !== null) {
+        validatedValue = Math.max(1, Math.floor(newValue));
+    }
+
+    // Update local state immediately
+    setLocalNumPerDaySettings(prev => ({ ...prev, [groupId]: validatedValue }));
+
+    // Only save if the value actually changed
+    if (validatedValue === originalValue) {
+      console.log(`No change needed for group ${groupId} numPerDay.`);
+      return;
+    }
+
+    console.log(`Updating numPerDay for group ${groupId} to ${validatedValue === null ? 'All' : validatedValue}`);
+    setIsSavingNumPerDay(groupId);
+    setError(null);
+
+    try {
+      const groupRef = doc(db, "groups", groupId);
+
+      // Explicitly construct the prayerSettings object for the update
+      const newPrayerSettings = {
+        strategy: originalGroup?.prayerSettings?.strategy ?? "sequential",
+        numPerDay: validatedValue, // The new validated value (can be null)
+        nextIndex: originalGroup?.prayerSettings?.nextIndex ?? 0,
+      };
+
+      await updateDoc(groupRef, {
+        prayerSettings: newPrayerSettings
+      });
+
+      // Update the main groups state to reflect the saved change
+      setGroups(prevGroups =>
+        prevGroups.map(g =>
+          g.id === groupId ? {
+            ...g,
+            prayerSettings: newPrayerSettings // Use the same object used for saving
+          } : g
+        )
+      );
+
+      console.log(`numPerDay updated successfully for group ${groupId}.`);
+
+    } catch (err) {
+      console.error("Error updating numPerDay:", err);
+      setError(`Failed to update settings for group ${originalGroup?.name ?? groupId}. Reverting input.`);
+      // Revert local state on error
+      setLocalNumPerDaySettings(prev => ({ ...prev, [groupId]: originalValue }));
+    } finally {
+      setIsSavingNumPerDay(null);
+    }
+  };
+
   const isLoading = authLoading || loadingData
 
   return (
@@ -395,15 +531,15 @@ export default function AssignmentsPage() {
       </div>
       {/* REMOVED Old Header Div */}
 
-      {error && <p className="text-red-500">{error}</p>}
+      {error && <p className="text-red-500 text-center mb-4">{error}</p>}
 
-      <Tabs defaultValue="people" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="people">People & Groups</TabsTrigger>
+      <Tabs defaultValue="people-groups">
+        <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsTrigger value="people-groups">People & Groups</TabsTrigger>
           <TabsTrigger value="groups-days">Groups & Days</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="people" className="space-y-6">
+        <TabsContent value="people-groups" className="space-y-6">
           {/* Uncategorized People Section */}
           <Card>
             <CardHeader className="pb-3">
@@ -418,7 +554,7 @@ export default function AssignmentsPage() {
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[425px]">
-                    <form onSubmit={handleAddPersonSubmit}>
+                    <form onSubmit={(e) => handleAddPersonSubmit(e)}>
                       <DialogHeader>
                         <DialogTitle>Add New Person</DialogTitle>
                         <DialogDescription>
@@ -588,51 +724,120 @@ export default function AssignmentsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="groups-days" className="space-y-6">
+        <TabsContent value="groups-days" className="space-y-4">
           {isLoading ? (
             <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
           ) : groups.length === 0 ? (
             <Card>
               <CardContent className="text-sm text-muted-foreground text-center py-8">
-                Create groups first to assign prayer days.
+                Create groups first to assign prayer days and settings.
               </CardContent>
             </Card>
-          ) : (
-            groups.map((group) => (
-              <Card key={group.id} className="mb-4">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">{group.name}</CardTitle>
-                  {/* Optional: Add group description or settings summary here */}
+          ) :
+            groups.map((group) => {
+              const isExpanded = expandedGroupId === group.id;
+              const currentNumSetting = localNumPerDaySettings[group.id];
+              const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
+              const groupSize = group.personIds?.length ?? 0; // Get group size, default 0
+
+              return (
+              <Card key={group.id} className="mb-4 overflow-hidden">
+                <CardHeader
+                  className="pb-3 pt-3 px-4 flex flex-row items-center justify-between cursor-pointer hover:bg-muted/50"
+                  onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
+                >
+                  {/* --- Add Group Icon --- */}
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary flex-shrink-0" />
+                    <CardTitle className="text-lg">{group.name}</CardTitle>
+                  </div>
+                  {isExpanded ? (
+                      <ChevronUp className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  ) : (
+                      <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  )}
                 </CardHeader>
-                <CardContent>
-                   <p className="text-sm text-muted-foreground mb-3">Select prayer days:</p>
-                   <div className="flex flex-wrap gap-2">
-                      {DAYS_OF_WEEK.map((day, index) => {
-                        const isSelected = group.prayerDays?.includes(index);
-                        const isUpdatingThisGroup = isUpdatingDays === group.id;
-                        return (
-                          <Button
-                            key={index}
-                            variant={isSelected ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => toggleDayForGroup(group.id, index)}
-                            disabled={isLoading || isUpdatingThisGroup}
-                            className={cn(
-                               "w-12", // Fixed width for consistency
-                               isSelected && "bg-shrub hover:bg-shrub/90", // Specific style for selected
-                               isUpdatingThisGroup && "opacity-50 cursor-not-allowed" // Indicate loading
-                            )}
-                          >
-                            {day}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                    {isUpdatingDays === group.id && <p className="text-xs text-muted-foreground mt-2">Updating...</p>}
-                    {/* TODO: Add Prayer Settings UI (Type, Count) later */}
-                </CardContent>
+
+                {isExpanded && (
+                  <CardContent className="space-y-4 pt-2 pb-4 px-4 border-t">
+                     <div>
+                       <p className="text-sm text-muted-foreground mb-3">Select prayer days:</p>
+                       <div className="flex flex-wrap gap-2">
+                          {displayDays.map((day, index) => {
+                            const isSelected = group.prayerDays?.includes(index);
+                            const isUpdatingThisGroup = isUpdatingDays === group.id;
+                            return (
+                              <Button
+                                key={index}
+                                variant={isSelected ? "default" : "outline"}
+                                size="sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleDayForGroup(group.id, index)
+                                }}
+                                disabled={isLoading || isUpdatingThisGroup}
+                                className={cn(
+                                   "w-10 md:w-12",
+                                   isSelected && "bg-shrub hover:bg-shrub/90",
+                                   isUpdatingThisGroup && "opacity-50 cursor-not-allowed"
+                                )}
+                              >
+                                {day}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        {isUpdatingDays === group.id && <p className="text-xs text-muted-foreground mt-2">Updating days...</p>}
+                     </div>
+
+                     <div className="pt-2">
+                       <Label className="text-sm text-muted-foreground block mb-2">People per day:</Label>
+                       <div className="flex items-center gap-2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-[100px] justify-start font-normal"
+                                disabled={isLoading || isSavingNumPerDay === group.id}
+                              >
+                                {isSavingNumPerDay === group.id ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <span>{currentNumSetting === null ? "All" : currentNumSetting}</span>
+                                )}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[100px]">
+                              {/* Make content scrollable vertically ONLY */}
+                              <div className="max-h-[200px] overflow-y-auto overflow-x-hidden"> {/* Added overflow-x-hidden */}
+                                <DropdownMenuRadioGroup
+                                  value={currentNumSetting === null ? "all" : currentNumSetting.toString()}
+                                  onValueChange={(value) => {
+                                    const newValue = value === "all" ? null : parseInt(value, 10);
+                                    handleNumPerDayChange(group.id, newValue);
+                                  }}
+                                >
+                                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+                                  {/* Only show numbers if group has members */}
+                                  {groupSize > 0 && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      {/* Generate options up to group size */}
+                                      {Array.from({ length: groupSize }, (_, i) => i + 1).map(num => (
+                                          <DropdownMenuRadioItem key={num} value={num.toString()}>{num}</DropdownMenuRadioItem>
+                                      ))}
+                                    </>
+                                  )}
+                                </DropdownMenuRadioGroup>
+                               </div> {/* Close scroll wrapper */}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                       </div>
+                     </div>
+                  </CardContent>
+                )}
               </Card>
-            ))
+            )}
           )}
         </TabsContent>
       </Tabs>

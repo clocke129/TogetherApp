@@ -39,7 +39,7 @@ import { formatDate } from "@/lib/utils"
 // Firestore and Auth Imports
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
-import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, serverTimestamp, orderBy, deleteField, limit } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, serverTimestamp, orderBy, deleteField, limit, writeBatch } from 'firebase/firestore'
 
 export default function PrayerPage() {
   const { user, loading: authLoading } = useAuth(); // Auth hook
@@ -264,7 +264,6 @@ export default function PrayerPage() {
           let peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
 
           // 3. Fetch the MOST RECENT prayer request for EACH person (for collapsed view)
-          // This adds extra reads but simplifies the list item component
           const peopleWithRecentRequestPromises = peopleData.map(async (person) => {
             const requestsQuery = query(
               collection(db, "persons", person.id, "prayerRequests"),
@@ -287,18 +286,76 @@ export default function PrayerPage() {
           console.log(`[Prayer Debug] Filtering for day index: ${currentDayIndex}`)
           console.log("[Prayer Debug] Active groups for today:", JSON.stringify(activeGroups, null, 2))
 
-          // 5. Get all personIds from active groups
-          let personIdsToPrayFor = new Set<string>()
-          activeGroups.forEach(group => {
-            // TODO: Apply group.prayerSettings logic here later (e.g., random, recent)
-            // For now, assume "all"
-            if (group.personIds) {
-              group.personIds.forEach(id => personIdsToPrayFor.add(id))
-            }
-          })
-          console.log("[Prayer Debug] Person IDs collected from active groups:", Array.from(personIdsToPrayFor))
+          // 5. --- Determine people to pray for using Sequential Algorithm & Update nextIndex --- //
+          const batch = writeBatch(db); // Initialize batch for nextIndex updates
+          let personIdsToPrayFor = new Set<string>(); // Initialize set for today's assignments
 
-          // 6. Filter all ENHANCED people data to get today's list
+          activeGroups.forEach(group => {
+            const groupPersonIds = group.personIds ?? [];
+            if (groupPersonIds.length === 0) {
+              console.log(`[Prayer Debug] Skipping group ${group.id} (${group.name}) - no members.`);
+              return; // Skip groups with no members
+            }
+
+            // Get settings or use defaults
+            const settings = group.prayerSettings;
+            // Default to 'null' (all) if not set or explicitly null
+            const numPerDaySetting = settings?.numPerDay ?? null;
+            const currentStartIndex = settings?.nextIndex ?? 0; // Default to index 0 if not set
+            const totalPeople = groupPersonIds.length;
+
+            // Determine actual number to assign based on setting
+            const actualNumToAssign = numPerDaySetting === null ? totalPeople : Math.min(numPerDaySetting, totalPeople);
+
+            console.log(`[Prayer Debug] Group: ${group.name} (ID: ${group.id}) - Settings: numPerDay=${numPerDaySetting ?? 'all'}(actual:${actualNumToAssign}), startIndex=${currentStartIndex}, total=${totalPeople}`);
+
+            let assignedCount = 0;
+            let newNextIndex = currentStartIndex;
+            const assignedIdsInGroup = []; // Keep track of IDs assigned from THIS group
+
+            for (let i = 0; i < actualNumToAssign; i++) {
+              const personIndex = (currentStartIndex + i) % totalPeople;
+              const personId = groupPersonIds[personIndex];
+              personIdsToPrayFor.add(personId);
+              assignedIdsInGroup.push(personId);
+              assignedCount++;
+            }
+
+            // Calculate the index for the *next* assignment
+            newNextIndex = (currentStartIndex + assignedCount) % totalPeople;
+
+            console.log(`[Prayer Debug] Group: ${group.name} - Assigned IDs: [${assignedIdsInGroup.join(", ")}], New nextIndex: ${newNextIndex}`);
+
+            // Stage update for nextIndex if it changed or wasn't set
+            if (!settings || settings.nextIndex !== newNextIndex) {
+              const groupRef = doc(db, "groups", group.id);
+              // Update the specific field, merging with existing settings if they exist
+              // Ensure strategy and numPerDay are preserved or defaulted if missing
+              batch.update(groupRef, {
+                "prayerSettings.nextIndex": newNextIndex,
+                "prayerSettings.strategy": settings?.strategy ?? "sequential", // Ensure strategy exists
+                // Preserve null if it was null, otherwise default to null if setting didn't exist before
+                "prayerSettings.numPerDay": numPerDaySetting === undefined ? null : numPerDaySetting
+              });
+              console.log(`[Prayer Debug] Staging update for group ${group.id}: set prayerSettings.nextIndex to ${newNextIndex}`);
+            }
+          });
+          // --- End Sequential Algorithm Processing --- //
+
+          console.log("[Prayer Debug] Final Person IDs determined for today:", Array.from(personIdsToPrayFor))
+
+          // 6. Commit the batch updates for nextIndex values
+          try {
+              console.log("[Prayer Debug] Committing batch updates for nextIndex...");
+              await batch.commit();
+              console.log("[Prayer Debug] Batch commit successful.");
+          } catch (commitError) {
+              console.error("[Prayer Debug] Error committing batch updates:", commitError);
+              // Decide how to handle commit errors - maybe proceed without index updates?
+              // setError("Failed to update prayer cycle state. List may be correct but future cycles might be affected.");
+          }
+
+          // 7. Filter all ENHANCED people data to get today's list
           const todaysList = peopleWithRecentRequests.filter(person => personIdsToPrayFor.has(person.id))
           setTodaysPrayerList(todaysList)
           console.log("[Prayer Debug] Final Today's Prayer List (with recent request):", JSON.stringify(todaysList, null, 2))

@@ -15,9 +15,10 @@ export interface Group {
   createdBy: string; // Firebase Auth uid
   personIds: string[]; // Array of Person document IDs in this group
   prayerDays: number[]; // 0-6 representing Sun-Sat
-  prayerSettings: {
-    type: "all" | "random" | "recent"; // Prayer selection method
-    count?: number; // Optional: Number of people for 'random'
+  prayerSettings?: {
+    strategy: "sequential"; // Selection method (only sequential for now)
+    numPerDay: number | null; // How many people to pray for each time (null means 'all')
+    nextIndex: number; // Index to start selection from next time
   };
   createdAt?: Timestamp; // Added creation timestamp
 }
