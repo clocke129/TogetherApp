@@ -41,6 +41,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { cn } from "@/lib/utils"
 
 // Types
 type Person = {
@@ -499,15 +500,15 @@ export default function FollowupsPage() {
            <Accordion type="multiple" className="w-full space-y-2" defaultValue={['overdue', 'this-week']}>
               {overdueFollowUps.length > 0 && (
                  <AccordionItem value="overdue">
-                   <AccordionTrigger className="p-3 bg-card border border-destructive/20 rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
+                   <AccordionTrigger className="p-3 bg-card border border-shrub/20 rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
                       <div className="flex items-center gap-2 text-lg font-medium">
-                        <AlertTriangle className="h-5 w-5 text-destructive" />
+                        <AlertTriangle className="h-5 w-5 text-shrub" />
                         <span>Overdue</span>
-                        <Badge variant="destructive">{overdueFollowUps.length}</Badge>
+                        <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground">{overdueFollowUps.length}</Badge>
                       </div>
                    </AccordionTrigger>
                    <AccordionContent className="p-0">
-                      <Card className="rounded-t-none border-t-0 border-destructive/20">
+                      <Card className="rounded-t-none border-t-0 border-shrub/20">
                         <CardContent className="pt-4">
                           <div className="space-y-4">
                             {overdueFollowUps.map((followUp) => (
@@ -530,8 +531,11 @@ export default function FollowupsPage() {
                                       <span>{getPersonNameById(followUp.personId)}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <Badge variant="destructive" className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
+                                      <Badge variant="default" className={cn(
+                                        "bg-shrub hover:bg-shrub/90 text-primary-foreground",
+                                        "text-xs font-medium"
+                                      )}>
+                                        <Clock className="h-3 w-3 mr-1" />
                                         {formatDate(followUp.dueDate.toDate())}
                                       </Badge>
                                       <Button
@@ -587,8 +591,10 @@ export default function FollowupsPage() {
                                         <span>{getPersonNameById(followUp.personId)}</span>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="flex items-center gap-1">
-                                          <Calendar className="h-3 w-3" />
+                                        <Badge variant="outline" className={cn(
+                                          "text-xs font-medium"
+                                        )}>
+                                          <Calendar className="h-3 w-3 mr-1" />
                                           {formatDate(followUp.dueDate.toDate())}
                                         </Badge>
                                         <Button
@@ -644,8 +650,10 @@ export default function FollowupsPage() {
                                         <span>{getPersonNameById(followUp.personId)}</span>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="flex items-center gap-1">
-                                          <Calendar className="h-3 w-3" />
+                                        <Badge variant="outline" className={cn(
+                                          "text-xs font-medium"
+                                        )}>
+                                          <Calendar className="h-3 w-3 mr-1" />
                                           {formatDate(followUp.dueDate.toDate())}
                                         </Badge>
                                         <Button

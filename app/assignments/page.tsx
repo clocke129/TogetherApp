@@ -104,6 +104,9 @@ export default function AssignmentsPage() {
   const [editingPersonNameValue, setEditingPersonNameValue] = useState("");
   const [isSavingPersonName, setIsSavingPersonName] = useState(false);
   const [editPersonNameError, setEditPersonNameError] = useState<string | null>(null);
+  // State for Merge Conflict
+  const [conflictingPerson, setConflictingPerson] = useState<Person | null>(null);
+  const [isMergingPerson, setIsMergingPerson] = useState(false);
 
   // State for Delete Person Confirmation Dialog
   const [isDeletePersonConfirmOpen, setIsDeletePersonConfirmOpen] = useState(false);
@@ -542,32 +545,29 @@ export default function AssignmentsPage() {
 
     const personId = selectedPerson.id;
     const newName = editingPersonNameValue.trim();
+    const newNameLower = newName.toLowerCase(); // For case-insensitive comparison
 
     setIsSavingPersonName(true);
     setEditPersonNameError(null);
+    setConflictingPerson(null); // Clear previous conflict
 
     try {
-      // 1. Check for existing person with the same name (global, case-sensitive for now)
-      // TODO: Implement case-insensitive check and merge prompt later
-      const nameQuery = query(
-        collection(db, "persons"),
-        where("createdBy", "==", user?.uid), // Ensure check is within user's data
-        where("name", "==", newName)
+      // 1. Check for existing person with the same name (case-insensitive, client-side)
+      // Fetch all people belonging to the user (re-use fetched `people` state for efficiency)
+      const potentialConflicts = people.filter(
+         p => p.id !== personId && p.name.toLowerCase() === newNameLower && p.createdBy === user?.uid
       );
-      const querySnapshot = await getDocs(nameQuery);
 
-      let nameExists = false;
-      querySnapshot.forEach((doc) => {
-        if (doc.id !== personId) { // Check if it's a *different* person
-          nameExists = true;
-        }
-      });
-
-      if (nameExists) {
-        setEditPersonNameError(`A person named "${newName}" already exists. Please use a different name.`);
+      if (potentialConflicts.length > 0) {
+        // Found a conflict
+        const targetPerson = potentialConflicts[0]; // Assuming only one conflict is possible/handled
+        setConflictingPerson(targetPerson);
+        setEditPersonNameError(`Person named "${targetPerson.name}" already exists.`); // Inform user
         setIsSavingPersonName(false);
-        return; // Stop execution
+        return; // Stop standard save, wait for merge decision
       }
+
+      // --- No Conflict Found: Proceed with standard name update --- 
 
       // 2. Update Firestore document
       const personRef = doc(db, "persons", personId);
@@ -594,6 +594,72 @@ export default function AssignmentsPage() {
       setEditPersonNameError("Failed to update name. Please try again.");
     } finally {
       setIsSavingPersonName(false);
+    }
+  };
+
+  // --- Merge Person ---
+  const handleMergePerson = async () => {
+    if (!selectedPerson || !conflictingPerson || !user) return;
+
+    setIsMergingPerson(true);
+    setEditPersonNameError(null); // Clear error message during merge attempt
+
+    const sourcePerson = selectedPerson; // Person being edited (will be deleted)
+    const targetPerson = conflictingPerson; // Existing person (will be kept)
+
+    console.log(`Attempting to merge ${sourcePerson.name} (${sourcePerson.id}) into ${targetPerson.name} (${targetPerson.id})`);
+
+    try {
+      const batch = writeBatch(db);
+
+      // 1. Get Ref for the source person (to be deleted)
+      const sourcePersonRef = doc(db, "persons", sourcePerson.id);
+
+      // 2. Delete the source person document
+      batch.delete(sourcePersonRef);
+
+      // 3. If the source person was in a group, remove them from that group's personIds
+      if (sourcePerson.groupId) {
+        const sourceGroupRef = doc(db, "groups", sourcePerson.groupId);
+        batch.update(sourceGroupRef, {
+          personIds: arrayRemove(sourcePerson.id)
+        });
+         console.log(`Also removing source person ${sourcePerson.id} from their original group ${sourcePerson.groupId}`);
+      }
+      
+      // Note: Target person remains in their original group (targetPerson.groupId) as per requirements.
+      // No data migration is performed in this simplified version.
+
+      // 4. Commit the batch
+      await batch.commit();
+
+      // 5. Optimistic UI Update
+      // Remove source person from local state
+      setPeople(prevPeople => prevPeople.filter(p => p.id !== sourcePerson.id));
+
+      // Update the source group's personIds in local state if applicable
+      if (sourcePerson.groupId) {
+         setGroups(prevGroups => prevGroups.map(g => {
+           if (g.id === sourcePerson.groupId) {
+             return { ...g, personIds: g.personIds.filter(id => id !== sourcePerson.id) };
+           }
+           return g;
+         }));
+      }
+
+      console.log(`Merge successful: ${sourcePerson.name} deleted, ${targetPerson.name} kept.`);
+
+      // 6. Close dialogs
+      setIsEditingPersonName(false);
+      setIsPersonActionsDialogOpen(false);
+      setConflictingPerson(null); // Clear conflict state
+
+    } catch (err) {
+        console.error("Error merging person:", err);
+        setEditPersonNameError("Failed to merge persons. Please try again.");
+        // Keep the edit form open to show the error
+    } finally {
+       setIsMergingPerson(false);
     }
   };
 
@@ -782,7 +848,8 @@ export default function AssignmentsPage() {
     }
   };
 
-  const isLoading = authLoading || loadingData
+  // Define isLoading based on auth and data loading states
+  const isLoading = authLoading || loadingData;
 
   return (
     <div className="mobile-container pb-16 md:pb-6">
@@ -835,7 +902,7 @@ export default function AssignmentsPage() {
       </div>
       {/* REMOVED Old Header Div */}
 
-      {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+      {error && <p className="text-shrub text-center mb-4">{error}</p>}
 
       <Tabs defaultValue="people-groups">
         <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -1171,7 +1238,21 @@ export default function AssignmentsPage() {
                 disabled={isSavingPersonName}
               />
               {editPersonNameError && (
-                <p className="text-sm text-red-600">{editPersonNameError}</p>
+                <p className="text-sm text-shrub flex items-center gap-1">
+                  {editPersonNameError} 
+                  {/* Show Merge button if there's a conflict */}
+                  {conflictingPerson && (
+                    <Button 
+                       variant="link" 
+                       className="text-shrub h-auto p-0 text-sm underline"
+                       onClick={handleMergePerson}
+                       disabled={isMergingPerson}
+                    >
+                      {isMergingPerson ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : null}
+                      Merge?
+                    </Button>
+                  )}
+                </p>
               )}
               <div className="flex justify-end gap-2 pt-2">
                  <Button 
@@ -1184,13 +1265,16 @@ export default function AssignmentsPage() {
                 >
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleEditPersonName} 
-                  disabled={isSavingPersonName || !editingPersonNameValue.trim() || editingPersonNameValue.trim() === selectedPerson?.name}
-                >
-                  {isSavingPersonName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Changes
-                </Button>
+                {/* Show Save Changes button ONLY if no conflict exists */}
+                {!conflictingPerson && (
+                  <Button 
+                    onClick={handleEditPersonName} 
+                    disabled={isSavingPersonName || !editingPersonNameValue.trim() || editingPersonNameValue.trim() === selectedPerson?.name}
+                  >
+                    {isSavingPersonName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Changes
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -1206,12 +1290,53 @@ export default function AssignmentsPage() {
                     setIsPersonActionsDialogOpen(false); // Close dialog after action
                   }
                 }}
-                disabled={!selectedPerson?.groupId || !!isRemovingPersonId}
+                disabled={!selectedPerson?.groupId || !!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
               >
                 <LogOut className="h-4 w-4" />
                 Remove from Group
                 {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
               </Button>
+
+              {/* --- Move to Another Group Dropdown --- */} 
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start gap-2" 
+                    disabled={groups.length <= 1 || !selectedPerson || isAssigningPerson === selectedPerson?.id || isRemovingPersonId === selectedPerson?.id}
+                  >
+                    <Users className="h-4 w-4" /> {/* Using Users icon */} 
+                    Move to Another Group
+                    {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />} 
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+                  <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {groups
+                    .filter(group => group.id !== selectedPerson?.groupId) // Filter out current group
+                    .map((group) => (
+                      <DropdownMenuItem
+                        key={group.id}
+                        onSelect={() => {
+                          if (selectedPerson?.id) {
+                             handleAssignPersonToGroup(selectedPerson.id, group.id);
+                             setIsPersonActionsDialogOpen(false); // Close dialog after selection
+                          }
+                        }}
+                        disabled={isAssigningPerson === selectedPerson?.id} // Disable during assignment
+                      >
+                        {group.name}
+                      </DropdownMenuItem>
+                  ))}
+                  {/* Show message if no other groups exist */}
+                  {groups.filter(group => group.id !== selectedPerson?.groupId).length === 0 && (
+                    <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {/* --- End Move to Another Group Dropdown --- */} 
+
               {/* Edit Name Button */}
               <Button 
                 variant="outline" 
@@ -1230,8 +1355,8 @@ export default function AssignmentsPage() {
               </Button>
               {/* Delete Person Button */}
               <Button 
-                variant="destructive" 
-                className="w-full justify-start gap-2" 
+                variant="outline" 
+                className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
                 onClick={() => {
                    if (selectedPerson) {
                       // Open Delete Confirmation Dialog instead of direct delete
@@ -1265,14 +1390,18 @@ export default function AssignmentsPage() {
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete 
               <strong> {selectedPerson?.name}</strong> and remove them from any groups.
-              {deletePersonError && <p className="text-sm text-red-600 mt-2">{deletePersonError}</p>}
+              {deletePersonError && <p className="text-sm text-shrub mt-2">{deletePersonError}</p>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeletePersonError(null)} disabled={isDeletingPerson}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDeletePerson} disabled={isDeletingPerson}>
+            <AlertDialogAction 
+              onClick={handleConfirmDeletePerson} 
+              disabled={isDeletingPerson}
+              className="bg-shrub hover:bg-shrub/90"
+            >
               {isDeletingPerson && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
               Confirm Delete
             </AlertDialogAction>
@@ -1303,7 +1432,7 @@ export default function AssignmentsPage() {
                 disabled={isSavingGroupName}
               />
               {editGroupNameError && (
-                <p className="text-sm text-red-600">{editGroupNameError}</p>
+                <p className="text-sm text-shrub">{editGroupNameError}</p>
               )}
               <div className="flex justify-end gap-2 pt-2">
                  <Button 
@@ -1346,8 +1475,8 @@ export default function AssignmentsPage() {
               </Button>
               {/* Delete Group Button */} 
               <Button 
-                 variant="destructive" 
-                 className="w-full justify-start gap-2" 
+                 variant="outline" 
+                 className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
                  onClick={() => {
                    if (selectedGroup) {
                      handleDeleteGroupClick(selectedGroup);
@@ -1396,12 +1525,12 @@ export default function AssignmentsPage() {
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="delete" id="rg-delete" />
                   <Label htmlFor="rg-delete" className="font-normal cursor-pointer">
-                    <span className="text-red-600">Permanently delete</span> all people in this group
+                    <span className="text-shrub">Permanently delete</span> all people in this group
                   </Label>
                 </div>
               </RadioGroup>
 
-              {deleteGroupError && <p className="text-sm text-red-600 mt-2">{deleteGroupError}</p>}
+              {deleteGroupError && <p className="text-sm text-shrub mt-2">{deleteGroupError}</p>}
              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1419,7 +1548,8 @@ export default function AssignmentsPage() {
               disabled={isDeletingGroup}
               className={cn(
                 "transition-colors", 
-                deleteGroupMembersOption === 'delete' && "bg-red-600 hover:bg-red-700 text-white"
+                deleteGroupMembersOption === 'delete' && "bg-shrub hover:bg-shrub/90 text-white", 
+                deleteGroupMembersOption !== 'delete' && "bg-primary hover:bg-primary/90"
               )}
             >
               {isDeletingGroup && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
