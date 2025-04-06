@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check, MoreVertical, Trash2, Edit, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
@@ -35,6 +35,20 @@ import {
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu"
 import { useMobile } from "@/hooks/use-mobile"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogCancel,
+  AlertDialogAction
+} from "@/components/ui/alert-dialog"
+import {
+  RadioGroup,
+  RadioGroupItem
+} from "@/components/ui/radio-group"
 
 // Types (Keep local types for now to avoid potential import issues until resolved)
 // type Person = {
@@ -82,9 +96,38 @@ export default function AssignmentsPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [isAddingGroup, setIsAddingGroup] = useState(false);
 
+  // State for Person Actions Dialog
+  const [isPersonActionsDialogOpen, setIsPersonActionsDialogOpen] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  // State for inline editing within Person Actions Dialog
+  const [isEditingPersonName, setIsEditingPersonName] = useState(false);
+  const [editingPersonNameValue, setEditingPersonNameValue] = useState("");
+  const [isSavingPersonName, setIsSavingPersonName] = useState(false);
+  const [editPersonNameError, setEditPersonNameError] = useState<string | null>(null);
+
+  // State for Delete Person Confirmation Dialog
+  const [isDeletePersonConfirmOpen, setIsDeletePersonConfirmOpen] = useState(false);
+  const [isDeletingPerson, setIsDeletingPerson] = useState(false);
+  const [deletePersonError, setDeletePersonError] = useState<string | null>(null);
+
+  // State for Group Actions Dialog
+  const [isGroupActionsDialogOpen, setIsGroupActionsDialogOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  // State for inline editing within Group Actions Dialog
+  const [isEditingGroupName, setIsEditingGroupName] = useState(false);
+  const [editingGroupNameValue, setEditingGroupNameValue] = useState("");
+  const [isSavingGroupName, setIsSavingGroupName] = useState(false);
+  const [editGroupNameError, setEditGroupNameError] = useState<string | null>(null);
+
   const [isAssigningPerson, setIsAssigningPerson] = useState<string | null>(null); // Store personId being assigned
   const [isUpdatingDays, setIsUpdatingDays] = useState<string | null>(null); // Store groupId being updated
   const [isRemovingPersonId, setIsRemovingPersonId] = useState<string | null>(null); // Store personId being removed
+
+  // State for Delete Group Confirmation Dialog
+  const [isDeleteGroupConfirmOpen, setIsDeleteGroupConfirmOpen] = useState(false);
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+  const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null);
+  const [deleteGroupMembersOption, setDeleteGroupMembersOption] = useState<"unassign" | "delete">("unassign");
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -411,8 +454,13 @@ export default function AssignmentsPage() {
   
   // Add Person to Specific Group - Needs Firestore update
   const handleAddPersonToGroup = (groupId: string) => {
-     // TODO: Implement adding person to a specific group (likely involves a dialog/form selecting existing people or adding new, then update Firestore)
-     console.log(`Add Person to group ${groupId} clicked (needs implementation)`);
+    // Reuse Add Person dialog, passing groupId
+    setNewPersonName(""); // Clear name from previous attempts
+    setIsAddPersonDialogOpen(true);
+    // We'll handle the group assignment within handleAddPersonSubmit
+    // Need a way to know which group this button was clicked for - maybe pass groupId to dialog?
+    // Or, simpler: have a separate button state/handler?
+    // Let's adjust handleAddPersonSubmit to optionally accept groupId
   };
 
   // NEW: Update numPerDay setting for a group (handles null for "All")
@@ -475,6 +523,262 @@ export default function AssignmentsPage() {
       setLocalNumPerDaySettings(prev => ({ ...prev, [groupId]: originalValue }));
     } finally {
       setIsSavingNumPerDay(null);
+    }
+  };
+
+  // --- Functions for Person Actions --- 
+  const openPersonActionsDialog = (person: Person) => {
+    setSelectedPerson(person);
+    setIsPersonActionsDialogOpen(true);
+  }
+
+  // --- Edit Person Name --- 
+  const handleEditPersonName = async () => {
+    if (!selectedPerson || !editingPersonNameValue.trim() || editingPersonNameValue.trim() === selectedPerson.name) {
+      setIsEditingPersonName(false); // Close edit form if name is unchanged or empty
+      setEditPersonNameError(null);
+      return;
+    }
+
+    const personId = selectedPerson.id;
+    const newName = editingPersonNameValue.trim();
+
+    setIsSavingPersonName(true);
+    setEditPersonNameError(null);
+
+    try {
+      // 1. Check for existing person with the same name (global, case-sensitive for now)
+      // TODO: Implement case-insensitive check and merge prompt later
+      const nameQuery = query(
+        collection(db, "persons"),
+        where("createdBy", "==", user?.uid), // Ensure check is within user's data
+        where("name", "==", newName)
+      );
+      const querySnapshot = await getDocs(nameQuery);
+
+      let nameExists = false;
+      querySnapshot.forEach((doc) => {
+        if (doc.id !== personId) { // Check if it's a *different* person
+          nameExists = true;
+        }
+      });
+
+      if (nameExists) {
+        setEditPersonNameError(`A person named "${newName}" already exists. Please use a different name.`);
+        setIsSavingPersonName(false);
+        return; // Stop execution
+      }
+
+      // 2. Update Firestore document
+      const personRef = doc(db, "persons", personId);
+      await updateDoc(personRef, {
+        name: newName
+      });
+
+      // 3. Optimistic UI Update
+      setPeople(prevPeople =>
+        prevPeople.map(p => (p.id === personId ? { ...p, name: newName } : p))
+      );
+      // Also update the selectedPerson state if it's currently open
+      setSelectedPerson(prev => (prev?.id === personId ? { ...prev, name: newName } : prev));
+
+      // 4. Close edit form and potentially the dialog
+      setIsEditingPersonName(false);
+      // Keep the main dialog open to show success/updated name
+      // setIsPersonActionsDialogOpen(false); 
+
+      console.log(`Person ${personId} name updated to ${newName}`);
+
+    } catch (err) {
+      console.error("Error updating person name:", err);
+      setEditPersonNameError("Failed to update name. Please try again.");
+    } finally {
+      setIsSavingPersonName(false);
+    }
+  };
+
+  // --- Delete Person --- 
+  // Opens the confirmation dialog
+  const handleDeletePersonClick = (person: Person) => {
+    setSelectedPerson(person); // Set the person to be deleted
+    setDeletePersonError(null); // Clear previous errors
+    setIsDeletePersonConfirmOpen(true);
+    setIsPersonActionsDialogOpen(false); // Close the actions dialog
+  }
+
+  // Performs the actual deletion after confirmation
+  const handleConfirmDeletePerson = async () => {
+    if (!selectedPerson || !user) return;
+
+    const personId = selectedPerson.id;
+    const groupId = selectedPerson.groupId;
+    const personName = selectedPerson.name; // For logging/error messages
+
+    setIsDeletingPerson(true);
+    setDeletePersonError(null);
+
+    try {
+      const batch = writeBatch(db);
+
+      // 1. Delete the person document
+      const personRef = doc(db, "persons", personId);
+      batch.delete(personRef);
+
+      // 2. If in a group, remove from group's personIds array
+      if (groupId) {
+        const groupRef = doc(db, "groups", groupId);
+        batch.update(groupRef, {
+          personIds: arrayRemove(personId)
+        });
+      }
+
+      // 3. Commit the batch
+      await batch.commit();
+
+      // 4. Optimistic UI Update: Remove person from local state
+      setPeople(prevPeople => prevPeople.filter(p => p.id !== personId));
+
+      // 5. Close confirmation dialog & clear selection
+      setIsDeletePersonConfirmOpen(false);
+      setSelectedPerson(null);
+
+      console.log(`Person "${personName}" (${personId}) deleted successfully.`);
+
+    } catch (err) {
+      console.error("Error deleting person:", err);
+      setDeletePersonError(`Failed to delete ${personName}. Please try again.`);
+      // Keep dialog open to show error
+    } finally {
+      setIsDeletingPerson(false);
+    }
+  };
+
+  // --- Group Actions ---
+  const openGroupActionsDialog = (group: Group) => {
+    setSelectedGroup(group);
+    setIsGroupActionsDialogOpen(true);
+    // Clear edit/delete states when opening
+    setIsEditingGroupName(false);
+    setEditGroupNameError(null);
+    setDeleteGroupError(null); // Clear group delete error too
+    setDeleteGroupMembersOption("unassign"); // Reset member option
+  }
+
+  // --- Edit Group Name --- 
+  const handleEditGroupName = async () => {
+    if (!selectedGroup || !editingGroupNameValue.trim() || editingGroupNameValue.trim() === selectedGroup.name) {
+      setIsEditingGroupName(false);
+      setEditGroupNameError(null);
+      return;
+    }
+
+    const groupId = selectedGroup.id;
+    const newName = editingGroupNameValue.trim();
+
+    setIsSavingGroupName(true);
+    setEditGroupNameError(null);
+
+    try {
+      // TODO: Add group name conflict check if necessary
+
+      // Update Firestore
+      const groupRef = doc(db, "groups", groupId);
+      await updateDoc(groupRef, {
+        name: newName
+      });
+
+      // Optimistic UI Update
+      setGroups(prevGroups =>
+        prevGroups.map(g => (g.id === groupId ? { ...g, name: newName } : g))
+      );
+      setSelectedGroup(prev => (prev?.id === groupId ? { ...prev, name: newName } : prev));
+
+      // Close edit form
+      setIsEditingGroupName(false);
+
+      console.log(`Group ${groupId} name updated to ${newName}`);
+
+    } catch (err) {
+      console.error("Error updating group name:", err);
+      setEditGroupNameError("Failed to update group name. Please try again.");
+    } finally {
+      setIsSavingGroupName(false);
+    }
+  };
+
+  // --- Delete Group ---
+  // Opens the confirmation dialog
+  const handleDeleteGroupClick = (group: Group) => {
+    setSelectedGroup(group); // Set the group to be potentially deleted
+    setDeleteGroupError(null);
+    setDeleteGroupMembersOption("unassign"); // Default option
+    setIsDeleteGroupConfirmOpen(true);
+    setIsGroupActionsDialogOpen(false); // Close the actions dialog
+  }
+
+  // Performs the actual deletion after confirmation
+  const handleConfirmDeleteGroup = async () => {
+    if (!selectedGroup || !user) return;
+
+    const groupId = selectedGroup.id;
+    const groupName = selectedGroup.name;
+    const memberIds = selectedGroup.personIds || [];
+
+    setIsDeletingGroup(true);
+    setDeleteGroupError(null);
+
+    try {
+      const batch = writeBatch(db);
+
+      // 1. Delete the group document
+      const groupRef = doc(db, "groups", groupId);
+      batch.delete(groupRef);
+
+      // 2. Handle members based on the selected option
+      if (deleteGroupMembersOption === "unassign" && memberIds.length > 0) {
+        // Move members to uncategorized by removing groupId
+        memberIds.forEach(personId => {
+          const personRef = doc(db, "persons", personId);
+          batch.update(personRef, { groupId: deleteField() }); // Remove the groupId field
+        });
+      } else if (deleteGroupMembersOption === "delete" && memberIds.length > 0) {
+        // Delete member documents
+        memberIds.forEach(personId => {
+          const personRef = doc(db, "persons", personId);
+          batch.delete(personRef);
+        });
+      }
+
+      // 3. Commit the batch
+      await batch.commit();
+
+      // 4. Optimistic UI Updates
+      // Remove the group from local state
+      setGroups(prevGroups => prevGroups.filter(g => g.id !== groupId));
+
+      // Update people state based on the option
+      if (deleteGroupMembersOption === "unassign") {
+        setPeople(prevPeople =>
+          prevPeople.map(p =>
+            memberIds.includes(p.id) ? { ...p, groupId: undefined } : p // Set groupId to undefined
+          )
+        );
+      } else if (deleteGroupMembersOption === "delete") {
+        setPeople(prevPeople => prevPeople.filter(p => !memberIds.includes(p.id)));
+      }
+
+      // 5. Close confirmation dialog & clear selection
+      setIsDeleteGroupConfirmOpen(false);
+      setSelectedGroup(null);
+
+      console.log(`Group "${groupName}" (${groupId}) deleted successfully. Members handled: ${deleteGroupMembersOption}`);
+
+    } catch (err) {
+      console.error("Error deleting group:", err);
+      setDeleteGroupError(`Failed to delete group ${groupName}. Please try again.`);
+      // Keep dialog open to show error
+    } finally {
+      setIsDeletingGroup(false);
     }
   };
 
@@ -660,15 +964,25 @@ export default function AssignmentsPage() {
             <div className="space-y-4 pt-4">
               {groups.map((group) => (
                 <Card key={group.id} className="mb-4">
+                  {/* Make header clickable for expand/collapse */}
                   <CardHeader className="pb-3 pt-4 px-4 cursor-pointer" onClick={() => toggleExpandGroup(group.id)}>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      {/* Group Name & Icon - Clickable for Actions */}
+                      <div 
+                        className="flex items-center gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent card header click (expand/collapse)
+                          openGroupActionsDialog(group);
+                        }}
+                      >
                         <Users className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-base">{group.name}</CardTitle>
+                        {/* Add hover effect to name only */}
+                        <CardTitle className="text-base hover:underline">{group.name}</CardTitle>
                         <Badge variant="outline" className="ml-2">
                           {getPeopleInGroup(group.id).length} people
                         </Badge>
                       </div>
+                      {/* Expand/Collapse Icon */}
                       {expandedGroupId === group.id ? (
                         <ChevronUp className="h-5 w-5 text-muted-foreground" />
                       ) : (
@@ -683,29 +997,20 @@ export default function AssignmentsPage() {
                         <p className="text-center py-4 text-muted-foreground">No people in this group</p>
                       ) : (
                         <div className="space-y-2 mb-4">
+                          {/* Render people in the group */}
                           {getPeopleInGroup(group.id).map((person) => (
                             <div
                               key={person.id}
                               className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
                             >
-                              <div className="flex items-center gap-2">
+                              {/* Make the name + icon clickable */} 
+                              <div 
+                                className="flex items-center gap-2 cursor-pointer"
+                                onClick={() => openPersonActionsDialog(person)}
+                              >
                                 <User className="h-4 w-4 text-muted-foreground" />
                                 <span>{person.name}</span>
                               </div>
-                              {/* Connect handleRemovePersonFromGroup */}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() => handleRemovePersonFromGroup(person.id, group.id)}
-                                disabled={isLoading || isRemovingPersonId === person.id}
-                              >
-                                {isRemovingPersonId === person.id ? (
-                                   <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
-                                 ) : (
-                                   <X className="h-4 w-4" />
-                                 )}
-                              </Button>
                             </div>
                           ))}
                         </div>
@@ -841,6 +1146,291 @@ export default function AssignmentsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Person Actions Dialog */}
+      <Dialog open={isPersonActionsDialogOpen} onOpenChange={setIsPersonActionsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Actions for {selectedPerson?.name}</DialogTitle>
+            {isEditingPersonName && selectedPerson && (
+              <DialogDescription>
+                Editing name for {selectedPerson.name}.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {/* Conditional Rendering: Show edit form or action buttons */} 
+          {isEditingPersonName ? (
+            // --- Edit Name Form --- 
+            <div className="py-4 space-y-3">
+              <Label htmlFor="edit-person-name">New Name</Label>
+              <Input 
+                id="edit-person-name"
+                value={editingPersonNameValue}
+                onChange={(e) => setEditingPersonNameValue(e.target.value)}
+                disabled={isSavingPersonName}
+              />
+              {editPersonNameError && (
+                <p className="text-sm text-red-600">{editPersonNameError}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                 <Button 
+                  variant="ghost"
+                  onClick={() => {
+                    setIsEditingPersonName(false); 
+                    setEditPersonNameError(null);
+                  }}
+                  disabled={isSavingPersonName}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleEditPersonName} 
+                  disabled={isSavingPersonName || !editingPersonNameValue.trim() || editingPersonNameValue.trim() === selectedPerson?.name}
+                >
+                  {isSavingPersonName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          ) : (
+            // --- Action Buttons --- 
+            <div className="py-4 space-y-2">
+              {/* Remove from Group Button */}
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2"
+                onClick={() => {
+                  if (selectedPerson?.id && selectedPerson?.groupId) {
+                    handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
+                    setIsPersonActionsDialogOpen(false); // Close dialog after action
+                  }
+                }}
+                disabled={!selectedPerson?.groupId || !!isRemovingPersonId}
+              >
+                <LogOut className="h-4 w-4" />
+                Remove from Group
+                {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
+              </Button>
+              {/* Edit Name Button */}
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2" 
+                onClick={() => {
+                  if (selectedPerson) {
+                     setEditingPersonNameValue(selectedPerson.name); 
+                     setIsEditingPersonName(true);
+                     setEditPersonNameError(null); // Clear previous errors
+                  }
+                }}
+                disabled={!!isRemovingPersonId || isSavingPersonName} // Disable if other actions are happening
+              >
+                <Edit className="h-4 w-4" />
+                Edit Name
+              </Button>
+              {/* Delete Person Button */}
+              <Button 
+                variant="destructive" 
+                className="w-full justify-start gap-2" 
+                onClick={() => {
+                   if (selectedPerson) {
+                      // Open Delete Confirmation Dialog instead of direct delete
+                      handleDeletePersonClick(selectedPerson);
+                   }
+                }}
+                disabled={!!isRemovingPersonId || isSavingPersonName || isDeletingPerson} // Disable if other actions are happening
+               >
+                <Trash2 className="h-4 w-4" />
+                Delete Person
+              </Button>
+            </div>
+          )}
+
+          {/* Hide footer when editing */} 
+          {!isEditingPersonName && (
+             <DialogFooter>
+               <DialogClose asChild>
+                 <Button variant="ghost">Cancel</Button>
+               </DialogClose>
+             </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Person Confirmation Dialog */} 
+      <AlertDialog open={isDeletePersonConfirmOpen} onOpenChange={setIsDeletePersonConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete 
+              <strong> {selectedPerson?.name}</strong> and remove them from any groups.
+              {deletePersonError && <p className="text-sm text-red-600 mt-2">{deletePersonError}</p>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeletePersonError(null)} disabled={isDeletingPerson}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeletePerson} disabled={isDeletingPerson}>
+              {isDeletingPerson && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Group Actions Dialog */} 
+      <Dialog open={isGroupActionsDialogOpen} onOpenChange={setIsGroupActionsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Actions for Group: {selectedGroup?.name}</DialogTitle>
+            {isEditingGroupName && selectedGroup && (
+              <DialogDescription>
+                Editing name for {selectedGroup.name}.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {isEditingGroupName ? (
+             // --- Edit Group Name Form --- 
+             <div className="py-4 space-y-3">
+              <Label htmlFor="edit-group-name">New Group Name</Label>
+              <Input 
+                id="edit-group-name"
+                value={editingGroupNameValue}
+                onChange={(e) => setEditingGroupNameValue(e.target.value)}
+                disabled={isSavingGroupName}
+              />
+              {editGroupNameError && (
+                <p className="text-sm text-red-600">{editGroupNameError}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                 <Button 
+                  variant="ghost"
+                  onClick={() => {
+                    setIsEditingGroupName(false); 
+                    setEditGroupNameError(null);
+                  }}
+                  disabled={isSavingGroupName}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleEditGroupName} 
+                  disabled={isSavingGroupName || !editingGroupNameValue.trim() || editingGroupNameValue.trim() === selectedGroup?.name}
+                >
+                  {isSavingGroupName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          ) : (
+            // --- Group Action Buttons --- 
+            <div className="py-4 space-y-2">
+              {/* Edit Group Name Button */}
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2" 
+                onClick={() => {
+                   if (selectedGroup) {
+                      setEditingGroupNameValue(selectedGroup.name);
+                      setIsEditingGroupName(true);
+                      setEditGroupNameError(null);
+                   }
+                }}
+                disabled={isSavingGroupName /* TODO: || isDeletingGroup */} 
+              >
+                <Edit className="h-4 w-4" />
+                Edit Group Name
+              </Button>
+              {/* Delete Group Button */} 
+              <Button 
+                 variant="destructive" 
+                 className="w-full justify-start gap-2" 
+                 onClick={() => {
+                   if (selectedGroup) {
+                     handleDeleteGroupClick(selectedGroup);
+                   }
+                 }}
+                 disabled={isSavingGroupName || isDeletingGroup} 
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete Group
+              </Button>
+            </div>
+          )}
+          
+          {/* Hide footer when editing */} 
+          {!isEditingGroupName && (
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="ghost">Cancel</Button>
+              </DialogClose>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Group Confirmation Dialog */} 
+      <AlertDialog open={isDeleteGroupConfirmOpen} onOpenChange={setIsDeleteGroupConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Group: {selectedGroup?.name}?</AlertDialogTitle>
+            <AlertDialogDescription asChild> {/* Use asChild to prevent potential style conflicts */} 
+             <div className="space-y-3"> {/* Wrap content in div */} 
+               <span>This action cannot be undone. What should happen to the <strong>{selectedGroup?.personIds?.length ?? 0} people</strong> in this group?</span>
+              
+              {/* Radio Group for Member Options */} 
+              <RadioGroup 
+                value={deleteGroupMembersOption}
+                onValueChange={(value) => setDeleteGroupMembersOption(value as "unassign" | "delete")} 
+                className="mt-2 mb-1"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="unassign" id="rg-unassign" />
+                  <Label htmlFor="rg-unassign" className="font-normal cursor-pointer">
+                    Move people to Uncategorized
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="delete" id="rg-delete" />
+                  <Label htmlFor="rg-delete" className="font-normal cursor-pointer">
+                    <span className="text-red-600">Permanently delete</span> all people in this group
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {deleteGroupError && <p className="text-sm text-red-600 mt-2">{deleteGroupError}</p>}
+             </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                 setDeleteGroupError(null);
+              }}
+              disabled={isDeletingGroup}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDeleteGroup} 
+              disabled={isDeletingGroup}
+              className={cn(
+                "transition-colors", 
+                deleteGroupMembersOption === 'delete' && "bg-red-600 hover:bg-red-700 text-white"
+              )}
+            >
+              {isDeletingGroup && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* TODO: Add Edit Group Name Dialog/UI */} 
+
     </div>
   )
 }
