@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, Clock, AlertTriangle, User, Check, Plus, CalendarPlus } from "lucide-react"
+import { Calendar, Clock, AlertTriangle, User, Check, Plus, CalendarPlus, Loader2, Trash2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ import {
   Timestamp,
   orderBy,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -53,6 +54,7 @@ type FollowUp = {
   content: string
   dueDate: Timestamp
   completed: boolean
+  archived: boolean
 }
 
 export default function FollowupsPage() {
@@ -67,10 +69,13 @@ export default function FollowupsPage() {
     personId: "",
     dueDate: Timestamp.now(),
     completed: false,
+    archived: false,
   })
   const [editingFollowUp, setEditingFollowUp] = useState<FollowUp | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const { user } = useAuth()
 
@@ -205,7 +210,7 @@ export default function FollowupsPage() {
   const epochZeroTimestamp = Timestamp.fromDate(new Date(0));
 
   // Filter logic using Timestamps
-  const activeFollowUps = followUps.filter((followUp) => !followUp.completed);
+  const activeFollowUps = followUps.filter((followUp) => !followUp.completed && !followUp.archived); // Exclude archived
 
   const overdueFollowUps = activeFollowUps
     .filter(
@@ -235,8 +240,9 @@ export default function FollowupsPage() {
     );
     // No specific sort needed for no-date items unless based on content/person
 
+  // Include non-archived completed items only
   const completedFollowUps = followUps
-      .filter((followUp) => followUp.completed)
+      .filter((followUp) => followUp.completed && !followUp.archived)
       .sort((a, b) => b.dueDate.seconds - a.dueDate.seconds); // Optional: Sort completed by most recent due date first
   
    // --- End Filtering and Sorting --- //
@@ -262,6 +268,7 @@ export default function FollowupsPage() {
         // Ensure dueDate is a Timestamp, default to epoch 0 if needed
         dueDate: newFollowUp.dueDate instanceof Timestamp ? newFollowUp.dueDate : Timestamp.fromDate(new Date(0)), 
         completed: false,
+        archived: false,
         createdBy: user.uid, // Add createdBy field
         createdAt: serverTimestamp(), // Add createdAt timestamp
       };
@@ -273,7 +280,7 @@ export default function FollowupsPage() {
       setFollowUps(prev => [...prev, { id: docRef.id, ...docToAdd }]);
 
       // Reset form and close dialog
-      setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false });
+      setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false, archived: false });
       setIsAddDialogOpen(false);
 
     } catch (error) {
@@ -344,6 +351,71 @@ export default function FollowupsPage() {
       setIsEditDialogOpen(true)
     }
   }
+
+  // --- Clear Completed Follow-ups (Now Archives) --- //
+  const handleClearCompletedFollowUps = async () => {
+    if (!user || isClearing) return;
+    const itemsToArchive = followUps.filter(fu => fu.completed && !fu.archived); // Use local state
+
+    if (itemsToArchive.length === 0) {
+        console.log("No completed, unarchived follow-ups to clear.");
+        return;
+    }
+
+    const confirmation = confirm(`Are you sure you want to archive all ${itemsToArchive.length} completed follow-up items? They will be hidden from view.`);
+    if (!confirmation) {
+      return;
+    }
+
+    console.log("Starting to archive completed follow-ups...");
+    setIsClearing(true);
+    setError(null);
+
+    try {
+      // No need to fetch person IDs again if we trust local state
+      // (assuming fetched followUps only contains user's data)
+
+      // Create batch and stage updates for owned follow-ups
+      const batch = writeBatch(db);
+      let itemsToArchiveCount = 0;
+
+      itemsToArchive.forEach(followUp => {
+          // Get the full path to the follow-up doc
+          const followUpRef = doc(db, "persons", followUp.personId, "followUps", followUp.id);
+          console.log(`Staging archive for follow-up ${followUp.id} (parent: ${followUp.personId})`);
+          batch.update(followUpRef, { archived: true });
+          itemsToArchiveCount++;
+      });
+
+      if (itemsToArchiveCount === 0) {
+        console.log("Something went wrong, no items staged for archival."); // Should not happen based on initial check
+        setIsClearing(false);
+        return;
+      }
+
+      // Commit the batch
+      console.log(`Committing batch to archive ${itemsToArchiveCount} follow-ups...`);
+      await batch.commit();
+      console.log("Batch commit successful.");
+
+      // Update local state: mark items as archived
+      setFollowUps(prev =>
+        prev.map(fu =>
+          itemsToArchive.some(item => item.id === fu.id)
+            ? { ...fu, archived: true }
+            : fu
+        )
+      );
+      alert(`${itemsToArchiveCount} completed follow-up items archived successfully.`);
+
+    } catch (err) {
+      console.error("Error archiving completed follow-ups:", err);
+      setError("An error occurred while archiving follow-ups. Please try again.");
+    } finally {
+      setIsClearing(false);
+    }
+  };
+  // --- End Clear Completed Follow-ups --- //
 
   if (isLoading) {
     return <div className="flex justify-center items-center min-h-screen"><p>Loading Follow-ups...</p></div>
@@ -655,12 +727,26 @@ export default function FollowupsPage() {
 
         <TabsContent value="completed">
            <Card>
-             <CardHeader className="pb-3">
+             <CardHeader className="pb-3 flex flex-row items-center justify-between"> 
                <CardTitle className="text-lg flex items-center gap-2">
                   <Check className="h-5 w-5 text-primary" />
                   <span>Completed</span>
                   <Badge variant="outline">{completedFollowUps.length}</Badge>
                 </CardTitle>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearCompletedFollowUps}
+                    disabled={isClearing || completedFollowUps.length === 0}
+                    className="gap-1 text-xs"
+                 >
+                   {isClearing ? (
+                     <Loader2 className="h-4 w-4 animate-spin" />
+                   ) : (
+                     <Trash2 className="h-4 w-4" />
+                   )}
+                   Clear All Completed
+                 </Button>
               </CardHeader>
               <CardContent>
                  {completedFollowUps.length === 0 ? (

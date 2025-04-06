@@ -44,4 +44,5 @@ export interface FollowUp {
   completed: boolean; // Status of the follow-up
   createdAt?: Timestamp; // Firestore server timestamp (optional)
   completedAt?: Timestamp; // Firestore server timestamp (optional)
+  archived?: boolean; // Added flag for soft delete/archiving
 }
