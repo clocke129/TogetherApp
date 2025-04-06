@@ -37,20 +37,53 @@ type FollowUp = {
   completed: boolean
 }
 
+// Add a simpler type for existing persons list used for suggestions
+type ExistingPerson = {
+  id: string
+  name: string
+}
+
 export default function NotesPage() {
   const [text, setText] = useState("")
   const [parsedData, setParsedData] = useState<Person[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestionQuery, setSuggestionQuery] = useState("")
-  const [filteredSuggestions, setFilteredSuggestions] = useState<{ id: string; name: string }[]>([])
+  const [filteredSuggestions, setFilteredSuggestions] = useState<ExistingPerson[]>([]) // Use ExistingPerson type
   const [cursorPosition, setCursorPosition] = useState(0)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor")
   const [isSaving, setIsSaving] = useState(false)
+  const [existingPersons, setExistingPersons] = useState<ExistingPerson[]>([]) // State for existing persons
 
   const isMobile = useMobile()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { user } = useAuth()
+
+  // Fetch existing persons for the current user
+  useEffect(() => {
+    const fetchPersons = async () => {
+      if (!user) {
+        setExistingPersons([])
+        return
+      }
+      console.log("Fetching persons for user:", user.uid)
+      const personsRef = collection(db, "persons")
+      const q = query(personsRef, where("createdBy", "==", user.uid))
+      try {
+        const querySnapshot = await getDocs(q)
+        const personsList = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name,
+        }))
+        console.log("Fetched persons:", personsList)
+        setExistingPersons(personsList)
+      } catch (error) {
+        console.error("Error fetching persons:", error)
+        setExistingPersons([]) // Reset on error
+      }
+    }
+
+    fetchPersons()
+  }, [user]) // Re-fetch if user changes
 
   // Parse the text to extract people, prayer requests, and follow-ups
   useEffect(() => {
@@ -133,13 +166,39 @@ export default function NotesPage() {
     const position = e.target.selectionStart || 0
     setCursorPosition(position)
 
-    const lastAtSymbolIndex = newText.lastIndexOf("@", position)
-    if (lastAtSymbolIndex !== -1 && lastAtSymbolIndex < position) {
-      const query = newText.substring(lastAtSymbolIndex + 1, position).trim()
-      setSuggestionQuery(query)
-      setShowSuggestions(false)
-      setFilteredSuggestions([])
+    const textBeforeCursor = newText.substring(0, position)
+    const lastAtSymbolIndex = textBeforeCursor.lastIndexOf("@")
+    // const lastSpaceIndex = textBeforeCursor.lastIndexOf(" ") // Removed this check
+
+    // Show suggestions if @ exists and there's no newline between @ and cursor
+    if (lastAtSymbolIndex !== -1) {
+      const query = textBeforeCursor.substring(lastAtSymbolIndex + 1)
+      const textBetweenAtAndCursor = textBeforeCursor.substring(lastAtSymbolIndex);
+
+      // Only suggest if no newline between the @ and the cursor
+      if (!textBetweenAtAndCursor.includes('\n')) {
+        setSuggestionQuery(query)
+
+        if (query.length >= 0) { // Check even for empty query right after @
+          const lowerCaseQuery = query.toLowerCase()
+          const suggestions = existingPersons.filter(person =>
+            person.name.toLowerCase().includes(lowerCaseQuery)
+          )
+          setFilteredSuggestions(suggestions)
+          // Show suggestions if there are matches OR if the query could be a new person
+          const couldBeNewPerson = query.trim().length > 0 && !suggestions.some(p => p.name.toLowerCase() === lowerCaseQuery.trim());
+          setShowSuggestions(suggestions.length > 0 || couldBeNewPerson)
+        } 
+        // Removed the 'else' block that showed all persons on empty query, as filter handles it
+
+      } else {
+        // Hide suggestions if there's a newline after @
+        setShowSuggestions(false)
+        setSuggestionQuery("")
+        setFilteredSuggestions([])
+      }
     } else {
+      // Hide suggestions if no @ is found before the cursor
       setShowSuggestions(false)
       setSuggestionQuery("")
       setFilteredSuggestions([])
@@ -147,19 +206,61 @@ export default function NotesPage() {
   }
 
   // Handle selection of a person from suggestions
-  const handleSelectPerson = (person: { id: string; name: string }) => {
-    const beforeAt = text.substring(0, text.lastIndexOf("@", cursorPosition))
-    const afterCursor = text.substring(cursorPosition)
-    const newText = `${beforeAt}@${person.name}${afterCursor}`
+  const handleSelectPerson = (person: ExistingPerson) => {
+    if (!textareaRef.current) return;
 
-    setText(newText)
-    setShowSuggestions(false)
+    const currentText = text;
+    const currentPosition = textareaRef.current.selectionStart || 0;
 
-    // Focus back on the textarea
-    if (textareaRef.current) {
-      textareaRef.current.focus()
-    }
-  }
+    // Find the start of the @mention based on the last @ before the cursor
+    const textBeforeCursor = currentText.substring(0, currentPosition);
+    const lastAtSymbolIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (lastAtSymbolIndex === -1) return; // Should not happen if suggestions are shown
+
+    const beforeAt = currentText.substring(0, lastAtSymbolIndex);
+    const afterMention = currentText.substring(currentPosition);
+
+    // Construct the new text with the selected person's name
+    // Ensure a space is added after the name if the text doesn't continue immediately
+    const suffix = afterMention.startsWith(' ') || afterMention === '' ? '' : ' ';
+    const newText = `${beforeAt}@${person.name}${suffix}${afterMention}`;
+
+    setText(newText);
+    setShowSuggestions(false);
+    setSuggestionQuery("");
+    setFilteredSuggestions([]);
+
+    // Set cursor position after the inserted name + space
+    const newCursorPosition = lastAtSymbolIndex + 1 + person.name.length + suffix.length;
+
+    // Defer focusing and setting cursor position to allow state update
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+      }
+    }, 0);
+  };
+
+  // Handle adding a new person from suggestions
+  const handleAddPerson = (name: string) => {
+    if (!name.trim()) return; // Don't add empty names
+
+    const newPerson: ExistingPerson = {
+      // Use a temporary ID or the name itself; persistence happens on save
+      id: `temp_${Date.now()}`,
+      name: name.trim() // Use the trimmed query as the name
+    };
+
+    // Optimistically add to the existing persons list for immediate feedback in suggestions
+    setExistingPersons(prev => [...prev, newPerson]);
+
+    // Call handleSelectPerson to insert the tag into the textarea
+    handleSelectPerson(newPerson);
+
+    // Suggestions should hide automatically via handleSelectPerson
+  };
 
   // Format the date for display
   const formatDate = (date: Date) => {
@@ -270,16 +371,53 @@ export default function NotesPage() {
 
   // Render the editor component
   const renderEditor = () => (
-    <div className="relative">
-      <TextareaAutosize
-        ref={textareaRef}
-        value={text}
-        onChange={handleTextChange}
-        placeholder="Start typing... Use @name for people and #MMDD for follow-up dates"
-        className="w-full resize-none appearance-none overflow-hidden bg-transparent focus:outline-none focus:ring-0 border rounded-md border-input p-2 font-mono min-h-[200px] md:min-h-[300px]"
-        minRows={5}
-      />
-    </div>
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">Editor</CardTitle>
+      </CardHeader>
+      <CardContent className="relative">
+        <TextareaAutosize
+          ref={textareaRef}
+          value={text}
+          onChange={handleTextChange}
+          placeholder={`Type your prayer notes here...
+Use @PersonName to mention someone.
+Use #MMDD for follow-up dates.`}
+          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-shrub min-h-[150px] resize-none"
+          minRows={5}
+        />
+        {showSuggestions && (
+          <Card
+            className="absolute z-10 mt-1 w-full max-w-xs border rounded-md bg-background shadow-lg"
+            style={{ top: '100%' }}
+          >
+            <CardContent className="p-1 max-h-48 overflow-y-auto">
+              {filteredSuggestions.map((person) => (
+                <Button
+                  key={person.id}
+                  variant="ghost"
+                  className="w-full justify-start h-8 px-2 mb-1 text-left text-sm"
+                  onClick={() => handleSelectPerson(person)}
+                >
+                  {person.name}
+                </Button>
+              ))}
+              {/* --- Add New Person Option --- */}
+              {/* Show if query is non-empty and no exact case-insensitive match exists */}
+              {suggestionQuery.trim() && !filteredSuggestions.some(p => p.name.toLowerCase() === suggestionQuery.trim().toLowerCase()) && (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-8 px-2 mt-1 text-left text-shrub text-sm" // Changed text-blue-600 to text-shrub
+                  onClick={() => handleAddPerson(suggestionQuery.trim())} // Trim name before adding
+                >
+                  Add new person: "{suggestionQuery.trim()}"
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </CardContent>
+    </Card>
   )
 
   // Render the preview component
@@ -339,17 +477,7 @@ export default function NotesPage() {
   // Render desktop layout
   const renderDesktopLayout = () => (
     <div className="grid gap-4 md:gap-6 md:grid-cols-2">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="text-lg">Note Editor</CardTitle>
-          {/* <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
-            <Maximize2 className="h-4 w-4" />
-          </Button> */}
-        </CardHeader>
-        <CardContent>
-          {renderEditor()}
-        </CardContent>
-      </Card>
+      {renderEditor()}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Preview</CardTitle>
@@ -370,9 +498,6 @@ export default function NotesPage() {
                 <TabsTrigger value="editor">Editor</TabsTrigger>
                 <TabsTrigger value="preview">Preview</TabsTrigger>
             </TabsList>
-            {/* <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(true)} className="h-8 w-8 p-0">
-                <Maximize2 className="h-4 w-4" />
-            </Button> */}
         </div>
         <TabsContent value="editor" className="flex-1 overflow-auto p-4">
           {renderEditor()}
