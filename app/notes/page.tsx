@@ -58,21 +58,38 @@ export default function NotesPage() {
       const lines = text.split("\n")
       const people: Person[] = []
       let currentPerson: Person | null = null
+      let currentPrayerLines: string[] = [] // Buffer for prayer request lines
+
+      // Helper to finalize the prayer request for the current person
+      const finalizePreviousPersonPrayer = () => {
+        if (currentPerson && currentPrayerLines.length > 0) {
+          currentPerson.prayerRequests.push({
+            id: Date.now().toString() + Math.random().toString(),
+            content: currentPrayerLines.join('\n'), // Join lines into one string
+            createdAt: new Date(),
+          })
+          currentPrayerLines = [] // Reset buffer
+        }
+      }
 
       lines.forEach((line) => {
         // Check for person mention (@PersonName)
         if (line.startsWith("@")) {
+          finalizePreviousPersonPrayer() // Finalize prayers for the previous person first
+
           const name = line.substring(1).trim()
           currentPerson = {
             id: Date.now().toString() + Math.random().toString(),
             name,
-            prayerRequests: [],
+            prayerRequests: [], // Initialize empty
             followUps: [],
           }
           people.push(currentPerson)
         }
         // Check for follow-up date (#MMDD)
         else if (line.match(/^#\d{4}/) && currentPerson) {
+          finalizePreviousPersonPrayer() // Finalize prayers before processing follow-up
+
           const dateMatch = line.match(/^#(\d{2})(\d{2})/)
           if (dateMatch) {
             const [_, month, day] = dateMatch
@@ -93,15 +110,14 @@ export default function NotesPage() {
             })
           }
         }
-        // Regular prayer request
+        // Regular line - potential prayer request part
         else if (line.trim() && currentPerson) {
-          currentPerson.prayerRequests.push({
-            id: Date.now().toString() + Math.random().toString(),
-            content: line.trim(),
-            createdAt: new Date(),
-          })
+          currentPrayerLines.push(line.trim()) // Add to buffer
         }
+        // Ignore empty lines or lines before the first @person
       })
+
+      finalizePreviousPersonPrayer() // Finalize prayers for the very last person in the note
 
       setParsedData(people)
     }
@@ -285,19 +301,18 @@ export default function NotesPage() {
                 <h3 className="text-lg font-semibold">{person.name}</h3>
               </div>
 
+              {/* Display consolidated prayer request */}
               {person.prayerRequests.length > 0 && (
                 <div className="space-y-2 pl-7">
                   <p className="text-sm font-medium text-muted-foreground">Prayer Requests:</p>
-                  <ul className="space-y-1">
-                    {person.prayerRequests.map((request, idx) => (
-                      <li key={idx} className="text-sm">
-                        • {request.content}
-                      </li>
-                    ))}
-                  </ul>
+                  {/* Render the single request's content, preserving line breaks */}
+                  <p className="text-sm whitespace-pre-wrap">
+                    {person.prayerRequests[0].content}
+                  </p>
                 </div>
               )}
 
+              {/* Follow-ups remain the same */}
               {person.followUps.length > 0 && (
                 <div className="space-y-2 pl-7">
                   <p className="text-sm font-medium text-muted-foreground">Follow-ups:</p>

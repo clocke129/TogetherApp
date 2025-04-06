@@ -71,9 +71,11 @@ export function PrayerListItem({
           {/* Collapsed View: Most Recent Request Content & Date */}
           {!isExpanded && mostRecentRequest && (
             <div className="pt-1 space-y-1">
-              <p className="text-sm text-muted-foreground line-clamp-2">
+              {/* Display full content, respect newlines */}
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                 {mostRecentRequest.content}
               </p>
+              {/* Re-add the date display for collapsed view */}
               <div className="flex items-center text-xs text-muted-foreground pt-1">
                 <span className="flex items-center flex-shrink-0">
                   <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
@@ -109,28 +111,47 @@ export function PrayerListItem({
             <p className="text-muted-foreground text-sm">Loading details...</p>
           ) : (
             <>
-              {/* Prayer Requests Section */}
+              {/* Prayer Requests Section - Handles both single consolidated and multiple individual requests */}
               <div>
                 <h4 className="text-sm font-medium mb-2">Prayer Requests:</h4>
-                {expandedRequests.length > 0 ? (
-                  <ul className="space-y-1 pl-4">
-                    {expandedRequests.slice(0, 3).map((req) => (
-                      <li key={req.id} className="text-xs py-1 flex justify-between items-start gap-4">
-                        <p className="text-foreground flex-1"><span className="mr-2">•</span>{req.content}</p>
-                        <span className="flex items-center text-muted-foreground flex-shrink-0">
-                          <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
-                          {formatDate(req.createdAt.toDate())}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
+                {expandedRequests.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic pl-4">No prayer requests found.</p>
-                )}
-                {expandedRequests.length > 3 && (
-                   <Button variant="link" size="sm" className="h-auto p-0 mt-1 text-xs pl-4">
-                     View all {expandedRequests.length} requests... {/* TODO: Implement Modal */}
-                   </Button>
+                ) : expandedRequests.length === 1 ? (
+                  // SCENARIO 1: Single Request (potentially multi-line/consolidated)
+                  <div className="pl-4">
+                    <p className="text-sm whitespace-pre-wrap">
+                      {expandedRequests[0].content}
+                    </p>
+                    <div className="flex items-center text-xs text-muted-foreground pt-1">
+                       <span className="flex items-center flex-shrink-0">
+                         <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+                         {formatDate(expandedRequests[0].createdAt.toDate())}
+                       </span>
+                     </div>
+                  </div>
+                ) : (
+                  // SCENARIO 2: Multiple Individual Requests
+                  <>
+                    <ul className="space-y-1 pl-4">
+                      {expandedRequests.slice(0, 3).map((req) => (
+                        <li key={req.id} className="text-xs py-1 flex justify-between items-start gap-4">
+                          {/* Restore bullet point and content display */}
+                          <p className="text-foreground flex-1"><span className="mr-2">•</span>{req.content}</p>
+                          {/* Restore side-aligned date */}
+                          <span className="flex items-center text-muted-foreground flex-shrink-0">
+                            <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+                            {formatDate(req.createdAt.toDate())}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {/* Restore "View all" button if more than 3 requests */}
+                    {expandedRequests.length > 3 && (
+                      <Button variant="link" size="sm" className="h-auto p-0 mt-1 text-xs pl-4">
+                        View all {expandedRequests.length} requests... {/* TODO: Implement Modal */}
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
 
