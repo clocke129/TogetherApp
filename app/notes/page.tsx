@@ -15,6 +15,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { collection, addDoc, serverTimestamp, doc, writeBatch, query, where, getDocs, Timestamp } from "firebase/firestore"
 import { useAuth } from "@/context/AuthContext"
 import { db } from "@/lib/firebaseConfig"
+import { cn } from "@/lib/utils"
 
 // Types for our data models
 type Person = {
@@ -369,13 +370,11 @@ export default function NotesPage() {
   };
   // --- End Save Notes Functionality --- //
 
-  // Render the editor component
-  const renderEditor = () => (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Editor</CardTitle>
-      </CardHeader>
-      <CardContent className="relative">
+  // Render the editor component - Added isMobileView prop
+  const renderEditor = (isMobileView: boolean) => {
+    const editorContent = (
+      // Added relative positioning for suggestion card when isMobileView is true
+      <div className={cn(isMobileView && "relative")}>
         <TextareaAutosize
           ref={textareaRef}
           value={text}
@@ -416,9 +415,25 @@ Use #MMDD for follow-up dates.`}
             </CardContent>
           </Card>
         )}
-      </CardContent>
-    </Card>
-  )
+      </div>
+    );
+
+    if (isMobileView) {
+      return editorContent; // Render only textarea and suggestions on mobile
+    }
+
+    // Render with Card wrapper on desktop
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Editor</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {editorContent}
+        </CardContent>
+      </Card>
+    );
+  }
 
   // Render the preview component
   const renderPreview = () => (
@@ -477,7 +492,7 @@ Use #MMDD for follow-up dates.`}
   // Render desktop layout
   const renderDesktopLayout = () => (
     <div className="grid gap-4 md:gap-6 md:grid-cols-2">
-      {renderEditor()}
+      {renderEditor(false)} {/* Pass false for desktop */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Preview</CardTitle>
@@ -500,7 +515,7 @@ Use #MMDD for follow-up dates.`}
             </TabsList>
         </div>
         <TabsContent value="editor" className="flex-1 overflow-auto p-4">
-          {renderEditor()}
+          {renderEditor(true)} {/* Pass true for mobile */}
         </TabsContent>
         <TabsContent value="preview" className="flex-1 overflow-auto p-4">
           {renderPreview()}

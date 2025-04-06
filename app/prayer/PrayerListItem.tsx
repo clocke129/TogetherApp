@@ -61,9 +61,10 @@ export function PrayerListItem({
 
   return (
     <Card>
-      {/* CardHeader for Name, Badge, Pray Button - Common to both views */}
-      <CardHeader className="flex flex-row items-start justify-between space-x-4 pb-2">
-        <div className="flex-1 space-y-1">
+      {/* CardHeader: Added relative, removed justify-between */}
+      <CardHeader className="relative flex flex-row items-start p-4 pb-2"> {/* Removed justify-between, added relative */}
+        {/* Text Div: Removed flex-1, min-w-0 */}
+        <div className="space-y-1">
           <CardTitle className="text-lg font-semibold">{person.name}</CardTitle>
           {groupName && (
             <Badge variant="outline">{groupName}</Badge>
@@ -85,12 +86,12 @@ export function PrayerListItem({
             </div>
           )}
         </div>
-        {/* Pray Button */}
+        {/* Button: Absolute positioning */}
         <Button
           variant={isPrayedToday ? "outline" : "default"}
           size="sm"
           className={cn(
-            "gap-1 min-w-[90px]",
+            "gap-1 min-w-[90px] absolute top-4 right-4", /* Added absolute positioning */
             !isPrayedToday && "bg-shrub hover:bg-shrub/90 text-white"
           )}
           onClick={handleMarkPrayed}
@@ -106,7 +107,7 @@ export function PrayerListItem({
 
       {/* Expanded View: Content (Requests & Follow-ups) */}
       {isExpanded && (
-        <CardContent className="pt-2 pb-3 space-y-4">
+        <CardContent className="pt-2 pb-3 space-y-4 px-4">
           {isLoadingExpanded ? (
             <p className="text-muted-foreground text-sm">Loading details...</p>
           ) : (
@@ -115,10 +116,10 @@ export function PrayerListItem({
               <div>
                 <h4 className="text-sm font-medium mb-2">Prayer Requests:</h4>
                 {expandedRequests.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic pl-4">No prayer requests found.</p>
+                  <p className="text-sm text-muted-foreground italic">No prayer requests found.</p>
                 ) : expandedRequests.length === 1 ? (
                   // SCENARIO 1: Single Request (potentially multi-line/consolidated)
-                  <div className="pl-4">
+                  <div>
                     <p className="text-sm whitespace-pre-wrap">
                       {expandedRequests[0].content}
                     </p>
@@ -132,7 +133,7 @@ export function PrayerListItem({
                 ) : (
                   // SCENARIO 2: Multiple Individual Requests
                   <>
-                    <ul className="space-y-1 pl-4">
+                    <ul className="space-y-1">
                       {expandedRequests.slice(0, 3).map((req) => (
                         <li key={req.id} className="text-xs py-1 flex justify-between items-start gap-4">
                           {/* Restore bullet point and content display */}
@@ -147,7 +148,7 @@ export function PrayerListItem({
                     </ul>
                     {/* Restore "View all" button if more than 3 requests */}
                     {expandedRequests.length > 3 && (
-                      <Button variant="link" size="sm" className="h-auto p-0 mt-1 text-xs pl-4">
+                      <Button variant="link" size="sm" className="h-auto p-0 mt-1 text-xs">
                         View all {expandedRequests.length} requests... {/* TODO: Implement Modal */}
                       </Button>
                     )}
@@ -160,7 +161,7 @@ export function PrayerListItem({
                 <h4 className="text-sm font-medium mb-2">Follow-ups:</h4>
                  {/* Filter for active follow-ups before mapping */}
                 {expandedFollowUps.filter(fu => !fu.completed).length > 0 ? (
-                  <ul className="space-y-1 pl-4">
+                  <ul className="space-y-1">
                     {expandedFollowUps.filter(fu => !fu.completed).map((fu) => (
                       <li key={fu.id} className="flex items-center gap-2 py-1">
                         <Checkbox
