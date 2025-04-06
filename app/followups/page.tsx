@@ -430,12 +430,12 @@ export default function FollowupsPage() {
         {/* Action Button */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90">
+            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90 text-white">
               <Plus className="h-4 w-4" />
               Action
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[425px] overflow-y-auto max-h-[80vh]">
             <DialogHeader>
               <DialogTitle>Add New Follow-up</DialogTitle>
               <DialogDescription>Enter the details for the new follow-up item.</DialogDescription>
