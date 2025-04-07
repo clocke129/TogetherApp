@@ -1,91 +1,89 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Heart, FileText, Calendar, Users } from "lucide-react"
+import { Heart, FileText, Calendar, Users, Lightbulb } from "lucide-react"
 
 export default function Home() {
   return (
     <div className="mobile-container">
       <div className="mb-10 text-center">
-        <h1 className="text-4xl font-bold tracking-tight">Together App</h1>
+        <h1 className="text-4xl font-bold tracking-tight">Welcome to Together!</h1>
         <p className="mt-4 text-lg text-muted-foreground">
-          A prayer management application for tracking prayer requests, organizing groups, and managing follow-ups.
+          Your guide to managing prayer requests, groups, and follow-ups effectively.
         </p>
       </div>
 
-      <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <FileText className="h-6 w-6 text-shrub mb-2" />
-            <CardTitle>Intuitive Note-taking</CardTitle>
-            <CardDescription>Capture prayer requests with special syntax</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Use @PersonName to create people and #MMDD to set follow-up dates. Our smart parser automatically
-              structures your notes.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild className="w-full">
-              <Link href="/notes">Listen</Link>
-            </Button>
-          </CardFooter>
-        </Card>
+      <div className="max-w-3xl mx-auto">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6">
+          <Card>
+            <CardHeader>
+              <Link href="/notes" className="flex items-center gap-2 underline hover:text-shrub">
+                <FileText className="h-6 w-6 text-shrub" />
+                <CardTitle>Note</CardTitle>
+              </Link>
+              <CardDescription>Quickly capture prayer details and follow-ups.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Use `@Name` to tag someone (or create a new person if they don't exist) and add their prayer
+                requests. Use `#MMDD` (e.g., `#0315`) for follow-up dates/tasks. Check the preview pane to see how your
+                notes are automatically structured.
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <Heart className="h-6 w-6 text-shrub mb-2" />
-            <CardTitle>Prayer Tracking</CardTitle>
-            <CardDescription>Track prayer requests and mark them as prayed for</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Organize prayer requests by person and group. Mark prayers as complete and track your prayer history.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild className="w-full">
-              <Link href="/prayer">Pray</Link>
-            </Button>
-          </CardFooter>
-        </Card>
+          <Card>
+            <CardHeader>
+              <Link href="/assignments" className="flex items-center gap-2 underline hover:text-shrub">
+                <Users className="h-6 w-6 text-shrub" />
+                <CardTitle>Assign</CardTitle>
+              </Link>
+              <CardDescription>Organize people into groups and set prayer schedules.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Assign people to prayer groups you create. Then, select which days each group should pray. This is also
+                your central hub for adding, editing, or deleting people and groups.
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <Calendar className="h-6 w-6 text-shrub mb-2" />
-            <CardTitle>Follow-up Management</CardTitle>
-            <CardDescription>Never forget to follow up on prayer requests</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Set follow-up dates and get reminders. Track completed and upcoming follow-ups in one place.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild className="w-full">
-              <Link href="/followups">Follow-up</Link>
-            </Button>
-          </CardFooter>
-        </Card>
+          <Card>
+            <CardHeader>
+              <Link href="/prayer" className="flex items-center gap-2 underline hover:text-shrub">
+                <Heart className="h-6 w-6 text-shrub" />
+                <CardTitle>Pray</CardTitle>
+              </Link>
+              <CardDescription>View your daily prayer list and track completion.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                See the specific people/requests assigned for you to pray for today based on your group assignments.
+                Mark items as 'Prayed' to track your progress and review your prayer history.
+              </p>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <Users className="h-6 w-6 text-shrub mb-2" />
-            <CardTitle>Group Management</CardTitle>
-            <CardDescription>Organize people into prayer groups</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Create groups and assign prayer days. Configure how many people to pray for each day.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild className="w-full">
-              <Link href="/assignments">Assign</Link>
-            </Button>
-          </CardFooter>
-        </Card>
+          <Card>
+            <CardHeader>
+              <Link href="/followups" className="flex items-center gap-2 underline hover:text-shrub">
+                <Calendar className="h-6 w-6 text-shrub" />
+                <CardTitle>Follow-up</CardTitle>
+              </Link>
+              <CardDescription>Manage upcoming and completed follow-up tasks.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Track follow-up items created from your notes (using `#MMDD`). View upcoming or overdue tasks, set
+                dates if needed, and mark them as complete when finished.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+        <p className="mt-6 flex justify-center gap-2 text-sm text-muted-foreground">
+          <Lightbulb className="h-4 w-4 text-shrub flex-shrink-0" />
+          <span>(Tip: Click the "Together" logo in the top bar anytime to return here)</span>
+        </p>
       </div>
     </div>
   )
