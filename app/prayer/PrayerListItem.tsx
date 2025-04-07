@@ -61,10 +61,10 @@ export function PrayerListItem({
 
   return (
     <Card>
-      {/* CardHeader: Added relative, removed justify-between */}
-      <CardHeader className="relative flex flex-row items-start p-4 pb-2"> {/* Removed justify-between, added relative */}
-        {/* Text Div: Removed flex-1, min-w-0 */}
-        <div className="space-y-1">
+      {/* CardHeader: Use flexbox for layout */}
+      <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
+        {/* Text Div: Added flex-1, min-w-0, mr-2 */}
+        <div className="space-y-1 flex-1 min-w-0 mr-2">
           <CardTitle className="text-lg font-semibold">{person.name}</CardTitle>
           {groupName && (
             <Badge variant="outline">{groupName}</Badge>
@@ -86,12 +86,12 @@ export function PrayerListItem({
             </div>
           )}
         </div>
-        {/* Button: Absolute positioning */}
+        {/* Button: Removed absolute positioning, added flex-shrink-0 */}
         <Button
           variant={isPrayedToday ? "outline" : "default"}
           size="sm"
           className={cn(
-            "gap-1 min-w-[90px] absolute top-4 right-4", /* Added absolute positioning */
+            "gap-1 min-w-[90px] flex-shrink-0",
             !isPrayedToday && "bg-shrub hover:bg-shrub/90 text-white"
           )}
           onClick={handleMarkPrayed}

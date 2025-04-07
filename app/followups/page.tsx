@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, Clock, AlertTriangle, User, Check, Plus, CalendarPlus, Loader2, Trash2 } from "lucide-react"
+import { Calendar, Clock, AlertTriangle, User, Check, Plus, CalendarPlus, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -750,10 +750,8 @@ export default function FollowupsPage() {
                  >
                    {isClearing ? (
                      <Loader2 className="h-4 w-4 animate-spin" />
-                   ) : (
-                     <Trash2 className="h-4 w-4" />
-                   )}
-                   Clear All Completed
+                   ) : null}
+                   Clear Completed
                  </Button>
               </CardHeader>
               <CardContent>
