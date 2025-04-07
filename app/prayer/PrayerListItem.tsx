@@ -69,22 +69,6 @@ export function PrayerListItem({
           {groupName && (
             <Badge variant="outline">{groupName}</Badge>
           )}
-          {/* Collapsed View: Most Recent Request Content & Date */}
-          {!isExpanded && mostRecentRequest && (
-            <div className="pt-1 space-y-1">
-              {/* Display full content, respect newlines */}
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                {mostRecentRequest.content}
-              </p>
-              {/* Re-add the date display for collapsed view */}
-              <div className="flex items-center text-xs text-muted-foreground pt-1">
-                <span className="flex items-center flex-shrink-0">
-                  <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
-                  {formatDate(mostRecentRequest.createdAt.toDate())}
-                </span>
-              </div>
-            </div>
-          )}
         </div>
         {/* Button: Removed absolute positioning, added flex-shrink-0 */}
         <Button
@@ -104,6 +88,25 @@ export function PrayerListItem({
           )}
         </Button>
       </CardHeader>
+
+      {/* Collapsed View Content (Moved Outside Header) */}
+      {!isExpanded && mostRecentRequest && (
+        <CardContent className="pt-0 pb-3 px-4"> {/* Use CardContent, adjust padding */}
+           <div className="space-y-1"> {/* Removed pt-1 */}
+            {/* Display full content, respect newlines */}
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              {mostRecentRequest.content}
+            </p>
+            {/* Re-add the date display for collapsed view */}
+            <div className="flex items-center text-xs text-muted-foreground pt-1">
+              <span className="flex items-center flex-shrink-0">
+                <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+                {formatDate(mostRecentRequest.createdAt.toDate())}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      )}
 
       {/* Expanded View: Content (Requests & Follow-ups) */}
       {isExpanded && (
