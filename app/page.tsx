@@ -1,9 +1,28 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Heart, FileText, Calendar, Users, Lightbulb } from "lucide-react"
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      console.log("User logged in, redirecting from home to /prayer");
+      router.push('/prayer');
+    }
+  }, [user, loading, router]);
+
+  if (loading || user) {
+    return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
+  }
+
   return (
     <div className="mobile-container">
       <div className="mb-10 text-center">
@@ -26,7 +45,7 @@ export default function Home() {
             <CardContent>
               <p className="text-sm text-muted-foreground">
                 Use `@Name` to tag someone (or create a new person if they don't exist) and add their prayer
-                requests. Use `#MMDD` (e.g., `#0315`) for follow-up dates/tasks. Check the preview pane to see how your
+                requests. Use `#MMDD` (e.g., `#0315` for March 15th) for follow-up dates/tasks. Check the preview pane to see how your
                 notes are automatically structured.
               </p>
             </CardContent>

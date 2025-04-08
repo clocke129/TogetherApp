@@ -54,7 +54,7 @@ export default function SignupPage() {
     console.log("Attempting signup for:", email);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      console.log("Signup successful, redirecting to home...");
+      console.log("Signup successful, redirecting to home (instructions)...");
       router.push('/');
     } catch (err: any) {
       console.error("Firebase Signup Error:", err.code, err.message);

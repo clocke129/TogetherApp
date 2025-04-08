@@ -58,16 +58,16 @@ export default function LoginPage() {
 
         // Check if the difference is less than 5 seconds (5000 milliseconds)
         if (Math.abs(lastSignInTime - creationTime) < 5000) {
-          console.log("New user detected, redirecting to home...");
+          console.log("New user detected, redirecting to home (instructions)...");
           router.push('/');
         } else {
-          console.log("Existing user detected, redirecting to home...");
-          router.push('/');
+          console.log("Existing user detected, redirecting to prayer page...");
+          router.push('/prayer');
         }
       } else {
          // Fallback if metadata is somehow unavailable
-         console.log("User metadata not available, redirecting to home...");
-         router.push('/');
+         console.log("User metadata not available, redirecting to prayer page (fallback)...");
+         router.push('/prayer');
       }
 
     } catch (err: any) {
