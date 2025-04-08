@@ -49,6 +49,24 @@ import {
   RadioGroup,
   RadioGroupItem
 } from "@/components/ui/radio-group"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { SortableGroupCard } from "../../src/components/ui/sortable-group-card";
+import { SortableDayGroupCard } from "../../src/components/ui/sortable-day-group-card";
 
 // Types (Keep local types for now to avoid potential import issues until resolved)
 // type Person = {
@@ -140,6 +158,36 @@ export default function AssignmentsPage() {
       day: 'numeric'
     });
   });
+
+  // --- DND Kit Sensors ---
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // --- DND Kit Drag End Handler ---
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setGroups((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        const newOrderedGroups = arrayMove(items, oldIndex, newIndex);
+        
+        // TODO: Persist the new order in Firestore
+        // This typically involves updating an 'order' field on each group document
+        // based on the newOrderedGroups array indices.
+        // Example: updateGroupOrder(newOrderedGroups);
+        console.log(`Group ${active.id} moved from index ${oldIndex} to ${newIndex}`);
+        console.log("New Order:", newOrderedGroups.map(g => ({ id: g.id, name: g.name }))); // Log new order for verification
+
+        return newOrderedGroups;
+      });
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -876,9 +924,14 @@ export default function AssignmentsPage() {
 
   // Logged In State (Original Return Content)
   return (
-    <div className="mobile-container pb-16 md:pb-6">
-      {/* Consistent Header */}
-      <div className="mb-4 md:mb-6 flex items-center justify-between">
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="container mx-auto p-4 max-w-4xl">
+        {/* Header with Date */}
+        <div className="flex justify-between items-center mb-4">
         <div className="flex flex-col">
           <h1 className="page-title">Assignments</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
@@ -928,9 +981,9 @@ export default function AssignmentsPage() {
         </Dialog>
       </div>
 
-      <Tabs defaultValue="people-groups">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="people-groups">People & Groups</TabsTrigger>
+        <Tabs defaultValue="people-groups" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="people-groups">Groups & People</TabsTrigger>
           <TabsTrigger value="groups-days">Groups & Days</TabsTrigger>
         </TabsList>
 
@@ -1044,7 +1097,7 @@ export default function AssignmentsPage() {
             </CardContent>
           </Card>
 
-          {/* Groups Section */}
+            {/* Groups Section - Uses SortableGroupCard */}
           {isLoading ? (
             <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
           ) : groups.length === 0 ? (
@@ -1052,71 +1105,29 @@ export default function AssignmentsPage() {
               No groups created yet
             </div>
           ) : (
-            <div className="space-y-4 pt-4">
-              {groups.map((group) => (
-                <Card key={group.id} className="mb-4">
-                  {/* Make header clickable for expand/collapse */}
-                  <CardHeader className="pb-3 pt-4 px-4 cursor-pointer" onClick={() => toggleExpandGroup(group.id)}>
-                    <div className="flex items-center justify-between">
-                      {/* Group Name & Icon - Clickable for Actions */}
-                      <div 
-                        className="flex items-center gap-2"
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent card header click (expand/collapse)
-                          openGroupActionsDialog(group);
-                        }}
-                      >
-                        <Users className="h-5 w-5 text-primary" />
-                        {/* Add hover effect to name only */}
-                        <CardTitle className="text-base hover:underline">{group.name}</CardTitle>
-                        <Badge variant="outline" className="ml-2">
-                          {getPeopleInGroup(group.id).length} people
-                        </Badge>
-                      </div>
-                      {/* Expand/Collapse Icon */}
-                      {expandedGroupId === group.id ? (
-                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </div>
-                  </CardHeader>
-
-                  {expandedGroupId === group.id && (
-                    <CardContent className="pt-0">
-                      {getPeopleInGroup(group.id).length === 0 ? (
-                        <p className="text-center py-4 text-muted-foreground">No people in this group</p>
-                      ) : (
-                        <div className="space-y-2 mb-4">
-                          {/* Render people in the group */}
-                          {getPeopleInGroup(group.id).map((person) => (
-                            <div
-                              key={person.id}
-                              className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
-                            >
-                              {/* Make the name + icon clickable */} 
-                              <div 
-                                className="flex items-center gap-2 cursor-pointer"
-                                onClick={() => openPersonActionsDialog(person)}
-                              >
-                                <User className="h-4 w-4 text-muted-foreground" />
-                                <span>{person.name}</span>
+              <SortableContext
+                items={groups.map(g => g.id)} 
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-4 pt-4">
+                  {groups.map((group) => {
+                    const peopleInGroup = getPeopleInGroup(group.id);
+                    
+                    return (
+                      <SortableGroupCard
+                        key={group.id} 
+                        group={group}
+                        peopleInGroup={peopleInGroup}
+                        expandedGroupId={expandedGroupId}
+                        toggleExpandGroup={toggleExpandGroup}
+                        openGroupActionsDialog={openGroupActionsDialog}
+                        openPersonActionsDialog={openPersonActionsDialog}
+                        handleAddPersonToGroup={handleAddPersonToGroup}
+                      />
+                    );
+                  })}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Connect handleAddPersonToGroup */}
-                      <Button variant="outline" size="sm" className="gap-1 w-full" onClick={() => handleAddPersonToGroup(group.id)}>
-                        <UserPlus className="h-4 w-4" />
-                        Add Person to Group
-                      </Button>
-                    </CardContent>
-                  )}
-                </Card>
-              ))}
-            </div>
+              </SortableContext>
           )}
         </TabsContent>
 
@@ -1129,111 +1140,38 @@ export default function AssignmentsPage() {
                 Create groups first to assign prayer days and settings.
               </CardContent>
             </Card>
-          ) :
-            groups.map((group) => {
+            ) : (
+              <SortableContext
+                items={groups.map(g => g.id)} 
+                strategy={verticalListSortingStrategy}
+              >
+                {groups.map((group) => {
               const isExpanded = expandedGroupId === group.id;
               const currentNumSetting = localNumPerDaySettings[group.id];
               const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
-              const groupSize = group.personIds?.length ?? 0; // Get group size, default 0
+                  const groupSize = group.personIds?.length ?? 0;
+                  const isUpdatingThisGroupDays = isUpdatingDays === group.id;
+                  const isSavingThisGroupNum = isSavingNumPerDay === group.id;
 
               return (
-              <Card key={group.id} className="mb-4 overflow-hidden">
-                <CardHeader
-                  className="pb-3 pt-3 px-4 flex flex-row items-center justify-between cursor-pointer hover:bg-muted/50"
-                  onClick={() => setExpandedGroupId(isExpanded ? null : group.id)}
-                >
-                  {/* --- Add Group Icon --- */}
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-primary flex-shrink-0" />
-                    <CardTitle className="text-lg">{group.name}</CardTitle>
-                  </div>
-                  {isExpanded ? (
-                      <ChevronUp className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  ) : (
-                      <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  )}
-                </CardHeader>
-
-                {isExpanded && (
-                  <CardContent className="space-y-4 pt-2 pb-4 px-4 border-t">
-                     <div>
-                       <p className="text-sm text-muted-foreground mb-3">Select prayer days:</p>
-                       <div className="flex flex-wrap gap-2">
-                          {displayDays.map((day, index) => {
-                            const isSelected = group.prayerDays?.includes(index);
-                            const isUpdatingThisGroup = isUpdatingDays === group.id;
-                            return (
-                              <Button
-                                key={index}
-                                variant={isSelected ? "default" : "outline"}
-                                size="sm"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleDayForGroup(group.id, index)
-                                }}
-                                disabled={isLoading || isUpdatingThisGroup}
-                                className={cn(
-                                   "w-10 md:w-12",
-                                   isSelected && "bg-shrub hover:bg-shrub/90",
-                                   isUpdatingThisGroup && "opacity-50 cursor-not-allowed"
-                                )}
-                              >
-                                {day}
-                              </Button>
+                    <SortableDayGroupCard
+                       key={group.id}
+                       group={group}
+                       isExpanded={isExpanded}
+                       currentNumSetting={currentNumSetting}
+                       displayDays={displayDays}
+                       groupSize={groupSize}
+                       isMobile={isMobile}
+                       isLoading={isLoading} 
+                       isUpdatingDays={isUpdatingThisGroupDays}
+                       isSavingNumPerDay={isSavingThisGroupNum}
+                       onExpandToggle={() => toggleExpandGroup(group.id)}
+                       onDayToggle={toggleDayForGroup}
+                       onNumPerDayChange={handleNumPerDayChange}
+                    />
                             );
                           })}
-                        </div>
-                        {isUpdatingDays === group.id && <p className="text-xs text-muted-foreground mt-2">Updating days...</p>}
-                     </div>
-
-                     <div className="pt-2">
-                       <Label className="text-sm text-muted-foreground block mb-2">People per day:</Label>
-                       <div className="flex items-center gap-2">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="w-[100px] justify-start font-normal"
-                                disabled={isLoading || isSavingNumPerDay === group.id}
-                              >
-                                {isSavingNumPerDay === group.id ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <span>{currentNumSetting === null ? "All" : currentNumSetting}</span>
-                                )}
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-[100px]">
-                              {/* Make content scrollable vertically ONLY */}
-                              <div className="max-h-[200px] overflow-y-auto overflow-x-hidden"> {/* Added overflow-x-hidden */}
-                                <DropdownMenuRadioGroup
-                                  value={currentNumSetting == null ? "all" : currentNumSetting.toString()}
-                                  onValueChange={(value) => {
-                                    const newValue = value === "all" ? null : parseInt(value, 10);
-                                    handleNumPerDayChange(group.id, newValue);
-                                  }}
-                                >
-                                  <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-                                  {/* Only show numbers if group has members */}
-                                  {groupSize > 0 && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      {/* Generate options up to group size */}
-                                      {Array.from({ length: groupSize }, (_, i) => i + 1).map(num => (
-                                          <DropdownMenuRadioItem key={num} value={num.toString()}>{num}</DropdownMenuRadioItem>
-                                      ))}
-                                    </>
-                                  )}
-                                </DropdownMenuRadioGroup>
-                               </div> {/* Close scroll wrapper */}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                       </div>
-                     </div>
-                  </CardContent>
-                )}
-              </Card>
-            )}
+              </SortableContext>
           )}
         </TabsContent>
       </Tabs>
@@ -1250,9 +1188,7 @@ export default function AssignmentsPage() {
             )}
           </DialogHeader>
 
-          {/* Conditional Rendering: Show edit form or action buttons */} 
           {isEditingPersonName ? (
-            // --- Edit Name Form --- 
             <div className="py-4 space-y-3">
               <Label htmlFor="edit-person-name">New Name</Label>
               <Input 
@@ -1264,7 +1200,6 @@ export default function AssignmentsPage() {
               {editPersonNameError && (
                 <p className="text-sm text-shrub flex items-center gap-1">
                   {editPersonNameError} 
-                  {/* Show Merge button if there's a conflict */}
                   {conflictingPerson && (
                     <Button 
                        variant="link" 
@@ -1289,7 +1224,6 @@ export default function AssignmentsPage() {
                 >
                   Cancel
                 </Button>
-                {/* Show Save Changes button ONLY if no conflict exists */}
                 {!conflictingPerson && (
                   <Button 
                     onClick={handleEditPersonName} 
@@ -1302,16 +1236,14 @@ export default function AssignmentsPage() {
               </div>
             </div>
           ) : (
-            // --- Action Buttons --- 
             <div className="py-4 space-y-2">
-              {/* Remove from Group Button */}
               <Button
                 variant="outline"
                 className="w-full justify-start gap-2"
                 onClick={() => {
                   if (selectedPerson?.id && selectedPerson?.groupId) {
                     handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
-                    setIsPersonActionsDialogOpen(false); // Close dialog after action
+                      setIsPersonActionsDialogOpen(false);
                   }
                 }}
                 disabled={!selectedPerson?.groupId || !!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
@@ -1321,7 +1253,6 @@ export default function AssignmentsPage() {
                 {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
               </Button>
 
-              {/* --- Move to Another Group Dropdown --- */} 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button 
@@ -1329,7 +1260,7 @@ export default function AssignmentsPage() {
                     className="w-full justify-start gap-2" 
                     disabled={groups.length <= 1 || !selectedPerson || isAssigningPerson === selectedPerson?.id || isRemovingPersonId === selectedPerson?.id}
                   >
-                    <Users className="h-4 w-4" /> {/* Using Users icon */} 
+                      <Users className="h-4 w-4" />
                     Move to Another Group
                     {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />} 
                   </Button>
@@ -1338,30 +1269,27 @@ export default function AssignmentsPage() {
                   <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {groups
-                    .filter(group => group.id !== selectedPerson?.groupId) // Filter out current group
+                      .filter(group => group.id !== selectedPerson?.groupId)
                     .map((group) => (
                       <DropdownMenuItem
                         key={group.id}
                         onSelect={() => {
                           if (selectedPerson?.id) {
                              handleAssignPersonToGroup(selectedPerson.id, group.id);
-                             setIsPersonActionsDialogOpen(false); // Close dialog after selection
+                               setIsPersonActionsDialogOpen(false);
                           }
                         }}
-                        disabled={isAssigningPerson === selectedPerson?.id} // Disable during assignment
+                          disabled={isAssigningPerson === selectedPerson?.id}
                       >
                         {group.name}
                       </DropdownMenuItem>
                   ))}
-                  {/* Show message if no other groups exist */}
                   {groups.filter(group => group.id !== selectedPerson?.groupId).length === 0 && (
                     <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              {/* --- End Move to Another Group Dropdown --- */} 
 
-              {/* Edit Name Button */}
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2" 
@@ -1369,25 +1297,23 @@ export default function AssignmentsPage() {
                   if (selectedPerson) {
                      setEditingPersonNameValue(selectedPerson.name); 
                      setIsEditingPersonName(true);
-                     setEditPersonNameError(null); // Clear previous errors
+                       setEditPersonNameError(null);
                   }
                 }}
-                disabled={!!isRemovingPersonId || isSavingPersonName} // Disable if other actions are happening
+                  disabled={!!isRemovingPersonId || isSavingPersonName}
               >
                 <Edit className="h-4 w-4" />
                 Edit Name
               </Button>
-              {/* Delete Person Button */}
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
                 onClick={() => {
                    if (selectedPerson) {
-                      // Open Delete Confirmation Dialog instead of direct delete
                       handleDeletePersonClick(selectedPerson);
                    }
                 }}
-                disabled={!!isRemovingPersonId || isSavingPersonName || isDeletingPerson} // Disable if other actions are happening
+                  disabled={!!isRemovingPersonId || isSavingPersonName || isDeletingPerson}
                >
                 <Trash2 className="h-4 w-4" />
                 Delete Person
@@ -1395,7 +1321,6 @@ export default function AssignmentsPage() {
             </div>
           )}
 
-          {/* Hide footer when editing */} 
           {!isEditingPersonName && (
              <DialogFooter>
                <DialogClose asChild>
@@ -1406,7 +1331,6 @@ export default function AssignmentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Person Confirmation Dialog */} 
       <AlertDialog open={isDeletePersonConfirmOpen} onOpenChange={setIsDeletePersonConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1433,7 +1357,6 @@ export default function AssignmentsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Group Actions Dialog */} 
       <Dialog open={isGroupActionsDialogOpen} onOpenChange={setIsGroupActionsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1446,7 +1369,6 @@ export default function AssignmentsPage() {
           </DialogHeader>
 
           {isEditingGroupName ? (
-             // --- Edit Group Name Form --- 
              <div className="py-4 space-y-3">
               <Label htmlFor="edit-group-name">New Group Name</Label>
               <Input 
@@ -1479,9 +1401,7 @@ export default function AssignmentsPage() {
               </div>
             </div>
           ) : (
-            // --- Group Action Buttons --- 
             <div className="py-4 space-y-2">
-              {/* Edit Group Name Button */}
               <Button 
                 variant="outline" 
                 className="w-full justify-start gap-2" 
@@ -1492,12 +1412,11 @@ export default function AssignmentsPage() {
                       setEditGroupNameError(null);
                    }
                 }}
-                disabled={isSavingGroupName /* TODO: || isDeletingGroup */} 
+                  disabled={isSavingGroupName} 
               >
                 <Edit className="h-4 w-4" />
                 Edit Group Name
               </Button>
-              {/* Delete Group Button */} 
               <Button 
                  variant="outline" 
                  className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
@@ -1514,7 +1433,6 @@ export default function AssignmentsPage() {
             </div>
           )}
           
-          {/* Hide footer when editing */} 
           {!isEditingGroupName && (
             <DialogFooter>
               <DialogClose asChild>
@@ -1525,16 +1443,14 @@ export default function AssignmentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Group Confirmation Dialog */} 
       <AlertDialog open={isDeleteGroupConfirmOpen} onOpenChange={setIsDeleteGroupConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Group: {selectedGroup?.name}?</AlertDialogTitle>
             <AlertDialogDescription asChild>
-             <div className="space-y-3"> {/* Wrap content in div */}
+               <div className="space-y-3">
                <span>This action cannot be undone. What should happen to the <strong>{selectedGroup?.personIds?.length ?? 0} people</strong> in this group?</span>
               
-              {/* Radio Group for Member Options */} 
               <RadioGroup 
                 value={deleteGroupMembersOption}
                 onValueChange={(value) => setDeleteGroupMembersOption(value as "unassign" | "delete")} 
@@ -1583,9 +1499,8 @@ export default function AssignmentsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* TODO: Add Edit Group Name Dialog/UI */} 
-
     </div>
+    </DndContext>
   )
 }
 
