@@ -55,17 +55,29 @@ export default function NotesPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [existingPersons, setExistingPersons] = useState<ExistingPerson[]>([]) // State for existing persons
 
+  // State for the formatted current date
+  const [currentDateString, setCurrentDateString] = useState(() => {
+    const today = new Date();
+    return today.toLocaleDateString("en-US", {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    });
+  });
+
   const isMobile = useMobile()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { user } = useAuth()
 
   // Fetch existing persons for the current user
   useEffect(() => {
+    // Fetch existing persons only if logged in
+    if (!user) {
+       console.log("No user logged in, skipping person fetch for suggestions.")
+       setExistingPersons([])
+       return
+    }
     const fetchPersons = async () => {
-      if (!user) {
-        setExistingPersons([])
-        return
-      }
       console.log("Fetching persons for user:", user.uid)
       const personsRef = collection(db, "persons")
       const q = query(personsRef, where("createdBy", "==", user.uid))
@@ -526,19 +538,56 @@ Use #MMDD for follow-up dates.`}
     </div>
   )
 
+  // Loading State (Only need auth loading here, no data fetch on initial render)
+  const { loading: authLoading } = useAuth(); // Get authLoading specifically
+  if (authLoading) {
+     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
+  }
+
+  // Logged Out State
+  if (!user) {
+    return (
+      <div className="mobile-container pb-16 md:pb-6">
+        {/* Header structure */}
+        <div className="mb-4 md:mb-6 flex items-center justify-between">
+          <div className="flex flex-col">
+            <h1 className="page-title">Notes</h1>
+            <p className="text-muted-foreground">{currentDateString}</p>
+          </div>
+          <Button size="sm" disabled={true}>
+            <Save className="mr-2 h-4 w-4" /> Save Note
+          </Button>
+        </div>
+        {/* Login Prompt */}
+        <div className="flex flex-col items-center justify-center text-center py-16 px-4">
+          <p className="text-muted-foreground">
+            Please <strong className="text-foreground">log in</strong> or <strong className="text-foreground">sign up</strong> to save notes.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Logged In State (Original Return Content)
   return (
     <div className="mobile-container pb-16 md:pb-6">
+      {/* Consistent Header */}
       <div className="mb-4 md:mb-6 flex items-center justify-between">
-        <h1 className="page-title">Notes</h1>
+        <div className="flex flex-col">
+          <h1 className="page-title">Notes</h1>
+          <p className="text-muted-foreground">{currentDateString}</p>
+        </div>
         <Button onClick={handleSaveNotes} disabled={isSaving} size="sm">
-          {isSaving ? (
-              <>Saving...</>
-          ) : (
-              <><Save className="mr-2 h-4 w-4" /> Save Note</>
-          )}
+           {/* Restore Save button content */}
+           {isSaving ? (
+               <>Saving...</>
+           ) : (
+               <><Save className="mr-2 h-4 w-4" /> Save Note</>
+           )}
         </Button>
       </div>
 
+      {/* Main Content */}
       {isMobile ? renderMobileLayout() : renderDesktopLayout()}
 
       {/* <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>

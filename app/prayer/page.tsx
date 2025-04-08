@@ -44,11 +44,21 @@ import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, s
 
 export default function PrayerPage() {
   const { user, loading: authLoading } = useAuth(); // Auth hook
-  const [currentDate, setCurrentDate] = useState(new Date())
+  const [prayerListDate, setPrayerListDate] = useState(new Date());
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false); // State for prayer request dialog
   const [newRequestContent, setNewRequestContent] = useState("");
   const [selectedPersonIdForRequest, setSelectedPersonIdForRequest] = useState<string | "">("");
+
+  // State for formatted date string
+  const [currentDateString, setCurrentDateString] = useState(() => {
+    const today = new Date();
+    return today.toLocaleDateString("en-US", {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    });
+  });
 
   // NEW State to hold detailed data for the EXPANDED person
   const [expandedData, setExpandedData] = useState<{
@@ -67,23 +77,22 @@ export default function PrayerPage() {
 
   // Loading and error states
   const [loadingData, setLoadingData] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [isMarkingPrayedId, setIsMarkingPrayedId] = useState<string | null>(null)
   const [isCompletingFollowUpId, setIsCompletingFollowUpId] = useState<string | null>(null); // Loading state for follow-up completion
 
   // Navigate to previous day
   const goToPreviousDay = () => {
-    const newDate = new Date(currentDate)
+    const newDate = new Date(prayerListDate)
     newDate.setDate(newDate.getDate() - 1)
-    setCurrentDate(newDate)
+    setPrayerListDate(newDate)
     setExpandedPersonId(null) // Collapse items on date change
   }
 
   // Navigate to next day
   const goToNextDay = () => {
-    const newDate = new Date(currentDate)
+    const newDate = new Date(prayerListDate)
     newDate.setDate(newDate.getDate() + 1)
-    setCurrentDate(newDate)
+    setPrayerListDate(newDate)
     setExpandedPersonId(null) // Collapse items on date change
   }
 
@@ -117,11 +126,10 @@ export default function PrayerPage() {
     if (isMarkingPrayedId) return; // Prevent concurrent updates
     
     const personId = person.id;
-    const alreadyPrayedToday = isSameDay(person.lastPrayedFor, currentDate);
+    const alreadyPrayedToday = isSameDay(person.lastPrayedFor, prayerListDate);
 
     console.log(`Toggling prayed status for person ${personId}. Already prayed today: ${alreadyPrayedToday}`);
     setIsMarkingPrayedId(personId);
-    setError(null);
 
     try {
       const personRef = doc(db, "persons", personId);
@@ -152,7 +160,6 @@ export default function PrayerPage() {
 
     } catch (err) {
       console.error("Error toggling prayed status:", err);
-      setError(`Failed to update prayer status. Please try again.`);
     } finally {
       setIsMarkingPrayedId(null); // Clear loading state
     }
@@ -249,26 +256,31 @@ export default function PrayerPage() {
 
   // Get completed prayers - Filter based on lastPrayedFor date
   const getCompletedPrayers = (): Array<Person & { mostRecentRequest?: PrayerRequest }> => {
-    return todaysPrayerList.filter(person => isSameDay(person.lastPrayedFor, currentDate));
+    return todaysPrayerList.filter(person => isSameDay(person.lastPrayedFor, prayerListDate));
   };
 
   // Get active prayers - Filter based on lastPrayedFor date
   const getActivePrayers = (): Array<Person & { mostRecentRequest?: PrayerRequest }> => {
-    return todaysPrayerList.filter(person => !isSameDay(person.lastPrayedFor, currentDate));
+    return todaysPrayerList.filter(person => !isSameDay(person.lastPrayedFor, prayerListDate));
   };
+
+  // Define getGroupName in the main component scope
+  const getGroupName = (groupId?: string): string | undefined => {
+    if (!groupId) return undefined;
+    return allUserGroups.find(g => g.id === groupId)?.name;
+  }
 
   // Fetch initial data (groups, people, and determine today's list)
   useEffect(() => {
     if (!authLoading && user) {
       const fetchDataAndDetermineList = async () => {
         setLoadingData(true)
-        setError(null)
         console.log("Fetching prayer data for user:", user.uid)
 
         try {
           const userId = user.uid
-          const currentDayIndex = currentDate.getDay() // 0 for Sunday, 1 for Monday, etc.
-          console.log(`[Prayer Debug] Current Date: ${currentDate.toISOString()}, Day Index: ${currentDayIndex} (${getDayName(currentDate)})`)
+          const currentDayIndex = prayerListDate.getDay() // 0 for Sunday, 1 for Monday, etc.
+          console.log(`[Prayer Debug] Current Date: ${prayerListDate.toISOString()}, Day Index: ${currentDayIndex} (${getDayName(prayerListDate)})`)
 
           // 1. Fetch all groups created by the user
           const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", userId))
@@ -381,8 +393,7 @@ export default function PrayerPage() {
 
         } catch (err) {
           console.error("Error fetching prayer data:", err)
-          setError("Failed to load prayer data. Please try again later.")
-          setTodaysPrayerList([]) // Clear list on error
+          setTodaysPrayerList([])
           setAllUserPeople([])
         } finally {
           setLoadingData(false)
@@ -391,15 +402,14 @@ export default function PrayerPage() {
 
       fetchDataAndDetermineList()
     } else if (!authLoading && !user) {
-      // Handle logged out state
+      // Handle logged out state: Clear data, stop loading, message shown in return
       setLoadingData(false)
-      setError("Please log in to view your prayer list.")
       setAllUserGroups([])
       setAllUserPeople([])
       setTodaysPrayerList([])
     }
     // Dependency array: refetch if user logs in/out or date changes
-  }, [user, authLoading, currentDate])
+  }, [user, authLoading, prayerListDate])
 
   // NEW: Fetch expanded details (Prayer Requests & Follow-ups) for a specific person
   const fetchExpandedDetails = async (personId: string) => {
@@ -440,114 +450,164 @@ export default function PrayerPage() {
     }
   };
 
-  // Render the main prayer screen
-  const renderMainPrayerScreen = () => {
-    const activePrayers = getActivePrayers()
-    const completedPrayers = getCompletedPrayers()
+  // Main return uses mobile-container and includes header/content directly
+  if (authLoading) {
+    return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
+  }
 
-    const getGroupName = (groupId?: string): string | undefined => {
-      if (!groupId) return undefined;
-      return allUserGroups.find(g => g.id === groupId)?.name;
-    }
-
+  if (!user) {
     return (
-      <>
-        {/* Simplified Header: Always row layout */}
+      <div className="mobile-container pb-16 md:pb-6">
+        {/* Header structure */}
         <div className="mb-4 md:mb-6 flex items-center justify-between">
-          {/* Title */}
-          <h1 className="page-title">Prayer List</h1>
-          {/* Removed Date Navigation */}
-
-          {/* Action Button - Prayer Request Dialog */}
-          <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
+          <div className="flex flex-col">
+            <h1 className="page-title">Prayer List</h1>
+            <p className="text-muted-foreground">{currentDateString}</p>
+          </div>
+          <Dialog>
             <DialogTrigger asChild>
-              {/* Remove disabled prop */}
-              <Button size="sm" className="bg-shrub hover:bg-shrub/90 text-white">
-                <Plus className="mr-2 h-4 w-4" />
-                Request
+              <Button size="sm" className="bg-shrub hover:bg-shrub/90 text-white" disabled={true}>
+                <Plus className="mr-2 h-4 w-4" /> Request
               </Button>
             </DialogTrigger>
-            {/* Add DialogContent for Prayer Request */}
-            <DialogContent className="sm:max-w-[425px] overflow-y-auto max-h-[80vh]">
-              <DialogHeader>
-                <DialogTitle>Add New Prayer Request</DialogTitle>
-                <DialogDescription>
-                  Enter the details for the new prayer request item.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                {/* Request Content Textarea */}
-                <div className="grid grid-cols-4 items-start gap-4">
-                   <Label htmlFor="request-content" className="text-right pt-2">
-                     Request
-                   </Label>
-                   <Textarea
-                     id="request-content"
-                     placeholder="What is the prayer request?"
-                     value={newRequestContent}
-                     onChange={(e) => setNewRequestContent(e.target.value)}
-                     className="col-span-3"
-                     rows={3} // Adjust rows as needed
-                   />
-                 </div>
-                 {/* Person Select Dropdown */}
-                 <div className="grid grid-cols-4 items-center gap-4">
-                   <Label htmlFor="request-person" className="text-right">
-                     Person
-                   </Label>
-                   <Select
-                     value={selectedPersonIdForRequest}
-                     onValueChange={setSelectedPersonIdForRequest}
-                    >
-                     <SelectTrigger id="request-person" className="col-span-3">
-                       <SelectValue placeholder="Select a person" />
-                     </SelectTrigger>
-                     <SelectContent>
-                       {allUserPeople.length > 0 ? (
-                         allUserPeople.map((person) => (
-                           <SelectItem key={person.id} value={person.id}>
-                             {person.name}
-                           </SelectItem>
-                         ))
-                       ) : (
-                         <SelectItem value="" disabled>Loading people...</SelectItem> // Indicate loading or empty state
-                       )}
-                     </SelectContent>
-                   </Select>
-                 </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  onClick={handleAddPrayerRequest}
-                  className="bg-shrub hover:bg-shrub/90 text-white"
-                  disabled={!newRequestContent || !selectedPersonIdForRequest} // Basic validation
-                >
-                  Save Request
-                </Button>
-              </DialogFooter>
-            </DialogContent>
           </Dialog>
         </div>
+        {/* Login Prompt */}
+        <div className="flex flex-col items-center justify-center text-center py-16 px-4">
+          <p className="text-muted-foreground">
+            Please <strong className="text-foreground">log in</strong> or <strong className="text-foreground">sign up</strong> to view your prayer list.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-        {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+  return (
+    <div className="mobile-container pb-16 md:pb-6">
+      {/* Header section copied from renderMainPrayerScreen */}
+      <div className="mb-4 md:mb-6 flex items-center justify-between"> {/* Main row */}
+        <div className="flex flex-col"> {/* Inner stack for Title and Date */}
+          <h1 className="page-title">Prayer List</h1>
+          <p className="text-muted-foreground">{currentDateString}</p> {/* Date text */}
+        </div>
+        {/* Action Button - Prayer Request Dialog */}
+        <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="bg-shrub hover:bg-shrub/90 text-white">
+              <Plus className="mr-2 h-4 w-4" />
+              Request
+            </Button>
+          </DialogTrigger>
+          {/* Dialog Content remains the same */}
+          <DialogContent className="sm:max-w-[425px] overflow-y-auto max-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle>Add New Prayer Request</DialogTitle>
+              <DialogDescription>
+                Enter the details for the new prayer request item.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              {/* Request Content Textarea */}
+              <div className="grid grid-cols-4 items-start gap-4">
+                  <Label htmlFor="request-content" className="text-right pt-2">
+                    Request
+                  </Label>
+                  <Textarea
+                    id="request-content"
+                    placeholder="What is the prayer request?"
+                    value={newRequestContent}
+                    onChange={(e) => setNewRequestContent(e.target.value)}
+                    className="col-span-3"
+                    rows={3} // Adjust rows as needed
+                  />
+                </div>
+                {/* Person Select Dropdown */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="request-person" className="text-right">
+                    Person
+                  </Label>
+                  <Select
+                    value={selectedPersonIdForRequest}
+                    onValueChange={setSelectedPersonIdForRequest}
+                  >
+                    <SelectTrigger id="request-person" className="col-span-3">
+                      <SelectValue placeholder="Select a person" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allUserPeople.length > 0 ? (
+                        allUserPeople.map((person) => (
+                          <SelectItem key={person.id} value={person.id}>
+                            {person.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-people-placeholder" disabled>Loading people...</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                onClick={handleAddPrayerRequest}
+                className="bg-shrub hover:bg-shrub/90 text-white"
+                disabled={!newRequestContent || !selectedPersonIdForRequest} // Basic validation
+              >
+                Save Request
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-        {loadingData ? (
-          <div className="text-center py-10 text-muted-foreground">Loading prayer list...</div>
-        ) : (
-          <Tabs defaultValue="pray" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="pray">Pray</TabsTrigger>
-              <TabsTrigger value="completed">Completed</TabsTrigger>
-            </TabsList>
+      {/* Loading or Tabs content copied from renderMainPrayerScreen */}
+      {loadingData ? (
+        <div className="text-center py-10 text-muted-foreground">Loading prayer list...</div>
+      ) : (
+        <Tabs defaultValue="pray" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="pray">Pray</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
+          </TabsList>
 
-            {/* Pray Tab */}
-            <TabsContent value="pray" className="space-y-4">
-              {/* Content for Pray Tab (Active Prayers) */}
-              {getActivePrayers().length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">No one scheduled for prayer today.</p>
-              ) : (
-                getActivePrayers().map((person) => {
+          {/* Pray Tab */}
+          <TabsContent value="pray" className="space-y-4">
+            {/* ... Pray tab content ... */}
+            {getActivePrayers().length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No one scheduled for prayer today.</p>
+            ) : (
+              getActivePrayers().map((person) => {
+                const groupName = getGroupName(person.groupId);
+                const isExpanded = expandedPersonId === person.id;
+                return (
+                  <PrayerListItem
+                    key={person.id}
+                    person={person}
+                    mostRecentRequest={person.mostRecentRequest}
+                    groupName={groupName}
+                    isExpanded={isExpanded}
+                    isLoadingExpanded={isExpanded && expandedData.loading}
+                    expandedRequests={isExpanded ? expandedData.requests : []}
+                    expandedFollowUps={isExpanded ? expandedData.followUps : []}
+                    onToggleExpand={toggleExpandPerson}
+                    onMarkPrayed={markAsPrayedFor}
+                    onCompleteFollowUp={handleCompleteFollowUp}
+                    isMarkingPrayed={isMarkingPrayedId === person.id}
+                    isPrayedToday={false}
+                  />
+                );
+              })
+            )}
+          </TabsContent>
+
+          {/* Completed Tab */}
+          <TabsContent value="completed" className="space-y-4">
+              {/* ... Completed tab content ... */}
+              {getCompletedPrayers().length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No prayers completed today.</p>
+            ) : (
+              getCompletedPrayers().map((person) => {
                   const groupName = getGroupName(person.groupId);
                   const isExpanded = expandedPersonId === person.id;
                   return (
@@ -561,66 +621,17 @@ export default function PrayerPage() {
                       expandedRequests={isExpanded ? expandedData.requests : []}
                       expandedFollowUps={isExpanded ? expandedData.followUps : []}
                       onToggleExpand={toggleExpandPerson}
-                      onMarkPrayed={markAsPrayedFor}
+                      onMarkPrayed={markAsPrayedFor} // To 'un-complete'
                       onCompleteFollowUp={handleCompleteFollowUp}
                       isMarkingPrayed={isMarkingPrayedId === person.id}
-                      isPrayedToday={false}
+                      isPrayedToday={true}
                     />
                   );
-                })
-              )}
-            </TabsContent>
-
-            {/* Completed Tab */}
-            <TabsContent value="completed" className="space-y-4">
-               {/* Content for Completed Tab */}
-               {getCompletedPrayers().length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">No prayers completed today.</p>
-              ) : (
-                getCompletedPrayers().map((person) => {
-                   const groupName = getGroupName(person.groupId);
-                   const isExpanded = expandedPersonId === person.id;
-                   return (
-                     <PrayerListItem
-                       key={person.id}
-                       person={person}
-                       mostRecentRequest={person.mostRecentRequest}
-                       groupName={groupName}
-                       isExpanded={isExpanded}
-                       isLoadingExpanded={isExpanded && expandedData.loading}
-                       expandedRequests={isExpanded ? expandedData.requests : []}
-                       expandedFollowUps={isExpanded ? expandedData.followUps : []}
-                       onToggleExpand={toggleExpandPerson}
-                       onMarkPrayed={markAsPrayedFor} // To 'un-complete'
-                       onCompleteFollowUp={handleCompleteFollowUp}
-                       isMarkingPrayed={isMarkingPrayedId === person.id}
-                       isPrayedToday={true}
-                     />
-                   );
-                })
-              )}
-            </TabsContent>
-          </Tabs>
-        )}
-      </>
-    )
-  }
-
-  // --- Commented out Dialogs and Screens relying on old data structure ---
-  /*
-  // All Prayer Requests Dialog
-  <Dialog open={false} onOpenChange={() => {}}>
-    ... dialog content ...
-  </Dialog>
-
-  // Render the "View All Prayer Requests" screen
-  const renderViewAllRequestsScreen = () => { ... }
-  */
-
-  return (
-    <div className="container mx-auto px-4 py-6 md:py-8">
-      {/* Ensure main screen is always rendered for now */}
-      {renderMainPrayerScreen()}
+              })
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   )
 }

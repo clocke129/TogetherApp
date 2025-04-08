@@ -78,12 +78,24 @@ export default function FollowupsPage() {
   const [isClearing, setIsClearing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // State for formatted date string
+  const [currentDateString, setCurrentDateString] = useState(() => {
+    const today = new Date();
+    return today.toLocaleDateString("en-US", {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    });
+  });
+
   const { user } = useAuth()
 
   // --- Data Fetching --- //
   useEffect(() => {
+    // Fetch data only if logged in
     if (!user) {
       console.log("No user logged in, skipping data fetch.")
+      // Clear data if user logs out
       setFollowUps([])
       setPeopleMap({})
       setIsLoading(false)
@@ -418,17 +430,52 @@ export default function FollowupsPage() {
   };
   // --- End Clear Completed Follow-ups --- //
 
-  if (isLoading) {
-    return <div className="flex justify-center items-center min-h-screen"><p>Loading Follow-ups...</p></div>
+  // --- Render Logic --- 
+
+  // Loading State (Consider using authLoading if available/needed)
+  if (isLoading) { // Using existing isLoading state, might need refinement
+     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
   }
 
+  // Logged Out State
+  if (!user) {
+    return (
+      <div className="mobile-container pb-16 md:pb-6">
+        {/* Header structure */}
+        <div className="mb-4 md:mb-6 flex items-center justify-between">
+          <div className="flex flex-col">
+            <h1 className="page-title">Follow-ups</h1>
+            <p className="text-muted-foreground">{currentDateString}</p>
+          </div>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button size="sm" className="bg-shrub hover:bg-shrub/90 text-white" disabled={true}>
+                 <Plus className="mr-2 h-4 w-4" />
+                 Action
+               </Button>
+            </DialogTrigger>
+          </Dialog>
+        </div>
+        {/* Login Prompt */}
+        <div className="flex flex-col items-center justify-center text-center py-16 px-4">
+          <p className="text-muted-foreground">
+            Please <strong className="text-foreground">log in</strong> or <strong className="text-foreground">sign up</strong> to view your follow-ups.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Logged In State (Original Return Content)
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      {/* Simplified Header: Always row layout */}
+      {/* Consistent Header */}
       <div className="mb-4 md:mb-6 flex items-center justify-between">
-        {/* Title */}
-        <h1 className="page-title">Follow-ups</h1>
-        {/* Action Button */}
+        <div className="flex flex-col">
+          <h1 className="page-title">Follow-ups</h1>
+          <p className="text-muted-foreground">{currentDateString}</p>
+        </div>
+        {/* Action Button - Add Follow-up Dialog Trigger */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90 text-white">
@@ -489,6 +536,10 @@ export default function FollowupsPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Removed isLoading check here, handled above */}
+      {/* Error display */}
+      {error && <p className="text-red-500 text-center mb-4">{error}</p>}
 
       <Tabs defaultValue="active" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
@@ -791,8 +842,8 @@ export default function FollowupsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog for Editing Follow-up - needs modification */} 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}> 
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
          <DialogContent className="sm:max-w-[425px]"> 
            <DialogHeader> 
              <DialogTitle>Edit Follow-up</DialogTitle> 

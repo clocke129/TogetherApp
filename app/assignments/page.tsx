@@ -80,7 +80,6 @@ export default function AssignmentsPage() {
   const [groups, setGroups] = useState<Group[]>([])
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
   const [loadingData, setLoadingData] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   // Local state for number per day inputs, keyed by groupId (now stores number | null)
   const [localNumPerDaySettings, setLocalNumPerDaySettings] = useState<Record<string, number | null>>({});
@@ -132,11 +131,20 @@ export default function AssignmentsPage() {
   const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null);
   const [deleteGroupMembersOption, setDeleteGroupMembersOption] = useState<"unassign" | "delete">("unassign");
 
+  // NEW: State for formatted date string
+  const [currentDateString, setCurrentDateString] = useState(() => {
+    const today = new Date();
+    return today.toLocaleDateString("en-US", {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    });
+  });
+
   useEffect(() => {
     if (!authLoading && user) {
       const fetchData = async () => {
         setLoadingData(true)
-        setError(null)
         try {
           const userId = user.uid
 
@@ -165,20 +173,17 @@ export default function AssignmentsPage() {
 
         } catch (err) {
           console.error("Error fetching data:", err)
-          setError("Failed to load assignment data. Please try again later.")
         } finally {
           setLoadingData(false)
         }
       }
       fetchData()
     } else if (!authLoading && !user) {
-      // Handle case where user is not logged in after loading is finished
+      // Handle case where user is not logged in AFTER loading is finished
       setLoadingData(false)
-      setError("Please log in to view assignments.")
-      // Optionally redirect to login page
       setPeople([])
       setGroups([])
-      setLocalNumPerDaySettings({}) // Clear settings if logged out
+      setLocalNumPerDaySettings({})
     }
   }, [user, authLoading])
 
@@ -201,13 +206,11 @@ export default function AssignmentsPage() {
 
     console.log(`Toggling day ${dayIndex} for group ${groupId}`);
     setIsUpdatingDays(groupId); // Set loading state for this group
-    setError(null);
 
     // Find the current group's data
     const group = groups.find(g => g.id === groupId);
     if (!group) {
         console.error("Group not found locally!");
-        setError("Could not update days: Group not found.");
         setIsUpdatingDays(null);
         return;
     }
@@ -239,8 +242,6 @@ export default function AssignmentsPage() {
 
     } catch (err) {
       console.error("Error updating prayer days:", err);
-      setError(`Failed to update prayer days for ${group.name}. Please try again.`);
-      // Optionally revert optimistic update here if needed
     } finally {
       setIsUpdatingDays(null); // Clear loading state
     }
@@ -258,7 +259,6 @@ export default function AssignmentsPage() {
     if (!newPersonName.trim() || !user) return;
 
     setIsAddingPerson(true);
-    setError(null);
 
     try {
       const newPersonData: { name: string; createdBy: string; createdAt: any; groupId?: string } = {
@@ -294,7 +294,6 @@ export default function AssignmentsPage() {
 
     } catch (err) {
       console.error("Error adding person:", err);
-      setError("Failed to add person. Please try again.");
     } finally {
       setIsAddingPerson(false);
     }
@@ -306,7 +305,6 @@ export default function AssignmentsPage() {
     if (!newGroupName.trim() || !user) return;
 
     setIsAddingGroup(true);
-    setError(null);
 
     try {
       const newGroupData = {
@@ -330,7 +328,6 @@ export default function AssignmentsPage() {
       console.log("Group added with ID: ", docRef.id);
     } catch (err) {
       console.error("Error adding group:", err);
-      setError("Failed to add group. Please try again.");
     } finally {
       setIsAddingGroup(false);
     }
@@ -342,7 +339,6 @@ export default function AssignmentsPage() {
 
      console.log(`Assigning person ${personId} to group ${groupId}`);
      setIsAssigningPerson(personId); // Set loading state for this person
-     setError(null);
 
      // Check if person already has a group and remove from old group if necessary
      const person = people.find(p => p.id === personId);
@@ -402,8 +398,6 @@ export default function AssignmentsPage() {
 
      } catch (err) {
        console.error("Error assigning person (batch):", err);
-       setError(`Failed to assign person. Please try again.`);
-       // No need to revert optimistic update unless critical, as refetch will correct.
      } finally {
        setIsAssigningPerson(null); // Clear loading state
      }
@@ -421,7 +415,6 @@ export default function AssignmentsPage() {
 
      console.log(`Removing person ${personId} from group ${groupId}`);
      setIsRemovingPersonId(personId); // Set loading state for this person
-     setError(null);
 
      const personRef = doc(db, "persons", personId);
      const groupRef = doc(db, "groups", groupId);
@@ -449,7 +442,6 @@ export default function AssignmentsPage() {
 
      } catch (err) {
        console.error("Error removing person from group (batch):", err);
-       setError(`Failed to remove person. Please try again.`);
      } finally {
        setIsRemovingPersonId(null); // Clear loading state
      }
@@ -491,7 +483,6 @@ export default function AssignmentsPage() {
 
     console.log(`Updating numPerDay for group ${groupId} to ${validatedValue === null ? 'All' : validatedValue}`);
     setIsSavingNumPerDay(groupId);
-    setError(null);
 
     try {
       const groupRef = doc(db, "groups", groupId);
@@ -521,7 +512,6 @@ export default function AssignmentsPage() {
 
     } catch (err) {
       console.error("Error updating numPerDay:", err);
-      setError(`Failed to update settings for group ${originalGroup?.name ?? groupId}. Reverting input.`);
       // Revert local state on error
       setLocalNumPerDaySettings(prev => ({ ...prev, [groupId]: originalValue }));
     } finally {
@@ -851,12 +841,49 @@ export default function AssignmentsPage() {
   // Define isLoading based on auth and data loading states
   const isLoading = authLoading || loadingData;
 
+  // Loading State
+  if (authLoading) { // Use authLoading for the initial check
+    return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
+  }
+
+  // Logged Out State
+  if (!user) {
+    return (
+      <div className="mobile-container pb-16 md:pb-6">
+        {/* Header structure remains for consistency */}
+        <div className="mb-4 md:mb-6 flex items-center justify-between">
+          <div className="flex flex-col">
+            <h1 className="page-title">Assignments</h1>
+            <p className="text-muted-foreground">{currentDateString}</p>
+          </div>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90" disabled={true}>
+                <Plus className="h-4 w-4" /> Group
+              </Button>
+            </DialogTrigger>
+          </Dialog>
+        </div>
+        {/* Login Prompt */}
+        <div className="flex flex-col items-center justify-center text-center py-16 px-4">
+          <p className="text-muted-foreground">
+            Please <strong className="text-foreground">log in</strong> or <strong className="text-foreground">sign up</strong> to view your assignments.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Logged In State (Original Return Content)
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      {/* NEW Consistent Header */}
+      {/* Consistent Header */}
       <div className="mb-4 md:mb-6 flex items-center justify-between">
-        <h1 className="page-title">Assignments</h1>
-        {/* MOVED Add Group Dialog Trigger and Content Here */}
+        <div className="flex flex-col">
+          <h1 className="page-title">Assignments</h1>
+          <p className="text-muted-foreground">{currentDateString}</p>
+        </div>
+        {/* Add Group Button/Dialog Trigger */}
         <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
           <DialogTrigger asChild>
              <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90" disabled={isLoading || !user}>
@@ -900,9 +927,6 @@ export default function AssignmentsPage() {
           </DialogContent>
         </Dialog>
       </div>
-      {/* REMOVED Old Header Div */}
-
-      {error && <p className="text-shrub text-center mb-4">{error}</p>}
 
       <Tabs defaultValue="people-groups">
         <TabsList className="grid w-full grid-cols-2 mb-6">
