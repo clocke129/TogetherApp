@@ -328,6 +328,7 @@ export default function NotesPage() {
             batch.set(newRequestRef, {
               content: request.content,
               createdAt: serverTimestamp(),
+              createdBy: user.uid,
               personId: personRef.id, // Store parent person ID for potential denormalization/queries
               // prayedForDates: [] // Initialize if needed
             });
@@ -344,6 +345,7 @@ export default function NotesPage() {
               content: followUp.content,
               dueDate: Timestamp.fromDate(followUp.dueDate), // Convert JS Date to Firestore Timestamp
               completed: followUp.completed,
+              createdBy: user.uid,
               personId: personRef.id, // Store parent person ID
               // isRecurring, recurringPattern if needed
             });

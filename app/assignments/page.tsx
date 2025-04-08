@@ -1183,7 +1183,7 @@ export default function AssignmentsPage() {
                               {/* Make content scrollable vertically ONLY */}
                               <div className="max-h-[200px] overflow-y-auto overflow-x-hidden"> {/* Added overflow-x-hidden */}
                                 <DropdownMenuRadioGroup
-                                  value={currentNumSetting === null ? "all" : currentNumSetting.toString()}
+                                  value={currentNumSetting == null ? "all" : currentNumSetting.toString()}
                                   onValueChange={(value) => {
                                     const newValue = value === "all" ? null : parseInt(value, 10);
                                     handleNumPerDayChange(group.id, newValue);
@@ -1506,8 +1506,8 @@ export default function AssignmentsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Group: {selectedGroup?.name}?</AlertDialogTitle>
-            <AlertDialogDescription asChild> {/* Use asChild to prevent potential style conflicts */} 
-             <div className="space-y-3"> {/* Wrap content in div */} 
+            <AlertDialogDescription asChild>
+             <div className="space-y-3"> {/* Wrap content in div */}
                <span>This action cannot be undone. What should happen to the <strong>{selectedGroup?.personIds?.length ?? 0} people</strong> in this group?</span>
               
               {/* Radio Group for Member Options */} 

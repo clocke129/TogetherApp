@@ -49,8 +49,27 @@ export default function LoginPage() {
     console.log("Attempting login for:", email);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      console.log("Login successful, redirecting...");
-      router.push('/');
+      console.log("Login successful, determining redirect...");
+
+      const currentUser = auth.currentUser;
+      if (currentUser && currentUser.metadata.creationTime && currentUser.metadata.lastSignInTime) {
+        const creationTime = new Date(currentUser.metadata.creationTime).getTime();
+        const lastSignInTime = new Date(currentUser.metadata.lastSignInTime).getTime();
+
+        // Check if the difference is less than 5 seconds (5000 milliseconds)
+        if (Math.abs(lastSignInTime - creationTime) < 5000) {
+          console.log("New user detected, redirecting to home...");
+          router.push('/');
+        } else {
+          console.log("Existing user detected, redirecting to home...");
+          router.push('/');
+        }
+      } else {
+         // Fallback if metadata is somehow unavailable
+         console.log("User metadata not available, redirecting to home...");
+         router.push('/');
+      }
+
     } catch (err: any) {
       console.error("Firebase Login Error:", err.code, err.message);
       // Simplified error message for security
