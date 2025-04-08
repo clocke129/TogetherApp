@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,16 +9,8 @@ import { Heart, FileText, Calendar, Users, Lightbulb } from "lucide-react"
 
 export default function Home() {
   const { user, loading } = useAuth();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && user) {
-      console.log("User logged in, redirecting from home to /prayer");
-      router.push('/prayer');
-    }
-  }, [user, loading, router]);
-
-  if (loading || user) {
+  if (loading) {
     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
   }
 
