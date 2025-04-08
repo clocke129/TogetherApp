@@ -93,10 +93,26 @@ export function PrayerListItem({
       {!isExpanded && mostRecentRequest && (
         <CardContent className="pt-0 pb-3 px-4"> {/* Use CardContent, adjust padding */}
            <div className="space-y-1"> {/* Removed pt-1 */}
-            {/* Display full content, respect newlines */}
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {mostRecentRequest.content}
-            </p>
+            {/* Display content as bullet points if multi-line, else plain text */}
+            {(() => {
+              const lines = mostRecentRequest.content
+                .split('\n')
+                .filter(line => line.trim() !== '');
+              if (lines.length > 1) {
+                return (
+                  <ul className="list-disc pl-5 space-y-1">
+                    {lines.map((line, lineIndex) => (
+                      <li key={lineIndex} className="text-sm text-muted-foreground">
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                );
+              } else if (lines.length === 1) {
+                return <p className="text-sm text-muted-foreground">{lines[0]}</p>;
+              }
+              return null;
+            })()}
             {/* Re-add the date display for collapsed view */}
             <div className="flex items-center text-xs text-muted-foreground pt-1">
               <span className="flex items-center flex-shrink-0">
@@ -123,8 +139,13 @@ export function PrayerListItem({
                 ) : expandedRequests.length === 1 ? (
                   // SCENARIO 1: Single Request (potentially multi-line/consolidated)
                   <div>
-                    <p className="text-sm whitespace-pre-wrap">
-                      {expandedRequests[0].content}
+                    {/* Split multi-line content and join with comma + space */}
+                    <p className="text-sm">
+                      {expandedRequests[0].content
+                        .split('\n')
+                        .filter(line => line.trim() !== '') // Remove empty lines
+                        .join(', ') // Join with comma and space
+                       }
                     </p>
                     <div className="flex items-center text-xs text-muted-foreground pt-1">
                        <span className="flex items-center flex-shrink-0">

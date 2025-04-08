@@ -472,10 +472,26 @@ Use #MMDD for follow-up dates.`}
               {person.prayerRequests.length > 0 && (
                 <div className="space-y-2 pl-7">
                   <p className="text-sm font-medium text-muted-foreground">Prayer Requests:</p>
-                  {/* Render the single request's content, preserving line breaks */}
-                  <p className="text-sm whitespace-pre-wrap">
-                    {person.prayerRequests[0].content}
-                  </p>
+                  {/* Render as list only if multiple lines, otherwise plain text */}
+                  {(() => {
+                    const lines = person.prayerRequests[0].content
+                      .split('\n')
+                      .filter(line => line.trim() !== '');
+                    if (lines.length > 1) {
+                      return (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {lines.map((line, lineIndex) => (
+                            <li key={lineIndex} className="text-sm">
+                              {line}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    } else if (lines.length === 1) {
+                      return <p className="text-sm">{lines[0]}</p>;
+                    }
+                    return null; // Handle case with no non-empty lines (optional)
+                  })()}
                 </div>
               )}
 
