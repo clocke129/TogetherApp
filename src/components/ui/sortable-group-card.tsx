@@ -78,7 +78,8 @@ export function SortableGroupCard({
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Drag Handle - Use GripVertical with size/opacity */}
             <span 
-              className="cursor-grab p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
+              // Increase base padding for mobile, keep p-1 for medium screens and up
+              className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
               {...listeners}
               onClick={(e) => e.stopPropagation()}
             >
