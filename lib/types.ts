@@ -21,6 +21,7 @@ export interface Group {
     nextIndex: number; // Index to start selection from next time
   };
   createdAt?: Timestamp; // Added creation timestamp
+  order?: number; // Optional: For manual ordering/drag-and-drop
 }
 
 // Firestore Timestamp type for convenience if needed elsewhere
