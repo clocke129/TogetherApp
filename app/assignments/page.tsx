@@ -976,7 +976,7 @@ export default function AssignmentsPage() {
         {/* Right side: Add Group Button */}
         <Button onClick={() => setIsAddGroupDialogOpen(true)} size="sm">
           <Plus className="mr-2 h-4 w-4" /> Add Group
-        </Button>
+            </Button>
       </div>
 
       <DndContext
@@ -987,127 +987,127 @@ export default function AssignmentsPage() {
         <Tabs defaultValue="people-groups" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="people-groups">Groups & People</TabsTrigger>
-            <TabsTrigger value="groups-days">Groups & Days</TabsTrigger>
-          </TabsList>
+          <TabsTrigger value="groups-days">Groups & Days</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="people-groups" className="space-y-6">
-            {/* Uncategorized People Section */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <span>Uncategorized People</span>
-                  {/* --- Add Person Dialog Trigger --- */}
-                  <Dialog open={isAddPersonDialogOpen} onOpenChange={setIsAddPersonDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm" variant="outline" className="gap-1" disabled={isLoading || !user}>
-                        <UserPlus className="h-4 w-4" />
-                        Add Person
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
-                      <form onSubmit={(e) => handleAddPersonSubmit(e)}>
-                        <DialogHeader>
-                          <DialogTitle>Add New Person</DialogTitle>
-                          <DialogDescription>
-                            Enter the name of the person you want to add.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="person-name" className="text-right">
-                              Name
-                            </Label>
-                            <Input
-                              id="person-name"
-                              value={newPersonName}
-                              onChange={(e) => setNewPersonName(e.target.value)}
-                              className="col-span-3"
-                              placeholder="Person's name"
-                              required
-                              disabled={isAddingPerson}
-                            />
-                          </div>
+        <TabsContent value="people-groups" className="space-y-6">
+          {/* Uncategorized People Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center justify-between">
+                <span>Uncategorized People</span>
+                {/* --- Add Person Dialog Trigger --- */}
+                <Dialog open={isAddPersonDialogOpen} onOpenChange={setIsAddPersonDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="gap-1" disabled={isLoading || !user}>
+                      <UserPlus className="h-4 w-4" />
+                      Add Person
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <form onSubmit={(e) => handleAddPersonSubmit(e)}>
+                      <DialogHeader>
+                        <DialogTitle>Add New Person</DialogTitle>
+                        <DialogDescription>
+                          Enter the name of the person you want to add.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="person-name" className="text-right">
+                            Name
+                          </Label>
+                          <Input
+                            id="person-name"
+                            value={newPersonName}
+                            onChange={(e) => setNewPersonName(e.target.value)}
+                            className="col-span-3"
+                            placeholder="Person's name"
+                            required
+                            disabled={isAddingPerson}
+                          />
                         </div>
-                        <DialogFooter>
-                          <DialogClose asChild>
-                             <Button type="button" variant="outline" disabled={isAddingPerson}>Cancel</Button>
-                          </DialogClose>
-                          <Button type="submit" disabled={isAddingPerson || !newPersonName.trim()}>
-                            {isAddingPerson ? "Adding..." : "Add Person"}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                  {/* --- End Add Person Dialog --- */}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
-                ) : uncategorizedPeople.length === 0 ? (
-                  <div className="text-sm text-muted-foreground text-center py-8">
-                    No uncategorized people
-                  </div>
-                ) : (
-                  <div className="space-y-2 pt-4">
-                    {/* Display uncategorized people */}
-                    {uncategorizedPeople.map((person) => (
-                      <div key={person.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span>{person.name}</span>
-                        </div>
-
-                        {/* --- Assign to Group Dropdown --- */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1 text-xs"
-                              disabled={groups.length === 0 || isLoading || isAssigningPerson === person.id}
-                            >
-                              {isAssigningPerson === person.id ? "Assigning..." : "Assign to Group"}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {groups.length === 0 ? (
-                               <DropdownMenuLabel>No groups available</DropdownMenuLabel>
-                            ) : (
-                              <>
-                                <DropdownMenuLabel>Assign to:</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {groups.map((group) => (
-                                  <DropdownMenuItem
-                                    key={group.id}
-                                    onSelect={() => handleAssignPersonToGroup(person.id, group.id)}
-                                    disabled={isAssigningPerson === person.id}
-                                  >
-                                    {group.name}
-                                  </DropdownMenuItem>
-                                ))}
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        {/* --- End Assign to Group Dropdown --- */}
-
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      <DialogFooter>
+                        <DialogClose asChild>
+                           <Button type="button" variant="outline" disabled={isAddingPerson}>Cancel</Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={isAddingPerson || !newPersonName.trim()}>
+                          {isAddingPerson ? "Adding..." : "Add Person"}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+                {/* --- End Add Person Dialog --- */}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
+              ) : uncategorizedPeople.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-8">
+                  No uncategorized people
+                </div>
+              ) : (
+                <div className="space-y-2 pt-4">
+                  {/* Display uncategorized people */}
+                  {uncategorizedPeople.map((person) => (
+                    <div key={person.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span>{person.name}</span>
+                      </div>
+
+                      {/* --- Assign to Group Dropdown --- */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-xs"
+                            disabled={groups.length === 0 || isLoading || isAssigningPerson === person.id}
+                          >
+                            {isAssigningPerson === person.id ? "Assigning..." : "Assign to Group"}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {groups.length === 0 ? (
+                             <DropdownMenuLabel>No groups available</DropdownMenuLabel>
+                          ) : (
+                            <>
+                              <DropdownMenuLabel>Assign to:</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              {groups.map((group) => (
+                                <DropdownMenuItem
+                                  key={group.id}
+                                  onSelect={() => handleAssignPersonToGroup(person.id, group.id)}
+                                  disabled={isAssigningPerson === person.id}
+                                >
+                                  {group.name}
+                                </DropdownMenuItem>
+                              ))}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {/* --- End Assign to Group Dropdown --- */}
+
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
               {/* Groups Section - Uses SortableGroupCard */}
-            {isLoading ? (
-              <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
-            ) : groups.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-8">
-                No groups created yet
-              </div>
-            ) : (
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
+          ) : groups.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-8">
+              No groups created yet
+            </div>
+          ) : (
                 <SortableContext
                   items={groups.map(g => g.id)} 
                   strategy={verticalListSortingStrategy}
@@ -1131,32 +1131,32 @@ export default function AssignmentsPage() {
                     })}
                               </div>
                 </SortableContext>
-            )}
-          </TabsContent>
+          )}
+        </TabsContent>
 
-          <TabsContent value="groups-days" className="space-y-4">
-            {isLoading ? (
-              <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
-            ) : groups.length === 0 ? (
-              <Card>
-                <CardContent className="text-sm text-muted-foreground text-center py-8">
-                  Create groups first to assign prayer days and settings.
-                </CardContent>
-              </Card>
+        <TabsContent value="groups-days" className="space-y-4">
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
+          ) : groups.length === 0 ? (
+            <Card>
+              <CardContent className="text-sm text-muted-foreground text-center py-8">
+                Create groups first to assign prayer days and settings.
+              </CardContent>
+            </Card>
               ) : (
                 <SortableContext
                   items={groups.map(g => g.id)} 
                   strategy={verticalListSortingStrategy}
                 >
                   {groups.map((group) => {
-                const isExpanded = expandedGroupId === group.id;
-                const currentNumSetting = localNumPerDaySettings[group.id];
-                const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
+              const isExpanded = expandedGroupId === group.id;
+              const currentNumSetting = localNumPerDaySettings[group.id];
+              const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
                     const groupSize = group.personIds?.length ?? 0;
                     const isUpdatingThisGroupDays = isUpdatingDays === group.id;
                     const isSavingThisGroupNum = isSavingNumPerDay === group.id;
 
-                return (
+              return (
                       <SortableDayGroupCard
                          key={group.id}
                          group={group}
@@ -1175,332 +1175,332 @@ export default function AssignmentsPage() {
                             );
                           })}
                 </SortableContext>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Person Actions Dialog */}
+      <Dialog open={isPersonActionsDialogOpen} onOpenChange={setIsPersonActionsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Actions for {selectedPerson?.name}</DialogTitle>
+            {isEditingPersonName && selectedPerson && (
+              <DialogDescription>
+                Editing name for {selectedPerson.name}.
+              </DialogDescription>
             )}
-          </TabsContent>
-        </Tabs>
+          </DialogHeader>
 
-        {/* Person Actions Dialog */}
-        <Dialog open={isPersonActionsDialogOpen} onOpenChange={setIsPersonActionsDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Actions for {selectedPerson?.name}</DialogTitle>
-              {isEditingPersonName && selectedPerson && (
-                <DialogDescription>
-                  Editing name for {selectedPerson.name}.
-                </DialogDescription>
-              )}
-            </DialogHeader>
-
-            {isEditingPersonName ? (
-              <div className="py-4 space-y-3">
-                <Label htmlFor="edit-person-name">New Name</Label>
-                <Input 
-                  id="edit-person-name"
-                  value={editingPersonNameValue}
-                  onChange={(e) => setEditingPersonNameValue(e.target.value)}
-                  disabled={isSavingPersonName}
-                />
-                {editPersonNameError && (
-                  <p className="text-sm text-shrub flex items-center gap-1">
-                    {editPersonNameError} 
-                    {conflictingPerson && (
-                      <Button 
-                         variant="link" 
-                         className="text-shrub h-auto p-0 text-sm underline"
-                         onClick={handleMergePerson}
-                         disabled={isMergingPerson}
-                      >
-                        {isMergingPerson ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : null}
-                        Merge?
-                      </Button>
-                    )}
-                  </p>
-                )}
-                <div className="flex justify-end gap-2 pt-2">
-                   <Button 
-                    variant="ghost"
-                    onClick={() => {
-                      setIsEditingPersonName(false); 
-                      setEditPersonNameError(null);
-                    }}
-                    disabled={isSavingPersonName}
-                  >
-                    Cancel
-                  </Button>
-                  {!conflictingPerson && (
+          {isEditingPersonName ? (
+            <div className="py-4 space-y-3">
+              <Label htmlFor="edit-person-name">New Name</Label>
+              <Input 
+                id="edit-person-name"
+                value={editingPersonNameValue}
+                onChange={(e) => setEditingPersonNameValue(e.target.value)}
+                disabled={isSavingPersonName}
+              />
+              {editPersonNameError && (
+                <p className="text-sm text-shrub flex items-center gap-1">
+                  {editPersonNameError} 
+                  {conflictingPerson && (
                     <Button 
-                      onClick={handleEditPersonName} 
-                      disabled={isSavingPersonName || !editingPersonNameValue.trim() || editingPersonNameValue.trim() === selectedPerson?.name}
+                       variant="link" 
+                       className="text-shrub h-auto p-0 text-sm underline"
+                       onClick={handleMergePerson}
+                       disabled={isMergingPerson}
                     >
-                      {isSavingPersonName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Save Changes
+                      {isMergingPerson ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : null}
+                      Merge?
                     </Button>
                   )}
-                </div>
-              </div>
-            ) : (
-              <div className="py-4 space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                  onClick={() => {
-                    if (selectedPerson?.id && selectedPerson?.groupId) {
-                      handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
-                        setIsPersonActionsDialogOpen(false);
-                    }
-                  }}
-                  disabled={!selectedPerson?.groupId || !!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
-                >
-                  <LogOut className="h-4 w-4" />
-                  Remove from Group
-                  {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
-                </Button>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start gap-2" 
-                      disabled={groups.length <= 1 || !selectedPerson || isAssigningPerson === selectedPerson?.id || isRemovingPersonId === selectedPerson?.id}
-                    >
-                        <Users className="h-4 w-4" />
-                      Move to Another Group
-                      {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />} 
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
-                    <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {groups
-                        .filter(group => group.id !== selectedPerson?.groupId)
-                      .map((group) => (
-                        <DropdownMenuItem
-                          key={group.id}
-                          onSelect={() => {
-                            if (selectedPerson?.id) {
-                               handleAssignPersonToGroup(selectedPerson.id, group.id);
-                                 setIsPersonActionsDialogOpen(false);
-                            }
-                          }}
-                            disabled={isAssigningPerson === selectedPerson?.id}
-                        >
-                          {group.name}
-                        </DropdownMenuItem>
-                    ))}
-                    {groups.filter(group => group.id !== selectedPerson?.groupId).length === 0 && (
-                      <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start gap-2" 
-                  onClick={() => {
-                    if (selectedPerson) {
-                       setEditingPersonNameValue(selectedPerson.name); 
-                       setIsEditingPersonName(true);
-                         setEditPersonNameError(null);
-                    }
-                  }}
-                    disabled={!!isRemovingPersonId || isSavingPersonName}
-                >
-                  <Edit className="h-4 w-4" />
-                  Edit Name
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
-                  onClick={() => {
-                     if (selectedPerson) {
-                        handleDeletePersonClick(selectedPerson);
-                     }
-                  }}
-                    disabled={!!isRemovingPersonId || isSavingPersonName || isDeletingPerson}
-                 >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Person
-                </Button>
-              </div>
-            )}
-
-            {!isEditingPersonName && (
-               <DialogFooter>
-                 <DialogClose asChild>
-                   <Button variant="ghost">Cancel</Button>
-                 </DialogClose>
-               </DialogFooter>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        <AlertDialog open={isDeletePersonConfirmOpen} onOpenChange={setIsDeletePersonConfirmOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete 
-                <strong> {selectedPerson?.name}</strong> and remove them from any groups.
-                {deletePersonError && <p className="text-sm text-shrub mt-2">{deletePersonError}</p>}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setDeletePersonError(null)} disabled={isDeletingPerson}>
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleConfirmDeletePerson} 
-                disabled={isDeletingPerson}
-                className="bg-shrub hover:bg-shrub/90"
-              >
-                {isDeletingPerson && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
-                Confirm Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <Dialog open={isGroupActionsDialogOpen} onOpenChange={setIsGroupActionsDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Actions for Group: {selectedGroup?.name}</DialogTitle>
-              {isEditingGroupName && selectedGroup && (
-                <DialogDescription>
-                  Editing name for {selectedGroup.name}.
-                </DialogDescription>
+                </p>
               )}
-            </DialogHeader>
-
-            {isEditingGroupName ? (
-               <div className="py-4 space-y-3">
-                <Label htmlFor="edit-group-name">New Group Name</Label>
-                <Input 
-                  id="edit-group-name"
-                  value={editingGroupNameValue}
-                  onChange={(e) => setEditingGroupNameValue(e.target.value)}
-                  disabled={isSavingGroupName}
-                />
-                {editGroupNameError && (
-                  <p className="text-sm text-shrub">{editGroupNameError}</p>
-                )}
-                <div className="flex justify-end gap-2 pt-2">
-                   <Button 
-                    variant="ghost"
-                    onClick={() => {
-                      setIsEditingGroupName(false); 
-                      setEditGroupNameError(null);
-                    }}
-                    disabled={isSavingGroupName}
-                  >
-                    Cancel
-                  </Button>
+              <div className="flex justify-end gap-2 pt-2">
+                 <Button 
+                  variant="ghost"
+                  onClick={() => {
+                    setIsEditingPersonName(false); 
+                    setEditPersonNameError(null);
+                  }}
+                  disabled={isSavingPersonName}
+                >
+                  Cancel
+                </Button>
+                {!conflictingPerson && (
                   <Button 
-                    onClick={handleEditGroupName} 
-                    disabled={isSavingGroupName || !editingGroupNameValue.trim() || editingGroupNameValue.trim() === selectedGroup?.name}
+                    onClick={handleEditPersonName} 
+                    disabled={isSavingPersonName || !editingPersonNameValue.trim() || editingPersonNameValue.trim() === selectedPerson?.name}
                   >
-                    {isSavingGroupName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isSavingPersonName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Save Changes
                   </Button>
-                </div>
-               </div>
-            ) : (
-              <div className="py-4 space-y-2">
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start gap-2" 
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="py-4 space-y-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2"
+                onClick={() => {
+                  if (selectedPerson?.id && selectedPerson?.groupId) {
+                    handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
+                        setIsPersonActionsDialogOpen(false);
+                  }
+                }}
+                disabled={!selectedPerson?.groupId || !!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
+              >
+                <LogOut className="h-4 w-4" />
+                Remove from Group
+                {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start gap-2" 
+                    disabled={groups.length <= 1 || !selectedPerson || isAssigningPerson === selectedPerson?.id || isRemovingPersonId === selectedPerson?.id}
+                  >
+                        <Users className="h-4 w-4" />
+                    Move to Another Group
+                    {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />} 
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+                  <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {groups
+                        .filter(group => group.id !== selectedPerson?.groupId)
+                    .map((group) => (
+                      <DropdownMenuItem
+                        key={group.id}
+                        onSelect={() => {
+                          if (selectedPerson?.id) {
+                             handleAssignPersonToGroup(selectedPerson.id, group.id);
+                                 setIsPersonActionsDialogOpen(false);
+                          }
+                        }}
+                            disabled={isAssigningPerson === selectedPerson?.id}
+                      >
+                        {group.name}
+                      </DropdownMenuItem>
+                  ))}
+                  {groups.filter(group => group.id !== selectedPerson?.groupId).length === 0 && (
+                    <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2" 
+                onClick={() => {
+                  if (selectedPerson) {
+                     setEditingPersonNameValue(selectedPerson.name); 
+                     setIsEditingPersonName(true);
+                         setEditPersonNameError(null);
+                  }
+                }}
+                    disabled={!!isRemovingPersonId || isSavingPersonName}
+              >
+                <Edit className="h-4 w-4" />
+                Edit Name
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
+                onClick={() => {
+                   if (selectedPerson) {
+                      handleDeletePersonClick(selectedPerson);
+                   }
+                }}
+                    disabled={!!isRemovingPersonId || isSavingPersonName || isDeletingPerson}
+               >
+                <Trash2 className="h-4 w-4" />
+                Delete Person
+              </Button>
+            </div>
+          )}
+
+          {!isEditingPersonName && (
+             <DialogFooter>
+               <DialogClose asChild>
+                 <Button variant="ghost">Cancel</Button>
+               </DialogClose>
+             </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeletePersonConfirmOpen} onOpenChange={setIsDeletePersonConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete 
+              <strong> {selectedPerson?.name}</strong> and remove them from any groups.
+              {deletePersonError && <p className="text-sm text-shrub mt-2">{deletePersonError}</p>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeletePersonError(null)} disabled={isDeletingPerson}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDeletePerson} 
+              disabled={isDeletingPerson}
+              className="bg-shrub hover:bg-shrub/90"
+            >
+              {isDeletingPerson && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={isGroupActionsDialogOpen} onOpenChange={setIsGroupActionsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Actions for Group: {selectedGroup?.name}</DialogTitle>
+            {isEditingGroupName && selectedGroup && (
+              <DialogDescription>
+                Editing name for {selectedGroup.name}.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {isEditingGroupName ? (
+             <div className="py-4 space-y-3">
+              <Label htmlFor="edit-group-name">New Group Name</Label>
+              <Input 
+                id="edit-group-name"
+                value={editingGroupNameValue}
+                onChange={(e) => setEditingGroupNameValue(e.target.value)}
+                disabled={isSavingGroupName}
+              />
+              {editGroupNameError && (
+                <p className="text-sm text-shrub">{editGroupNameError}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                 <Button 
+                  variant="ghost"
                   onClick={() => {
-                     if (selectedGroup) {
-                        setEditingGroupNameValue(selectedGroup.name);
-                        setIsEditingGroupName(true);
-                        setEditGroupNameError(null);
-                     }
+                    setIsEditingGroupName(false); 
+                    setEditGroupNameError(null);
                   }}
-                    disabled={isSavingGroupName} 
+                  disabled={isSavingGroupName}
                 >
-                  <Edit className="h-4 w-4" />
-                  Edit Group Name
+                  Cancel
                 </Button>
                 <Button 
-                   variant="outline" 
-                   className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
-                   onClick={() => {
-                     if (selectedGroup) {
-                       handleDeleteGroupClick(selectedGroup);
-                     }
-                   }}
-                   disabled={isSavingGroupName || isDeletingGroup} 
+                  onClick={handleEditGroupName} 
+                  disabled={isSavingGroupName || !editingGroupNameValue.trim() || editingGroupNameValue.trim() === selectedGroup?.name}
                 >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Group
+                  {isSavingGroupName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
                 </Button>
               </div>
-            )}
-            
-            {!isEditingGroupName && (
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="ghost">Cancel</Button>
-                </DialogClose>
-              </DialogFooter>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        <AlertDialog open={isDeleteGroupConfirmOpen} onOpenChange={setIsDeleteGroupConfirmOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Group: {selectedGroup?.name}?</AlertDialogTitle>
-              <AlertDialogDescription asChild>
-                 <div className="space-y-3">
-                 <span>This action cannot be undone. What should happen to the <strong>{selectedGroup?.personIds?.length ?? 0} people</strong> in this group?</span>
-                
-                <RadioGroup 
-                  value={deleteGroupMembersOption}
-                  onValueChange={(value) => setDeleteGroupMembersOption(value as "unassign" | "delete")} 
-                  className="mt-2 mb-1"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="unassign" id="rg-unassign" />
-                    <Label htmlFor="rg-unassign" className="font-normal cursor-pointer">
-                      Move people to Uncategorized
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="delete" id="rg-delete" />
-                    <Label htmlFor="rg-delete" className="font-normal cursor-pointer">
-                      <span className="text-shrub">Permanently delete</span> all people in this group
-                    </Label>
-                  </div>
-                </RadioGroup>
-
-                {deleteGroupError && <p className="text-sm text-shrub mt-2">{deleteGroupError}</p>}
-               </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel 
+            </div>
+          ) : (
+            <div className="py-4 space-y-2">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2" 
                 onClick={() => {
-                   setDeleteGroupError(null);
+                   if (selectedGroup) {
+                      setEditingGroupNameValue(selectedGroup.name);
+                      setIsEditingGroupName(true);
+                      setEditGroupNameError(null);
+                   }
                 }}
-                disabled={isDeletingGroup}
+                    disabled={isSavingGroupName} 
               >
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleConfirmDeleteGroup} 
-                disabled={isDeletingGroup}
-                className={cn(
-                  "transition-colors", 
-                  deleteGroupMembersOption === 'delete' && "bg-shrub hover:bg-shrub/90 text-white", 
-                  deleteGroupMembersOption !== 'delete' && "bg-primary hover:bg-primary/90"
-                )}
+                <Edit className="h-4 w-4" />
+                Edit Group Name
+              </Button>
+              <Button 
+                 variant="outline" 
+                 className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
+                 onClick={() => {
+                   if (selectedGroup) {
+                     handleDeleteGroupClick(selectedGroup);
+                   }
+                 }}
+                 disabled={isSavingGroupName || isDeletingGroup} 
               >
-                {isDeletingGroup && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
-                Confirm Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+                <Trash2 className="h-4 w-4" />
+                Delete Group
+              </Button>
+            </div>
+          )}
+          
+          {!isEditingGroupName && (
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="ghost">Cancel</Button>
+              </DialogClose>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteGroupConfirmOpen} onOpenChange={setIsDeleteGroupConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Group: {selectedGroup?.name}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+                 <div className="space-y-3">
+               <span>This action cannot be undone. What should happen to the <strong>{selectedGroup?.personIds?.length ?? 0} people</strong> in this group?</span>
+              
+              <RadioGroup 
+                value={deleteGroupMembersOption}
+                onValueChange={(value) => setDeleteGroupMembersOption(value as "unassign" | "delete")} 
+                className="mt-2 mb-1"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="unassign" id="rg-unassign" />
+                  <Label htmlFor="rg-unassign" className="font-normal cursor-pointer">
+                    Move people to Uncategorized
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="delete" id="rg-delete" />
+                  <Label htmlFor="rg-delete" className="font-normal cursor-pointer">
+                    <span className="text-shrub">Permanently delete</span> all people in this group
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {deleteGroupError && <p className="text-sm text-shrub mt-2">{deleteGroupError}</p>}
+             </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                 setDeleteGroupError(null);
+              }}
+              disabled={isDeletingGroup}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDeleteGroup} 
+              disabled={isDeletingGroup}
+              className={cn(
+                "transition-colors", 
+                deleteGroupMembersOption === 'delete' && "bg-shrub hover:bg-shrub/90 text-white", 
+                deleteGroupMembersOption !== 'delete' && "bg-primary hover:bg-primary/90"
+              )}
+            >
+              {isDeletingGroup && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       </DndContext>
     </div>
