@@ -480,7 +480,7 @@ export default function FollowupsPage() {
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90 text-white">
               <Plus className="h-4 w-4" />
-              Action
+              Follow-up
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px] overflow-y-auto max-h-[80vh]">
@@ -554,7 +554,7 @@ export default function FollowupsPage() {
                    <AccordionTrigger className="p-3 bg-card border border-shrub/20 rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
                       <div className="flex items-center gap-2 text-lg font-medium">
                         <AlertTriangle className="h-5 w-5 text-shrub" />
-                        <span>Overdue</span>
+                        <span>Attention</span>
                         <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground">{overdueFollowUps.length}</Badge>
                       </div>
                    </AccordionTrigger>
