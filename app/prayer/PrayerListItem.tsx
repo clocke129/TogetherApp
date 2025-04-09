@@ -67,7 +67,7 @@ export function PrayerListItem({
         <div className="space-y-1 flex-1 min-w-0 mr-2">
           <CardTitle className="text-lg font-semibold">{person.name}</CardTitle>
           {groupName && (
-            <Badge variant="outline">{groupName}</Badge>
+            <Badge variant="secondary" className="bg-muted text-muted-foreground font-medium">{groupName}</Badge>
           )}
         </div>
         {/* Button: Removed absolute positioning, added flex-shrink-0 */}
