@@ -1062,7 +1062,7 @@ export default function AssignmentsPage() {
               ) : (
                  <RefreshCw className="mr-2 h-4 w-4" /> // Use a refresh icon
               )}
-              Update Today
+              Update Prayer List
             </Button>
         </div>
       </div>
@@ -1195,6 +1195,24 @@ export default function AssignmentsPage() {
               </CardContent>
             </Card>
 
+            {/* --- Update Today Button --- MOVED HERE */}
+            <div className="mt-4 flex justify-end"> {/* Add a container for alignment if needed */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUpdateTodaysList}
+                  disabled={isLoading || isUpdatingTodaysList || !user}
+                  className="gap-1"
+                >
+                  {isUpdatingTodaysList ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                     <RefreshCw className="mr-2 h-4 w-4" /> // Use a refresh icon
+                  )}
+                  Update Prayer List
+                </Button>
+            </div>
+
             {/* Groups Section - Uses SortableGroupCard */}
             {isLoading ? (
               <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
@@ -1221,6 +1239,7 @@ export default function AssignmentsPage() {
                             openGroupActionsDialog={openGroupActionsDialog}
                             openPersonActionsDialog={openPersonActionsDialog}
                             handleAddPersonToGroup={handleAddPersonToGroup}
+                            isMobile={isMobile}
                           />
                         );
                       })}
@@ -1230,6 +1249,24 @@ export default function AssignmentsPage() {
           </TabsContent>
 
           <TabsContent value="groups-days" className="space-y-4">
+            {/* --- Update Today Button --- MOVED HERE */}
+            <div className="mb-4 flex justify-end"> {/* Add a container for alignment if needed */}
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   onClick={handleUpdateTodaysList}
+                   disabled={isLoading || isUpdatingTodaysList || !user}
+                   className="gap-1"
+                 >
+                   {isUpdatingTodaysList ? (
+                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" /> // Use a refresh icon
+                   )}
+                   Update Prayer List
+                 </Button>
+            </div>
+
             {isLoading ? (
               <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
             ) : groups.length === 0 ? (

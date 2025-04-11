@@ -75,14 +75,16 @@ export function SortableDayGroupCard({
 
         {/* Right side container for handle and chevron */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Drag Handle - Use GripVertical with size/opacity */}
-          <span 
-            className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
-            {...listeners}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <GripVertical className="h-4 w-4" />
-          </span>
+          {/* Drag Handle - Conditionally render based on isMobile */}
+          {!isMobile && (
+              <span 
+                className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
+                {...listeners}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="h-4 w-4" />
+              </span>
+          )}
 
           {/* Expand/Collapse Icon */}
           {isExpanded ? (

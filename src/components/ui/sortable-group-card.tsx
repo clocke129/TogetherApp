@@ -16,6 +16,7 @@ interface SortableGroupCardProps {
   openGroupActionsDialog: (group: Group) => void;
   openPersonActionsDialog: (person: Person) => void; // Needed for clicking person name
   handleAddPersonToGroup: (groupId: string) => void; // Needed for the "Add Person" button
+  isMobile: boolean; // Add isMobile prop
 }
 
 export function SortableGroupCard({
@@ -26,6 +27,7 @@ export function SortableGroupCard({
   openGroupActionsDialog,
   openPersonActionsDialog, // Receive handler
   handleAddPersonToGroup, // Receive handler
+  isMobile, // Receive isMobile prop
 }: SortableGroupCardProps) {
   const {
     attributes,
@@ -76,15 +78,17 @@ export function SortableGroupCard({
           
           {/* Right side container for handle and chevron */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Drag Handle - Use GripVertical with size/opacity */}
-            <span 
-              // Increase base padding for mobile, keep p-1 for medium screens and up
-              className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
-              {...listeners}
-              onClick={(e) => e.stopPropagation()}
-            >
-               <GripVertical className="h-4 w-4" />
-            </span>
+            {/* Drag Handle - Conditionally render based on isMobile */}
+            {!isMobile && (
+                <span 
+                  // Increase base padding for mobile, keep p-1 for medium screens and up
+                  className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
+                  {...listeners}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                   <GripVertical className="h-4 w-4" />
+                </span>
+            )}
 
             {/* Expand/Collapse Icon */}
             {isExpanded ? (
