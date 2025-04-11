@@ -39,7 +39,7 @@ export default function Home() {
                   <code>@Name</code> tags or creates a person. Text on the following line adds a prayer request for that person.
                 </li>
                 <li>
-                  <code>#MMDD</code> (e.g., <code>#0315</code> for March 15th) creates a follow-up task for text on that line 
+                  <code>#MMDD</code> (e.g., <code>#0315</code> for March 15th) creates a follow-up task for text on that line.
                 </li>
                 <li>
                   Preview pane shows automatic structuring live.
@@ -59,7 +59,7 @@ export default function Home() {
             <CardContent>
               <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                 <li>Assign people to prayer groups you create.</li>
-                <li>Select which days each group should pray.</li>
+                <li>Select which days to pray for each group.</li>
                 <li>Click on groups or people to add, edit, or delete.</li>
               </ul>
             </CardContent>
