@@ -17,11 +17,11 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check, MoreVertical, Trash2, Edit, LogOut } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check, MoreVertical, Trash2, Edit, LogOut, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
-import { collection, query, where, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, writeBatch, arrayRemove, deleteField, orderBy } from 'firebase/firestore'
+import { collection, query, where, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, writeBatch, arrayRemove, deleteField, orderBy, deleteDoc } from 'firebase/firestore'
 import type { Person, Group } from '@/lib/types'
 import {
   DropdownMenu,
@@ -67,6 +67,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { SortableGroupCard } from "../../src/components/ui/sortable-group-card";
 import { SortableDayGroupCard } from "../../src/components/ui/sortable-day-group-card";
+import { calculateAndSaveDailyPrayerList } from "@/lib/utils";
+import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils";
 
 // Types (Keep local types for now to avoid potential import issues until resolved)
 // type Person = {
@@ -942,6 +944,63 @@ export default function AssignmentsPage() {
   // Define isLoading based on auth and data loading states
   const isLoading = authLoading || loadingData;
 
+  // --- Update Today's List State/Handler (NEW) ---
+  const [isUpdatingTodaysList, setIsUpdatingTodaysList] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  const handleUpdateTodaysList = async () => {
+    if (!user) return;
+    setUpdateError(null);
+
+    const confirmation = confirm("This will recalculate today's shared prayer list based on current settings for ALL devices. Continue?");
+    if (!confirmation) return;
+
+    setIsUpdatingTodaysList(true);
+    const today = new Date();
+    const dateKey = today.toISOString().split('T')[0];
+    const userId = user.uid;
+    const cacheKey = `prayerApp_dailyCache_${userId}`;
+
+    console.log(`[Update Button] Starting update for user ${userId}, date ${dateKey}`);
+
+    try {
+        // 1. Clear local session storage cache
+        if (typeof window !== 'undefined') {
+            const storedSessionCache = sessionStorage.getItem(cacheKey);
+            const loadedSessionCache = parseMapWithSets(storedSessionCache);
+            if (loadedSessionCache.has(dateKey)) {
+                loadedSessionCache.delete(dateKey);
+                sessionStorage.setItem(cacheKey, stringifyMapWithSets(loadedSessionCache));
+                console.log(`[Update Button] Cleared session storage entry for ${dateKey}`);
+            }
+        }
+
+        // 2. Clear central Firestore cache document (using NEW path)
+        const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
+        try {
+             await deleteDoc(dailyListRef);
+             console.log(`[Update Button] Deleted Firestore document at path ${dailyListRef.path} (if it existed).`);
+        } catch (deleteError) {
+             console.warn(`[Update Button] Could not delete Firestore doc (may not exist or other issue):`, deleteError);
+             // Continue even if delete fails (might not exist)
+        }
+
+        // 3. Recalculate and save the list using the utility function
+        console.log(`[Update Button] Calling calculation function...`);
+        await calculateAndSaveDailyPrayerList(db, userId, today);
+        console.log(`[Update Button] Calculation function finished successfully.`);
+
+        alert("Today's shared prayer list has been updated based on the current settings.");
+
+    } catch (error) {
+        console.error("[Update Button] Error during update process:", error);
+        setUpdateError("Failed to update today's prayer list. Please try again.");
+        alert("An error occurred while updating the prayer list. Check console for details.");
+    } finally {
+        setIsUpdatingTodaysList(false);
+    }
+  };
+
   // Loading State
   if (authLoading) { // Use authLoading for the initial check
     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
@@ -985,11 +1044,35 @@ export default function AssignmentsPage() {
           <h1 className="page-title">Assignments</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
-        {/* Right side: Add Group Button */}
-        <Button onClick={() => setIsAddGroupDialogOpen(true)} size="sm">
-          <Plus className="mr-2 h-4 w-4" /> Add Group
-        </Button>
+        {/* Right side: Add Group Button & Update Button */}
+        <div className="flex items-center gap-2"> { /* Wrap buttons */}
+            <Button onClick={() => setIsAddGroupDialogOpen(true)} size="sm">
+              <Plus className="mr-2 h-4 w-4" /> Add Group
+            </Button>
+            {/* NEW Update Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUpdateTodaysList}
+              disabled={isUpdatingTodaysList || !user}
+              title="Recalculate today's prayer list based on current settings"
+            >
+              {isUpdatingTodaysList ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                 <RefreshCw className="mr-2 h-4 w-4" /> // Use a refresh icon
+              )}
+              Update Today
+            </Button>
+        </div>
       </div>
+
+      {/* Display error if update failed */}
+      {updateError && (
+        <div className="mb-4 p-3 rounded-md border border-destructive bg-destructive/10 text-destructive text-sm">
+           {updateError}
+        </div>
+      )}
 
       <DndContext
         sensors={sensors}
