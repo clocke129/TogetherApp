@@ -42,7 +42,7 @@ import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
 // Firestore and Auth Imports
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
-import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, serverTimestamp, orderBy, deleteField, limit, writeBatch } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, serverTimestamp, orderBy, deleteField, limit, writeBatch, addDoc } from 'firebase/firestore'
 
 export default function PrayerPage() {
   const { user, loading: authLoading } = useAuth(); // Auth hook
@@ -210,23 +210,25 @@ export default function PrayerPage() {
     }
 
     console.log(`Adding prayer request for person ${selectedPersonIdForRequest}: ${newRequestContent}`);
-    // TODO: Implement Firestore addDoc logic here
-    // try {
-    //   const requestRef = collection(db, "persons", selectedPersonIdForRequest, "prayerRequests");
-    //   await addDoc(requestRef, {
-    //     content: newRequestContent,
-    //     createdAt: serverTimestamp(),
-    //     // createdBy: user.uid // Optional
-    //   });
-    //   console.log("Prayer request added successfully.");
+    // Implement Firestore addDoc logic here
+    try {
+      const requestRef = collection(db, "persons", selectedPersonIdForRequest, "prayerRequests");
+      await addDoc(requestRef, {
+        content: newRequestContent,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid // Include the user ID
+      });
+      console.log("Prayer request added successfully.");
        setNewRequestContent("");
        setSelectedPersonIdForRequest("");
        setIsRequestDialogOpen(false); // Close the dialog
-    //   // TODO: Optionally refresh data or add optimistic update
-    // } catch (error) {
-    //   console.error("Error adding prayer request:", error);
-    //   // TODO: Add user feedback for error
-    // }
+       alert("Prayer request added successfully!"); // Basic success feedback
+       // TODO: Optionally refresh data or add optimistic update
+    } catch (error) {
+      console.error("Error adding prayer request:", error);
+      // Provide a user-friendly error message
+      alert("Failed to add prayer request. Please check the console for more details.");
+    }
   };
 
   // NEW: Function to mark a follow-up as complete
