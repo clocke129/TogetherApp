@@ -1049,21 +1049,6 @@ export default function AssignmentsPage() {
             <Button onClick={() => setIsAddGroupDialogOpen(true)} size="sm">
               <Plus className="mr-2 h-4 w-4" /> Add Group
             </Button>
-            {/* NEW Update Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUpdateTodaysList}
-              disabled={isUpdatingTodaysList || !user}
-              title="Recalculate today's prayer list based on current settings"
-            >
-              {isUpdatingTodaysList ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                 <RefreshCw className="mr-2 h-4 w-4" /> // Use a refresh icon
-              )}
-              Update Prayer List
-            </Button>
         </div>
       </div>
 
@@ -1195,7 +1180,7 @@ export default function AssignmentsPage() {
               </CardContent>
             </Card>
 
-            {/* --- Update Today Button --- MOVED HERE */}
+            {/* --- Update Prayer List Button --- RE-ADDED HERE */}
             <div className="mt-4 flex justify-end"> {/* Add a container for alignment if needed */}
                 <Button
                   variant="outline"
@@ -1203,6 +1188,7 @@ export default function AssignmentsPage() {
                   onClick={handleUpdateTodaysList}
                   disabled={isLoading || isUpdatingTodaysList || !user}
                   className="gap-1"
+                  title="Recalculate today's prayer list based on current settings"
                 >
                   {isUpdatingTodaysList ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1249,7 +1235,7 @@ export default function AssignmentsPage() {
           </TabsContent>
 
           <TabsContent value="groups-days" className="space-y-4">
-            {/* --- Update Today Button --- MOVED HERE */}
+            {/* --- Update Prayer List Button --- RE-ADDED HERE */}
             <div className="mb-4 flex justify-end"> {/* Add a container for alignment if needed */}
                  <Button
                    variant="outline"
@@ -1257,6 +1243,7 @@ export default function AssignmentsPage() {
                    onClick={handleUpdateTodaysList}
                    disabled={isLoading || isUpdatingTodaysList || !user}
                    className="gap-1"
+                   title="Recalculate today's prayer list based on current settings"
                  >
                    {isUpdatingTodaysList ? (
                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
