@@ -70,13 +70,13 @@ export function PrayerListItem({
             <Badge variant="secondary" className="bg-muted text-muted-foreground font-medium">{groupName}</Badge>
           )}
         </div>
-        {/* Button: Removed absolute positioning, added flex-shrink-0 */}
+        {/* Button: Use secondary variant + explicit classes to match badge */}
         <Button
-          variant={isPrayedToday ? "outline" : "default"}
+          variant="secondary" 
           size="sm"
           className={cn(
-            "gap-1 min-w-[90px] flex-shrink-0",
-            !isPrayedToday && "bg-shrub hover:bg-shrub/90 text-white"
+            "gap-1 min-w-[90px] flex-shrink-0", 
+            "bg-muted text-muted-foreground hover:bg-muted/80" // Explicit classes + hover
           )}
           onClick={handleMarkPrayed}
           disabled={isMarkingPrayed}

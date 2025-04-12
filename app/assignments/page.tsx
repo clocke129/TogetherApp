@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, FormEvent } from "react"
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check, MoreVertical, Trash2, Edit, LogOut, RefreshCw } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check, MoreVertical, Trash2, Edit, LogOut, RefreshCw, ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
@@ -95,6 +97,7 @@ const DAYS_OF_WEEK_MOBILE = ["Su", "M", "T", "W", "Th", "F", "Sa"]
 
 export default function AssignmentsPage() {
   const { user, loading: authLoading } = useAuth()
+  const router = useRouter();
   const isMobile = useMobile()
   const [people, setPeople] = useState<Person[]>([])
   const [groups, setGroups] = useState<Group[]>([])
@@ -947,6 +950,7 @@ export default function AssignmentsPage() {
   // --- Update Today's List State/Handler (NEW) ---
   const [isUpdatingTodaysList, setIsUpdatingTodaysList] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isUpdatingAndReturning, setIsUpdatingAndReturning] = useState(false); // State for new FAB action
 
   const handleUpdateTodaysList = async () => {
     if (!user) return;
@@ -1001,6 +1005,57 @@ export default function AssignmentsPage() {
     }
   };
 
+  // --- New Handler for FAB: Update and Navigate Back ---
+  const handleUpdateAndGoBack = async () => {
+    if (!user || isUpdatingAndReturning) return;
+    setIsUpdatingAndReturning(true);
+    setUpdateError(null); // Clear previous errors
+
+    const today = new Date();
+    const dateKey = today.toISOString().split('T')[0];
+    const userId = user.uid;
+    const cacheKey = `prayerApp_dailyCache_${userId}`;
+
+    console.log(`[FAB] Starting update and return for user ${userId}, date ${dateKey}`);
+
+    try {
+        // 1. Clear local session storage cache
+        if (typeof window !== 'undefined') {
+            const storedSessionCache = sessionStorage.getItem(cacheKey);
+            const loadedSessionCache = parseMapWithSets(storedSessionCache);
+            if (loadedSessionCache.has(dateKey)) {
+                loadedSessionCache.delete(dateKey);
+                sessionStorage.setItem(cacheKey, stringifyMapWithSets(loadedSessionCache));
+                console.log(`[FAB] Cleared session storage entry for ${dateKey}`);
+            }
+        }
+
+        // 2. Clear central Firestore cache document
+        const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
+        try {
+             await deleteDoc(dailyListRef);
+             console.log(`[FAB] Deleted Firestore document at path ${dailyListRef.path} (if it existed).`);
+        } catch (deleteError) {
+             console.warn(`[FAB] Could not delete Firestore doc (may not exist or other issue):`, deleteError);
+        }
+
+        // 3. Recalculate and save the list
+        console.log(`[FAB] Calling calculation function...`);
+        await calculateAndSaveDailyPrayerList(db, userId, today);
+        console.log(`[FAB] Calculation function finished successfully.`);
+
+        // 4. Navigate back to prayer page
+        router.push('/prayer');
+
+    } catch (error) {
+        console.error("[FAB] Error during update and return process:", error);
+        setUpdateError("Failed to update prayer list before returning. Please try returning manually.");
+        // Don't navigate if update failed, show error on assignments page
+    } finally {
+        setIsUpdatingAndReturning(false);
+    }
+  };
+
   // Loading State
   if (authLoading) { // Use authLoading for the initial check
     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
@@ -1044,10 +1099,16 @@ export default function AssignmentsPage() {
           <h1 className="page-title">Assignments</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
-        {/* Right side: Add Group Button & Update Button */}
-        <div className="flex items-center gap-2"> { /* Wrap buttons */}
-            <Button onClick={() => setIsAddGroupDialogOpen(true)} size="sm">
-              <Plus className="mr-2 h-4 w-4" /> Add Group
+        {/* Right side: Back to Prayer Button */}
+        <div className="flex items-center gap-2">
+            <Button 
+               variant="default"
+               size="sm" 
+               onClick={handleUpdateAndGoBack} 
+               disabled={isUpdatingAndReturning}
+            >
+               {isUpdatingAndReturning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowLeft className="mr-2 h-4 w-4" />}
+               {isUpdatingAndReturning ? "Returning..." : "Back to Prayer"}
             </Button>
         </div>
       </div>
@@ -1204,7 +1265,7 @@ export default function AssignmentsPage() {
               <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
             ) : groups.length === 0 ? (
               <div className="text-sm text-muted-foreground text-center py-8">
-                No groups created yet
+                No groups created yet. Click the '+' button to add your first group.
               </div>
             ) : (
                   <SortableContext
@@ -1621,8 +1682,20 @@ export default function AssignmentsPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* --- Add Group Dialog --- */}
-        <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
+      </DndContext>
+
+      {/* FAB for Adding Group */}
+      <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
+          <DialogTrigger asChild>
+              <Button
+                  variant="default"
+                  className="fixed bottom-16 right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full shadow-lg z-50 flex items-center justify-center"
+                  size="icon"
+                  aria-label="Add Group"
+              >
+                <Plus className="h-6 w-6" />
+              </Button>
+          </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <form onSubmit={handleAddGroupSubmit}>
               <DialogHeader>
@@ -1662,9 +1735,7 @@ export default function AssignmentsPage() {
             </form>
           </DialogContent>
         </Dialog>
-        {/* --- End Add Group Dialog --- */}
 
-      </DndContext>
     </div>
   )
 }

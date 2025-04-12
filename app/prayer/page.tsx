@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"; // Import Link
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +18,8 @@ import {
   Check,
   ArrowLeft,
   Plus,
+  Users,
+  UserPlus
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -43,9 +46,11 @@ import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
 import { collection, query, where, getDocs, doc, getDoc, Timestamp, updateDoc, serverTimestamp, orderBy, deleteField, limit, writeBatch, addDoc } from 'firebase/firestore'
+import { useRouter } from "next/navigation"
 
 export default function PrayerPage() {
   const { user, loading: authLoading } = useAuth(); // Auth hook
+  const router = useRouter(); // Add router if not present
   const [prayerListDate, setPrayerListDate] = useState(new Date());
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false); // State for prayer request dialog
@@ -510,75 +515,12 @@ export default function PrayerPage() {
           <h1 className="page-title">Prayer List</h1>
           <p className="text-muted-foreground">{currentDateString}</p> {/* Date text */}
         </div>
-        {/* Action Button - Prayer Request Dialog */}
-        <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="bg-shrub hover:bg-shrub/90 text-white">
-              <Plus className="mr-2 h-4 w-4" />
-              Request
-            </Button>
-          </DialogTrigger>
-          {/* Dialog Content remains the same */}
-          <DialogContent className="sm:max-w-[425px] overflow-y-auto max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle>Add New Prayer Request</DialogTitle>
-              <DialogDescription>
-                Enter the details for the new prayer request item.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              {/* Request Content Textarea */}
-              <div className="grid grid-cols-4 items-start gap-4">
-                  <Label htmlFor="request-content" className="text-right pt-2">
-                    Request
-                  </Label>
-                  <Textarea
-                    id="request-content"
-                    placeholder="What is the prayer request?"
-                    value={newRequestContent}
-                    onChange={(e) => setNewRequestContent(e.target.value)}
-                    className="col-span-3"
-                    rows={3} // Adjust rows as needed
-                  />
-                </div>
-                {/* Person Select Dropdown */}
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="request-person" className="text-right">
-                    Person
-                  </Label>
-                  <Select
-                    value={selectedPersonIdForRequest}
-                    onValueChange={setSelectedPersonIdForRequest}
-                  >
-                    <SelectTrigger id="request-person" className="col-span-3">
-                      <SelectValue placeholder="Select a person" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allUserPeople.length > 0 ? (
-                        allUserPeople.map((person) => (
-                          <SelectItem key={person.id} value={person.id}>
-                            {person.name}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="no-people-placeholder" disabled>Loading people...</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                onClick={handleAddPrayerRequest}
-                className="bg-shrub hover:bg-shrub/90 text-white"
-                disabled={!newRequestContent || !selectedPersonIdForRequest} // Basic validation
-              >
-                Save Request
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Top Right Button: Assign Groups */}
+        <Link href="/assignments" passHref>
+           <Button size="sm" variant="default">
+              <Users className="mr-2 h-4 w-4" /> Assign Groups
+           </Button>
+        </Link>
       </div>
 
       {/* Loading or Tabs content copied from renderMainPrayerScreen */}
@@ -593,9 +535,17 @@ export default function PrayerPage() {
 
           {/* Pray Tab */}
           <TabsContent value="pray" className="space-y-4">
-            {/* ... Pray tab content ... */}
             {getActivePrayers().length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">No one scheduled for prayer today.</p>
+              // Conditional Empty State Message
+              allUserPeople.length > 0 ? (
+                <div className="text-center py-8 px-4 text-muted-foreground">
+                  <p className="mb-2">No one scheduled for prayer today.</p>
+                  <p>Assign people to groups and set prayer days using the <span className="font-semibold">Assign Groups</span> button.</p>
+                </div>
+              ) : (
+                // Original empty state if no people exist at all
+                <p className="text-center py-8 text-muted-foreground">No one scheduled for prayer today.</p>
+              )
             ) : (
               getActivePrayers().map((person) => {
                 const groupName = getGroupName(person.groupId);
@@ -652,6 +602,81 @@ export default function PrayerPage() {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* FAB for Adding Prayer Request */}
+      <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
+        <DialogTrigger asChild>
+            <Button
+              variant="default" // Use default style for primary action FAB
+              className="fixed bottom-16 right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full shadow-lg z-50 flex items-center justify-center"
+              size="icon"
+              aria-label="Add Prayer Request"
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+        </DialogTrigger>
+        {/* Existing DialogContent for adding request remains here */}
+        <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Add Prayer Request</DialogTitle>
+                <DialogDescription>
+                   Select a person and add a new prayer request for them.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                  {/* Person Selector */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="request-person" className="text-right">
+                      Person
+                    </Label>
+                    <Select
+                      value={selectedPersonIdForRequest}
+                      onValueChange={setSelectedPersonIdForRequest}
+                      disabled={allUserPeople.length === 0}
+                    >
+                      <SelectTrigger id="request-person" className="col-span-3">
+                        <SelectValue placeholder={allUserPeople.length > 0 ? "Select a person" : "No people found"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allUserPeople.length > 0 ? (
+                          allUserPeople.map((person) => (
+                            <SelectItem key={person.id} value={person.id}>
+                              {person.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-people-placeholder" disabled>Add people in Assignments</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {/* Request Content */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="request-content" className="text-right">
+                        Request
+                      </Label>
+                      <Textarea
+                        id="request-content"
+                        value={newRequestContent}
+                        onChange={(e) => setNewRequestContent(e.target.value)}
+                        className="col-span-3"
+                        placeholder="Type the prayer request here..."
+                        rows={3}
+                      />
+                  </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  onClick={handleAddPrayerRequest}
+                  className="bg-shrub hover:bg-shrub/90"
+                  disabled={!newRequestContent || !selectedPersonIdForRequest}
+                >
+                  Save Request
+                </Button>
+              </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -447,14 +448,6 @@ export default function FollowupsPage() {
             <h1 className="page-title">Follow-ups</h1>
             <p className="text-muted-foreground">{currentDateString}</p>
           </div>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button size="sm" className="bg-shrub hover:bg-shrub/90 text-white" disabled={true}>
-                 <Plus className="mr-2 h-4 w-4" />
-                 Action
-               </Button>
-            </DialogTrigger>
-          </Dialog>
         </div>
         {/* Login Prompt */}
         <div className="flex flex-col items-center justify-center text-center py-16 px-4">
@@ -475,66 +468,6 @@ export default function FollowupsPage() {
           <h1 className="page-title">Follow-ups</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
-        {/* Action Button - Add Follow-up Dialog Trigger */}
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1 bg-shrub hover:bg-shrub/90 text-white">
-              <Plus className="h-4 w-4" />
-              Follow-up
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] overflow-y-auto max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle>Add New Follow-up</DialogTitle>
-              <DialogDescription>Enter the details for the new follow-up item.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="content">Follow-up Item</Label>
-                <Input
-                  id="content"
-                  value={newFollowUp.content}
-                  onChange={(e) => setNewFollowUp({ ...newFollowUp, content: e.target.value })}
-                  placeholder="What do you need to follow up on?"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="person">Person</Label>
-                <Select
-                  value={newFollowUp.personId}
-                  onValueChange={(value) => setNewFollowUp({ ...newFollowUp, personId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a person" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(peopleMap).map(([id, name]) => (
-                      <SelectItem key={id} value={id}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="dueDate" className="text-right">Due Date</Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  className="col-span-3"
-                  value={formatDateForInput(newFollowUp.dueDate?.toDate() || Timestamp.now().toDate())}
-                  onChange={(e) => {
-                    const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.fromDate(new Date(0));
-                    setNewFollowUp({ ...newFollowUp, dueDate: dateValue })
-                  }}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={handleAddFollowUp}>Save Follow-up</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
       {/* Removed isLoading check here, handled above */}
@@ -776,10 +709,6 @@ export default function FollowupsPage() {
                <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                <h3 className="text-lg font-medium">No active follow-ups</h3>
                <p className="text-muted-foreground mt-1">All your follow-ups are completed!</p>
-               <Button className="mt-4 bg-shrub hover:bg-shrub/90" onClick={() => setIsAddDialogOpen(true)}>
-                 <Plus className="mr-2 h-4 w-4" />
-                 Add Follow-up
-               </Button>
              </div>
            )}
         </TabsContent>
@@ -880,6 +809,90 @@ export default function FollowupsPage() {
            </DialogFooter> 
          </DialogContent> 
        </Dialog> 
+
+      {/* FAB for Adding Follow-up */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogTrigger asChild>
+            <Button
+              variant="default"
+              className="fixed bottom-16 right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full shadow-lg z-50 flex items-center justify-center"
+              size="icon"
+              aria-label="Add Follow-up"
+              disabled={!user} // Disable if not logged in
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+        </DialogTrigger>
+        {/* Add Follow-up Dialog Content */}
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Follow-up</DialogTitle>
+            <DialogDescription>
+              Enter the details for the new follow-up item.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+              {/* Follow-up Content Textarea */}
+              <div className="grid gap-2">
+                <Label htmlFor="followup-content">Follow-up Item</Label>
+                <Textarea
+                  id="followup-content"
+                  placeholder="What is the follow-up task?"
+                  value={newFollowUp.content || ""}
+                  onChange={(e) => setNewFollowUp({ ...newFollowUp, content: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              {/* Person Select Dropdown */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="followup-person" className="text-right">
+                  Person
+                </Label>
+                <Select
+                  value={newFollowUp.personId}
+                  onValueChange={(value) => setNewFollowUp({ ...newFollowUp, personId: value })}
+                  disabled={Object.keys(peopleMap).length === 0}
+                >
+                  <SelectTrigger id="followup-person" className="col-span-3">
+                    <SelectValue placeholder={Object.keys(peopleMap).length > 0 ? "Select a person" : "No people found"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(peopleMap).length > 0 ? (
+                      Object.entries(peopleMap).map(([id, name]) => (
+                        <SelectItem key={id} value={id}>{name}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-people-placeholder" disabled>Add people first</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Due Date Input */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="followup-dueDate" className="text-right">Due Date</Label>
+                <Input
+                  id="followup-dueDate"
+                  type="date"
+                  className="col-span-3"
+                  value={formatDateForInput(newFollowUp.dueDate || new Date())}
+                  onChange={(e) => {
+                    const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.fromDate(new Date(0));
+                    setNewFollowUp({ ...newFollowUp, dueDate: dateValue });
+                  }}
+                />
+              </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+            <Button
+              onClick={handleAddFollowUp}
+              disabled={!newFollowUp.content || !newFollowUp.personId} // Basic validation
+            >
+              Save Follow-up
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
