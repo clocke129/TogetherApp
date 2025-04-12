@@ -24,7 +24,7 @@ export default function Home() {
       </div>
 
       <div className="max-w-4xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
               <Link href="/notes" className="flex items-center gap-2 underline hover:text-shrub">
@@ -50,34 +50,18 @@ export default function Home() {
 
           <Card>
             <CardHeader>
-              <Link href="/assignments" className="flex items-center gap-2 underline hover:text-shrub">
-                <Users className="h-6 w-6 text-shrub" />
-                <CardTitle>Assign</CardTitle>
-              </Link>
-              <CardDescription>Organize people into groups and set prayer schedules.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                <li>Assign people to prayer groups you create.</li>
-                <li>Select which days to pray for each group.</li>
-                <li>Click on groups or people to add, edit, or delete.</li>
-              </ul>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <Link href="/prayer" className="flex items-center gap-2 underline hover:text-shrub">
                 <Heart className="h-6 w-6 text-shrub" />
                 <CardTitle>Pray</CardTitle>
               </Link>
-              <CardDescription>View your daily prayer list and track completion.</CardDescription>
+              <CardDescription>View daily prayer list, manage assignments, and track completion.</CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                <li>See the specific people/requests assigned for you to pray for today based on your group assignments.</li>
-                <li>Mark items as 'Prayed' to track your progress.</li>
-                <li>Review your prayer history.</li>
+                <li>See people/requests assigned for today.</li>
+                <li>Use the <span className="font-semibold">Assign Groups</span> button to organize people and set prayer days.</li>
+                <li>Mark items as 'Prayed' to track progress.</li>
+                <li>Add new prayer requests using the '+' button.</li>
               </ul>
             </CardContent>
           </Card>

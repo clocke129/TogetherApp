@@ -5,6 +5,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import Navbar from "@/components/navbar"
 import { AuthProvider } from "@/context/AuthContext"
+import { Toaster } from "@/components/ui/sonner"
 // Remove this import
 // import { MobileFAB } from "@/components/mobile-fab"
 
@@ -31,6 +32,7 @@ export default function RootLayout({
               <main className="flex-1">{children}</main>
               <div className="h-16 md:hidden"></div> {/* Spacer for mobile navigation */}
               {/* Remove the MobileFAB component */}
+              <Toaster richColors />
             </div>
           </ThemeProvider>
         </AuthProvider>

@@ -71,6 +71,7 @@ import { SortableGroupCard } from "../../src/components/ui/sortable-group-card";
 import { SortableDayGroupCard } from "../../src/components/ui/sortable-day-group-card";
 import { calculateAndSaveDailyPrayerList } from "@/lib/utils";
 import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils";
+import { toast } from "sonner";
 
 // Types (Keep local types for now to avoid potential import issues until resolved)
 // type Person = {
@@ -331,7 +332,7 @@ export default function AssignmentsPage() {
           g.id === groupId ? { ...g, prayerDays: newPrayerDays } : g
         )
       );
-      console.log(`Prayer days updated for group ${groupId}.`);
+      console.log(`Toggled day ${dayIndex} for group ${groupId}`);
 
     } catch (err) {
       console.error("Error updating prayer days:", err);
@@ -432,6 +433,7 @@ export default function AssignmentsPage() {
       setNewGroupName(""); // Clear input
       setIsAddGroupDialogOpen(false); // Close dialog
       console.log("Group added with ID: ", docRef.id);
+
     } catch (err) {
       console.error("Error adding group:", err);
     } finally {
@@ -680,8 +682,6 @@ export default function AssignmentsPage() {
 
       // 4. Close edit form and potentially the dialog
       setIsEditingPersonName(false);
-      // Keep the main dialog open to show success/updated name
-      // setIsPersonActionsDialogOpen(false); 
 
       console.log(`Person ${personId} name updated to ${newName}`);
 
@@ -804,8 +804,6 @@ export default function AssignmentsPage() {
       setIsDeletePersonConfirmOpen(false);
       setSelectedPerson(null);
 
-      console.log(`Person "${personName}" (${personId}) deleted successfully.`);
-
     } catch (err) {
       console.error("Error deleting person:", err);
       setDeletePersonError(`Failed to delete ${personName}. Please try again.`);
@@ -857,8 +855,6 @@ export default function AssignmentsPage() {
 
       // Close edit form
       setIsEditingGroupName(false);
-
-      console.log(`Group ${groupId} name updated to ${newName}`);
 
     } catch (err) {
       console.error("Error updating group name:", err);
@@ -932,8 +928,6 @@ export default function AssignmentsPage() {
       // 5. Close confirmation dialog & clear selection
       setIsDeleteGroupConfirmOpen(false);
       setSelectedGroup(null);
-
-      console.log(`Group "${groupName}" (${groupId}) deleted successfully. Members handled: ${deleteGroupMembersOption}`);
 
     } catch (err) {
       console.error("Error deleting group:", err);

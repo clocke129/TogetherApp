@@ -80,35 +80,35 @@ export function SortableGroupCard({
         className="pb-3 pt-4 px-4 cursor-pointer flex flex-row items-center justify-between hover:bg-muted/50"
         onClick={() => toggleExpandGroup(group.id)}
       >
-        <div
+          <div
           className="flex items-center gap-2 cursor-pointer flex-grow mr-2" 
-          onClick={(e) => {
+            onClick={(e) => {
             e.stopPropagation(); 
-            openGroupActionsDialog(group);
-          }}
-        >
+              openGroupActionsDialog(group);
+            }}
+          >
           <Users className="h-5 w-5 text-primary flex-shrink-0" />
-          <CardTitle className="text-base hover:underline">{group.name}</CardTitle>
-          <Badge variant="outline" className="ml-2 flex-shrink-0">
-            {peopleInGroup.length} people
-          </Badge>
-        </div>
-        
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {!isMobile && (
-              <span 
-                className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
-                {...listeners}
-                onClick={(e) => e.stopPropagation()}
-              >
-                 <GripVertical className="h-4 w-4" />
-              </span>
-          )}
-          {isExpanded ? (
-            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-          )}
+            <CardTitle className="text-base hover:underline">{group.name}</CardTitle>
+            <Badge variant="outline" className="ml-2 flex-shrink-0">
+              {peopleInGroup.length} people
+            </Badge>
+          </div>
+          
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!isMobile && (
+                <span 
+                  className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
+                  {...listeners}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                   <GripVertical className="h-4 w-4" />
+                </span>
+            )}
+            {isExpanded ? (
+              <ChevronUp className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+            )}
         </div>
       </CardHeader>
 
@@ -193,29 +193,29 @@ export function SortableGroupCard({
 
           <div>
             <p className="text-xs text-muted-foreground mb-2 border-t pt-3">People in group:</p>
-            {peopleInGroup.length === 0 ? (
+          {peopleInGroup.length === 0 ? (
               <p className="text-center py-4 text-muted-foreground text-sm">No people in this group</p>
-            ) : (
+          ) : (
               <div className="space-y-2 mb-2">
-                {peopleInGroup.map((person) => (
+              {peopleInGroup.map((person) => (
+                <div
+                  key={person.id}
+                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
+                >
                   <div
-                    key={person.id}
-                    className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
-                  >
-                    <div
-                      className="flex items-center gap-2 cursor-pointer"
-                      onClick={(e) => {
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={(e) => {
                          e.stopPropagation(); 
-                         openPersonActionsDialog(person);
-                      }}
-                    >
-                      <User className="h-4 w-4 text-muted-foreground" />
+                       openPersonActionsDialog(person);
+                    }}
+                  >
+                    <User className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">{person.name}</span>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
+          )}
           </div>
         </CardContent>
       )}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"; // Import Link
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { PrayerListItem } from "./PrayerListItem"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
@@ -53,9 +53,10 @@ export default function PrayerPage() {
   const router = useRouter(); // Add router if not present
   const [prayerListDate, setPrayerListDate] = useState(new Date());
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
-  const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false); // State for prayer request dialog
+  const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [newRequestContent, setNewRequestContent] = useState("");
   const [selectedPersonIdForRequest, setSelectedPersonIdForRequest] = useState<string | "">("");
+  const [selectedGroupIdForFilter, setSelectedGroupIdForFilter] = useState<string | "all">("all"); // New state for group filter
 
   // State for formatted date string
   const [currentDateString, setCurrentDateString] = useState(() => {
@@ -78,6 +79,16 @@ export default function PrayerPage() {
   // State for fetched data
   const [allUserGroups, setAllUserGroups] = useState<Group[]>([])
   const [allUserPeople, setAllUserPeople] = useState<Array<Person & { mostRecentRequest?: PrayerRequest }>>([])
+
+  // Derived state for filtered people based on selected group
+  const filteredPeopleForRequestDialog = useMemo(() => {
+    if (selectedGroupIdForFilter === "all") {
+      return allUserPeople;
+    } else if (selectedGroupIdForFilter === "uncategorized") {
+      return allUserPeople.filter(p => !p.groupId);
+    }
+    return allUserPeople.filter(p => p.groupId === selectedGroupIdForFilter);
+  }, [allUserPeople, selectedGroupIdForFilter]);
 
   // State for today's prayer list derived from fetched data
   const [todaysPrayerList, setTodaysPrayerList] = useState<Array<Person & { mostRecentRequest?: PrayerRequest }>>([])
@@ -227,6 +238,7 @@ export default function PrayerPage() {
        setNewRequestContent("");
        setSelectedPersonIdForRequest("");
        setIsRequestDialogOpen(false); // Close the dialog
+       setSelectedGroupIdForFilter("all"); // Reset group filter on close
        alert("Prayer request added successfully!"); // Basic success feedback
        // TODO: Optionally refresh data or add optimistic update
     } catch (error) {
@@ -624,6 +636,34 @@ export default function PrayerPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
+                  {/* Group Filter Dropdown */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="request-group-filter" className="text-right">
+                      Group (Filter)
+                    </Label>
+                    <Select
+                      value={selectedGroupIdForFilter}
+                      onValueChange={(value) => {
+                        setSelectedGroupIdForFilter(value);
+                        setSelectedPersonIdForRequest(""); // Reset person when filter changes
+                      }}
+                    >
+                      <SelectTrigger id="request-group-filter" className="col-span-3">
+                        <SelectValue placeholder="Filter by group..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All People</SelectItem>
+                        <SelectItem value="uncategorized">Uncategorized</SelectItem>
+                        {allUserGroups.filter(g => g.id !== 'archive').length > 0 && <SelectSeparator />}
+                        {allUserGroups.filter(g => g.id !== 'archive').map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Person Selector */}
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="request-person" className="text-right">
@@ -632,24 +672,27 @@ export default function PrayerPage() {
                     <Select
                       value={selectedPersonIdForRequest}
                       onValueChange={setSelectedPersonIdForRequest}
-                      disabled={allUserPeople.length === 0}
+                      disabled={filteredPeopleForRequestDialog.length === 0} // Disable if filter yields no people
                     >
                       <SelectTrigger id="request-person" className="col-span-3">
-                        <SelectValue placeholder={allUserPeople.length > 0 ? "Select a person" : "No people found"} />
+                         {/* Update placeholder based on filter results */}
+                        <SelectValue placeholder={filteredPeopleForRequestDialog.length > 0 ? "Select a person" : "No people in selected group"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {allUserPeople.length > 0 ? (
-                          allUserPeople.map((person) => (
+                         {/* Map over FILTERED people */}
+                        {filteredPeopleForRequestDialog.length > 0 ? (
+                          filteredPeopleForRequestDialog.map((person) => (
                             <SelectItem key={person.id} value={person.id}>
                               {person.name}
                             </SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="no-people-placeholder" disabled>Add people in Assignments</SelectItem>
+                          <SelectItem value="no-people-placeholder" disabled>No people match filter</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
+
                   {/* Request Content */}
                   <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="request-content" className="text-right">

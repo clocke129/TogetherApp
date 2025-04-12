@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select"
 import { useAuth } from "@/context/AuthContext"
 import { db } from "@/lib/firebaseConfig"
 import {
@@ -34,6 +34,7 @@ import {
   orderBy,
   serverTimestamp,
   writeBatch,
+  deleteField,
 } from "firebase/firestore"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -43,39 +44,27 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { cn } from "@/lib/utils"
-
-// Types
-type Person = {
-  id: string
-  name: string
-}
-
-type FollowUp = {
-  id: string
-  personId: string
-  content: string
-  dueDate: Timestamp
-  completed: boolean
-  archived: boolean
-}
+import type { Person, Group, FollowUp } from "@/lib/types"
 
 export default function FollowupsPage() {
   // State for data
-  const [peopleMap, setPeopleMap] = useState<Record<string, string>>({})
+  const [allUserPeople, setAllUserPeople] = useState<Person[]>([])
+  const [allUserGroups, setAllUserGroups] = useState<Group[]>([])
   const [followUps, setFollowUps] = useState<FollowUp[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Initialize newFollowUp with default/empty values
   const [newFollowUp, setNewFollowUp] = useState<Partial<FollowUp>>({
     content: "",
-    personId: "",
+    personId: "", 
     dueDate: Timestamp.now(),
     completed: false,
     archived: false,
-  })
+  } as Partial<FollowUp>)
   const [editingFollowUp, setEditingFollowUp] = useState<FollowUp | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedGroupIdForFilter, setSelectedGroupIdForFilter] = useState<string | "all">("all")
   const [isClearing, setIsClearing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -98,7 +87,8 @@ export default function FollowupsPage() {
       console.log("No user logged in, skipping data fetch.")
       // Clear data if user logs out
       setFollowUps([])
-      setPeopleMap({})
+      setAllUserPeople([])
+      setAllUserGroups([])
       setIsLoading(false)
       return
     }
@@ -113,17 +103,19 @@ export default function FollowupsPage() {
           where("createdBy", "==", user.uid)
         )
         const peopleSnapshot = await getDocs(peopleQuery)
-        const fetchedPeople: Person[] = []
-        const tempPeopleMap: Record<string, string> = {}
-        peopleSnapshot.forEach((doc) => {
-          const personData = doc.data() as Omit<Person, "id">
-          fetchedPeople.push({ id: doc.id, ...personData })
-          tempPeopleMap[doc.id] = personData.name
-        })
-        setPeopleMap(tempPeopleMap)
-        console.log("Fetched people map:", tempPeopleMap)
+        // Store full person data
+        const fetchedPeople: Person[] = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
+        setAllUserPeople(fetchedPeople);
+        console.log("Fetched people:", fetchedPeople);
 
-        // 2. Fetch FollowUps for each person
+        // 2. Fetch Groups created by this user
+        const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", user.uid));
+        const groupsSnapshot = await getDocs(groupsQuery);
+        const fetchedGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
+        setAllUserGroups(fetchedGroups);
+        console.log("Fetched groups:", fetchedGroups);
+
+        // 3. Fetch FollowUps for each person
         let allFollowUps: FollowUp[] = []
         for (const person of fetchedPeople) {
           // Consider adding orderBy('dueDate') or similar if needed
@@ -152,18 +144,27 @@ export default function FollowupsPage() {
   }, [user])
   // --- End Data Fetching --- //
 
-  // Get person name by ID using the map
+  // Get person name by ID (adjust to use allUserPeople array)
   const getPersonNameById = (personId: string): string => {
-    return peopleMap[personId] || "Unknown Person"
+    const person = allUserPeople.find(p => p.id === personId);
+    return person ? person.name : "Unknown Person";
   }
+
+  // Derived state for filtered people
+  const filteredPeopleForDialog = useMemo(() => {
+    if (selectedGroupIdForFilter === "all") {
+      return allUserPeople;
+    } else if (selectedGroupIdForFilter === "uncategorized") {
+      return allUserPeople.filter(p => !p.groupId);
+    }
+    return allUserPeople.filter(p => p.groupId === selectedGroupIdForFilter);
+  }, [allUserPeople, selectedGroupIdForFilter]);
 
   // Toggle follow-up completion
   const toggleFollowUpCompletion = async (followUpId: string) => {
-    console.log(`Toggling completion for follow-up ID: ${followUpId}`);
-    // Find the full followUp object to get the personId
     const followUpToUpdate = followUps.find(fu => fu.id === followUpId);
-    if (!followUpToUpdate) {
-      console.error("Could not find follow-up to toggle.");
+    if (!followUpToUpdate || !followUpToUpdate.personId) { // Check both exist
+      console.error("Could not find follow-up or its personId to toggle.");
       return;
     }
 
@@ -223,83 +224,105 @@ export default function FollowupsPage() {
   const sevenDaysFromNow = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
   const epochZeroTimestamp = Timestamp.fromDate(new Date(0));
 
-  // Filter logic using Timestamps
-  const activeFollowUps = followUps.filter((followUp) => !followUp.completed && !followUp.archived); // Exclude archived
+  // Filter logic using Timestamps with safe access
+  const activeFollowUps = followUps.filter((followUp) => !followUp.completed && !followUp.archived);
 
   const overdueFollowUps = activeFollowUps
     .filter(
       (followUp) =>
+        followUp.dueDate && // Check dueDate exists
         followUp.dueDate < now &&
         followUp.dueDate.seconds !== epochZeroTimestamp.seconds
     )
-    .sort((a, b) => a.dueDate.seconds - b.dueDate.seconds); // Sort: Most overdue first
+    .sort((a, b) => {
+      const dateA = a.dueDate?.seconds ?? Infinity; // Default missing dates to far future for sorting
+      const dateB = b.dueDate?.seconds ?? Infinity;
+      return dateA - dateB;
+    });
 
   const thisWeekFollowUps = activeFollowUps
      .filter(
        (followUp) =>
+         followUp.dueDate && // Check dueDate exists
          followUp.dueDate >= now &&
          followUp.dueDate < sevenDaysFromNow
      )
-     .sort((a, b) => a.dueDate.seconds - b.dueDate.seconds); // Sort: Soonest first
+     .sort((a, b) => {
+        const dateA = a.dueDate?.seconds ?? Infinity;
+        const dateB = b.dueDate?.seconds ?? Infinity;
+        return dateA - dateB;
+      });
   
   const futureFollowUps = activeFollowUps
      .filter(
-       (followUp) => followUp.dueDate >= sevenDaysFromNow
+       (followUp) => followUp.dueDate && followUp.dueDate >= sevenDaysFromNow // Check dueDate exists
      )
-     .sort((a, b) => a.dueDate.seconds - b.dueDate.seconds); // Sort: Chronological
+     .sort((a, b) => {
+        const dateA = a.dueDate?.seconds ?? Infinity;
+        const dateB = b.dueDate?.seconds ?? Infinity;
+        return dateA - dateB;
+      });
 
   const noDateFollowUps = activeFollowUps
     .filter(
-      (followUp) => followUp.dueDate.seconds === epochZeroTimestamp.seconds
+      (followUp) =>
+        !followUp.dueDate || // Check dueDate does NOT exist or...
+        followUp.dueDate.seconds === epochZeroTimestamp.seconds // it's epoch zero
     );
     // No specific sort needed for no-date items unless based on content/person
 
   // Include non-archived completed items only
   const completedFollowUps = followUps
       .filter((followUp) => followUp.completed && !followUp.archived)
-      .sort((a, b) => b.dueDate.seconds - a.dueDate.seconds); // Optional: Sort completed by most recent due date first
+      // Safely sort completed by most recent due date first
+      .sort((a, b) => (b.dueDate?.seconds ?? 0) - (a.dueDate?.seconds ?? 0)); 
   
    // --- End Filtering and Sorting --- //
 
   // Handle adding a new follow-up - will need modification to save to Firestore
   const handleAddFollowUp = async () => {
-    if (!newFollowUp.content || !newFollowUp.personId) {
-      alert("Please select a person and enter content for the follow-up.");
-      return;
-    }
-    if (!user) {
-      alert("You must be logged in to add a follow-up.")
+    if (!user || !newFollowUp.content || !newFollowUp.personId) { // Check personId exists
+      console.error("Missing user, content, or person ID for new follow-up.");
       return;
     }
 
-    console.log("Adding new follow-up:", newFollowUp);
-    const collectionRef = collection(db, "persons", newFollowUp.personId, "followUps");
-    
+    const docToAdd = {
+      personId: newFollowUp.personId,
+      content: newFollowUp.content,
+      dueDate: newFollowUp.dueDate?.seconds === 0 ? deleteField() : newFollowUp.dueDate, // Handle epoch zero case
+      completed: false,
+      archived: false,
+      createdBy: user.uid,
+      createdAt: serverTimestamp(), // Use serverTimestamp for adding
+    };
+
     try {
-      const docToAdd = {
+      const followUpRef = collection(db, "persons", newFollowUp.personId, "followUps"); // Use correct personId
+      const docRef = await addDoc(followUpRef, docToAdd);
+
+      // Optimistic Add (use Timestamp.now() for createdAt locally)
+      const optimisticFollowUp: FollowUp = {
+        id: docRef.id, // Use the new ID
         personId: newFollowUp.personId,
         content: newFollowUp.content,
-        // Ensure dueDate is a Timestamp, default to epoch 0 if needed
-        dueDate: newFollowUp.dueDate instanceof Timestamp ? newFollowUp.dueDate : Timestamp.fromDate(new Date(0)), 
+        dueDate: newFollowUp.dueDate?.seconds === 0 ? undefined : newFollowUp.dueDate, // Handle epoch zero case
         completed: false,
         archived: false,
-        createdBy: user.uid, // Add createdBy field
-        createdAt: serverTimestamp(), // Add createdAt timestamp
+        createdBy: user.uid,
+        createdAt: Timestamp.now(), // Use local timestamp for immediate UI
       };
-      
-      const docRef = await addDoc(collectionRef, docToAdd);
-      console.log("Follow-up added successfully with ID:", docRef.id);
-
-      // Add to local state for responsiveness
-      setFollowUps(prev => [...prev, { id: docRef.id, ...docToAdd }]);
+      setFollowUps(prev => [...prev, optimisticFollowUp]);
 
       // Reset form and close dialog
-      setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false, archived: false });
+      setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false, archived: false } as Partial<FollowUp>);
       setIsAddDialogOpen(false);
+      setSelectedGroupIdForFilter("all");
 
+      console.log("Follow-up added successfully.");
+      alert("Follow-up added!") // Or use toast
     } catch (error) {
-      console.error("Error adding follow-up:", error);
-      alert("Failed to add follow-up. Please try again.");
+       console.error("Error adding follow-up:", error);
+       alert("Failed to add follow-up. Please try again.");
     }
   };
 
@@ -520,7 +543,8 @@ export default function FollowupsPage() {
                                         "text-xs font-medium"
                                       )}>
                                         <Clock className="h-3 w-3 mr-1" />
-                                        {formatDate(followUp.dueDate.toDate())}
+                                        {/* Safely access dueDate */}
+                                        {followUp.dueDate ? formatDate(followUp.dueDate.toDate()) : "No date"}
                                       </Badge>
                                       <Button
                                         variant="ghost"
@@ -579,7 +603,8 @@ export default function FollowupsPage() {
                                           "text-xs font-medium"
                                         )}>
                                           <Calendar className="h-3 w-3 mr-1" />
-                                          {formatDate(followUp.dueDate.toDate())}
+                                          {/* Safely access dueDate */}
+                                          {followUp.dueDate ? formatDate(followUp.dueDate.toDate()) : "No date"}
                                         </Badge>
                                         <Button
                                           variant="ghost"
@@ -638,7 +663,8 @@ export default function FollowupsPage() {
                                           "text-xs font-medium"
                                         )}>
                                           <Calendar className="h-3 w-3 mr-1" />
-                                          {formatDate(followUp.dueDate.toDate())}
+                                          {/* Safely access dueDate */}
+                                          {followUp.dueDate ? formatDate(followUp.dueDate.toDate()) : "No date"}
                                         </Badge>
                                         <Button
                                           variant="ghost"
@@ -794,9 +820,9 @@ export default function FollowupsPage() {
                    id="edit-dueDate" 
                    type="date" 
                    className="col-span-3" 
-                   value={formatDateForInput(editingFollowUp.dueDate)} 
+                   value={formatDateForInput(editingFollowUp.dueDate || Timestamp.now())} 
                    onChange={(e) => { 
-                     const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.fromDate(new Date(0)); 
+                     const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.now(); 
                      setEditingFollowUp({ ...editingFollowUp, dueDate: dateValue })
                    }} 
                  /> 
@@ -832,6 +858,61 @@ export default function FollowupsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+              {/* Group Filter Dropdown */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="followup-group-filter" className="text-right">
+                  Group (Filter)
+                </Label>
+                <Select
+                  value={selectedGroupIdForFilter}
+                  onValueChange={(value) => {
+                    setSelectedGroupIdForFilter(value);
+                    setNewFollowUp({ ...newFollowUp, personId: "" }); // Reset person selection
+                  }}
+                >
+                  <SelectTrigger id="followup-group-filter" className="col-span-3">
+                    <SelectValue placeholder="Filter by group..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All People</SelectItem>
+                    <SelectItem value="uncategorized">Uncategorized</SelectItem>
+                    {allUserGroups.filter(g => g.id !== 'archive').length > 0 && <SelectSeparator />}
+                    {allUserGroups.filter(g => g.id !== 'archive').map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Person Select Dropdown */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="followup-person" className="text-right">
+                  Person
+                </Label>
+                <Select
+                  value={newFollowUp.personId || ""} // Ensure value is controlled
+                  onValueChange={(value) => setNewFollowUp(prev => ({ ...prev, personId: value }) as Partial<FollowUp>)} // Explicit assertion on update
+                  disabled={filteredPeopleForDialog.length === 0} // Use filtered list for disabled state
+                >
+                  <SelectTrigger id="followup-person" className="col-span-3">
+                     {/* Adjust placeholder based on filter */}
+                    <SelectValue placeholder={filteredPeopleForDialog.length > 0 ? "Select a person" : "No people in selected group"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Map over FILTERED people */}
+                    {filteredPeopleForDialog.length > 0 ? (
+                      filteredPeopleForDialog.map((person) => (
+                        <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-people-placeholder" disabled>No people match filter</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Follow-up Content Textarea */}
               <div className="grid gap-2">
                 <Label htmlFor="followup-content">Follow-up Item</Label>
@@ -843,30 +924,7 @@ export default function FollowupsPage() {
                   rows={3}
                 />
               </div>
-              {/* Person Select Dropdown */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="followup-person" className="text-right">
-                  Person
-                </Label>
-                <Select
-                  value={newFollowUp.personId}
-                  onValueChange={(value) => setNewFollowUp({ ...newFollowUp, personId: value })}
-                  disabled={Object.keys(peopleMap).length === 0}
-                >
-                  <SelectTrigger id="followup-person" className="col-span-3">
-                    <SelectValue placeholder={Object.keys(peopleMap).length > 0 ? "Select a person" : "No people found"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.keys(peopleMap).length > 0 ? (
-                      Object.entries(peopleMap).map(([id, name]) => (
-                        <SelectItem key={id} value={id}>{name}</SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-people-placeholder" disabled>Add people first</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+
               {/* Due Date Input */}
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="followup-dueDate" className="text-right">Due Date</Label>
