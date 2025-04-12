@@ -1125,13 +1125,7 @@ export default function AssignmentsPage() {
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <Tabs defaultValue="people-groups" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="people-groups">Groups & People</TabsTrigger>
-            <TabsTrigger value="groups-days">Groups & Days</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="people-groups" className="space-y-6">
+        <div className="space-y-6">
             {/* Uncategorized People Section */}
             <Card>
               <CardHeader className="pb-3">
@@ -1241,26 +1235,7 @@ export default function AssignmentsPage() {
               </CardContent>
             </Card>
 
-            {/* --- Update Prayer List Button --- RE-ADDED HERE */}
-            <div className="mt-4 flex justify-end"> {/* Add a container for alignment if needed */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUpdateTodaysList}
-                  disabled={isLoading || isUpdatingTodaysList || !user}
-                  className="gap-1"
-                  title="Recalculate today's prayer list based on current settings"
-                >
-                  {isUpdatingTodaysList ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                     <RefreshCw className="mr-2 h-4 w-4" /> // Use a refresh icon
-                  )}
-                  Update Prayer List
-                </Button>
-            </div>
-
-            {/* Groups Section - Uses SortableGroupCard */}
+            {/* Groups Section - Renders directly now */}
             {isLoading ? (
               <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
             ) : groups.length === 0 ? (
@@ -1274,90 +1249,43 @@ export default function AssignmentsPage() {
                   >
                     <div className="space-y-4 pt-4">
                       {groups.map((group) => {
+                        // Prepare props for the consolidated card
                         const peopleInGroup = getPeopleInGroup(group.id);
-                        
+                        const isExpanded = expandedGroupId === group.id;
+                        const currentNumSetting = localNumPerDaySettings[group.id];
+                        const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
+                        const groupSize = group.personIds?.length ?? 0;
+                        const isUpdatingThisGroupDays = isUpdatingDays === group.id;
+                        const isSavingThisGroupNum = isSavingNumPerDay === group.id;
+
+                        // Pass ALL required props to the consolidated card
                         return (
                           <SortableGroupCard
                             key={group.id} 
                             group={group}
                             peopleInGroup={peopleInGroup}
                             expandedGroupId={expandedGroupId}
-                            toggleExpandGroup={toggleExpandGroup}
+                            toggleExpandGroup={toggleExpandGroup} 
                             openGroupActionsDialog={openGroupActionsDialog}
                             openPersonActionsDialog={openPersonActionsDialog}
                             handleAddPersonToGroup={handleAddPersonToGroup}
                             isMobile={isMobile}
+                            // Pass day/number settings props
+                            currentNumSetting={currentNumSetting}
+                            displayDays={displayDays}
+                            groupSize={groupSize}
+                            isLoading={isLoading}
+                            isUpdatingDays={isUpdatingThisGroupDays}
+                            isSavingNumPerDay={isSavingThisGroupNum}
+                            onDayToggle={toggleDayForGroup}
+                            onNumPerDayChange={handleNumPerDayChange}
                           />
                         );
                       })}
-                                </div>
+                    </div>
                   </SortableContext>
             )}
-          </TabsContent>
-
-          <TabsContent value="groups-days" className="space-y-4">
-            {/* --- Update Prayer List Button --- RE-ADDED HERE */}
-            <div className="mb-4 flex justify-end"> {/* Add a container for alignment if needed */}
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   onClick={handleUpdateTodaysList}
-                   disabled={isLoading || isUpdatingTodaysList || !user}
-                   className="gap-1"
-                   title="Recalculate today's prayer list based on current settings"
-                 >
-                   {isUpdatingTodaysList ? (
-                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                   ) : (
-                      <RefreshCw className="mr-2 h-4 w-4" /> // Use a refresh icon
-                   )}
-                   Update Prayer List
-                 </Button>
-            </div>
-
-            {isLoading ? (
-              <div className="text-sm text-muted-foreground text-center py-8">Loading...</div>
-            ) : groups.length === 0 ? (
-              <Card>
-                <CardContent className="text-sm text-muted-foreground text-center py-8">
-                  Create groups first to assign prayer days and settings.
-                </CardContent>
-              </Card>
-                ) : (
-                  <SortableContext
-                    items={groups.map(g => g.id)} 
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {groups.map((group) => {
-              const isExpanded = expandedGroupId === group.id;
-              const currentNumSetting = localNumPerDaySettings[group.id];
-              const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
-                    const groupSize = group.personIds?.length ?? 0;
-                    const isUpdatingThisGroupDays = isUpdatingDays === group.id;
-                    const isSavingThisGroupNum = isSavingNumPerDay === group.id;
-
-              return (
-                      <SortableDayGroupCard
-                         key={group.id}
-                         group={group}
-                         isExpanded={isExpanded}
-                         currentNumSetting={currentNumSetting}
-                         displayDays={displayDays}
-                         groupSize={groupSize}
-                         isMobile={isMobile}
-                         isLoading={isLoading} 
-                         isUpdatingDays={isUpdatingThisGroupDays}
-                         isSavingNumPerDay={isSavingThisGroupNum}
-                         onExpandToggle={() => toggleExpandGroup(group.id)}
-                         onDayToggle={toggleDayForGroup}
-                         onNumPerDayChange={handleNumPerDayChange}
-                      />
-                            );
-                          })}
-                  </SortableContext>
-            )}
-          </TabsContent>
-        </Tabs>
+        </div>
 
         {/* Person Actions Dialog */}
         <Dialog open={isPersonActionsDialogOpen} onOpenChange={setIsPersonActionsDialogOpen}>
