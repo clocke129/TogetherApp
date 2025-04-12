@@ -61,7 +61,6 @@ export default function Home() {
                 <li>See people/requests assigned for today.</li>
                 <li>Use the <span className="font-semibold">Assign Groups</span> button to organize people and set prayer days.</li>
                 <li>Mark items as 'Prayed' to track progress.</li>
-                <li>Add new prayer requests using the '+' button.</li>
               </ul>
             </CardContent>
           </Card>
