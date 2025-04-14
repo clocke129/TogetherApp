@@ -387,8 +387,8 @@ export default function NotesPage() {
   // Render the editor component - Added isMobileView prop
   const renderEditor = (isMobileView: boolean) => {
     const editorContent = (
-      // Added relative positioning for suggestion card when isMobileView is true
-      <div className={cn(isMobileView && "relative")}>
+      // Ensure the wrapper is always relative for suggestion card positioning
+      <div className="relative">
         <TextareaAutosize
           ref={textareaRef}
           value={text}
