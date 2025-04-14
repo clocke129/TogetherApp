@@ -40,6 +40,11 @@ export default function Navbar() {
       icon: FileText,
     },
     {
+      name: "People",
+      href: "/assignments",
+      icon: Users,
+    },
+    {
       name: "Pray",
       href: "/prayer",
       icon: Heart,

@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
 import { collection, query, where, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, writeBatch, arrayRemove, deleteField, orderBy, deleteDoc } from 'firebase/firestore'
-import type { Person, Group } from '@/lib/types'
+import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -154,6 +154,14 @@ export default function AssignmentsPage() {
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null);
   const [deleteGroupMembersOption, setDeleteGroupMembersOption] = useState<"unassign" | "delete">("unassign");
+
+  // NEW: State for Person Details Modal
+  const [isPersonDetailsModalOpen, setIsPersonDetailsModalOpen] = useState(false);
+  const [selectedPersonForDetails, setSelectedPersonForDetails] = useState<Person | null>(null);
+  const [personPrayerRequests, setPersonPrayerRequests] = useState<PrayerRequest[]>([]);
+  const [personFollowUps, setPersonFollowUps] = useState<FollowUp[]>([]);
+  const [isLoadingPersonDetails, setIsLoadingPersonDetails] = useState(false);
+  const [personDetailsError, setPersonDetailsError] = useState<string | null>(null);
 
   // NEW: State for formatted date string
   const [currentDateString, setCurrentDateString] = useState(() => {
@@ -1050,6 +1058,55 @@ export default function AssignmentsPage() {
     }
   };
 
+  // NEW: Fetch details for a specific person
+  const fetchPersonDetails = async (personId: string) => {
+    if (!user) return;
+    console.log("Fetching details for person:", personId);
+    setIsLoadingPersonDetails(true);
+    setPersonDetailsError(null);
+    setPersonPrayerRequests([]); // Clear previous data
+    setPersonFollowUps([]);      // Clear previous data
+
+    try {
+      // Fetch Prayer Requests from the subcollection
+      const requestsQuery = query(
+        collection(db, "persons", personId, "prayerRequests"), // Corrected path
+        // where("personId", "==", personId), // No longer needed when querying subcollection
+        where("createdBy", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+      const requestsSnapshot = await getDocs(requestsQuery);
+      const requestsData = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PrayerRequest));
+      setPersonPrayerRequests(requestsData);
+      console.log("Fetched Prayer Requests:", requestsData);
+
+      // Fetch Follow Ups from the subcollection
+      const followUpsQuery = query(
+        collection(db, "persons", personId, "followUps"), // Corrected path
+        // where("personId", "==", personId), // No longer needed when querying subcollection
+        where("createdBy", "==", user.uid),
+        orderBy("dueDate", "asc") // Corrected orderBy based on FollowUp type
+      );
+      const followUpsSnapshot = await getDocs(followUpsQuery);
+      const followUpsData = followUpsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FollowUp));
+      setPersonFollowUps(followUpsData);
+      console.log("Fetched Follow Ups:", followUpsData);
+
+    } catch (err) {
+      console.error("Error fetching person details:", err);
+      setPersonDetailsError("Failed to load details. Please try again.");
+    } finally {
+      setIsLoadingPersonDetails(false);
+    }
+  };
+
+  // NEW: Handler to open the person details modal
+  const handleOpenPersonDetailsModal = (person: Person) => {
+    setSelectedPersonForDetails(person);
+    setIsPersonDetailsModalOpen(true);
+    fetchPersonDetails(person.id); // Fetch data when modal opens
+  };
+
   // Loading State
   if (authLoading) { // Use authLoading for the initial check
     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
@@ -1062,7 +1119,7 @@ export default function AssignmentsPage() {
         {/* Header structure remains for consistency */}
         <div className="mb-4 md:mb-6 flex items-center justify-between">
           <div className="flex flex-col">
-            <h1 className="page-title">Assignments</h1>
+            <h1 className="page-title">People</h1>
             <p className="text-muted-foreground">{currentDateString}</p>
           </div>
           <Dialog>
@@ -1090,7 +1147,7 @@ export default function AssignmentsPage() {
       <div className="mb-4 md:mb-6 flex items-center justify-between">
         {/* Left side: Title and Date */}
         <div className="flex flex-col">
-          <h1 className="page-title">Assignments</h1>
+          <h1 className="page-title">People</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
         {/* Right side: Back to Prayer Button */}
@@ -1102,7 +1159,7 @@ export default function AssignmentsPage() {
                disabled={isUpdatingAndReturning}
             >
                {isUpdatingAndReturning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-               {isUpdatingAndReturning ? "Returning..." : "Update Changes"}
+               {isUpdatingAndReturning ? "Returning..." : "Update"}
             </Button>
         </div>
       </div>
@@ -1273,6 +1330,8 @@ export default function AssignmentsPage() {
                             isSavingNumPerDay={isSavingThisGroupNum}
                             onDayToggle={toggleDayForGroup}
                             onNumPerDayChange={handleNumPerDayChange}
+                            // NEW: Pass the details modal handler
+                            onOpenPersonDetailsModal={handleOpenPersonDetailsModal}
                           />
                         );
                       })}
@@ -1657,6 +1716,68 @@ export default function AssignmentsPage() {
             </form>
           </DialogContent>
         </Dialog>
+
+      {/* NEW: Person Details Modal */}
+      <Dialog open={isPersonDetailsModalOpen} onOpenChange={setIsPersonDetailsModalOpen}>
+        <DialogContent className="sm:max-w-[425px] md:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Details for {selectedPersonForDetails?.name}</DialogTitle>
+            <DialogDescription>
+              Prayer requests and follow-ups associated with this person.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 max-h-[60vh] overflow-y-auto">
+            {isLoadingPersonDetails ? (
+              <div className="flex justify-center items-center min-h-[100px]">
+                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : personDetailsError ? (
+              <p className="text-sm text-center text-destructive">{personDetailsError}</p>
+            ) : (
+              <div className="space-y-6">
+                 {/* Prayer Requests Section */}
+                 <div>
+                   <h3 className="text-md font-semibold mb-2 border-b pb-1">Prayer Requests</h3>
+                   {personPrayerRequests.length > 0 ? (
+                     <ul className="space-y-2 list-disc pl-5">
+                       {personPrayerRequests.map(req => (
+                         <li key={req.id} className="text-sm text-muted-foreground">
+                           {req.content} 
+                           <span className="text-xs ml-2">({req.createdAt instanceof Timestamp ? req.createdAt.toDate().toLocaleDateString() : 'Date N/A'})</span>
+                         </li>
+                       ))}
+                     </ul>
+                   ) : (
+                     <p className="text-sm text-center text-muted-foreground italic py-2">No prayer requests found.</p>
+                   )}
+                 </div>
+
+                 {/* Follow Ups Section */}
+                 <div>
+                   <h3 className="text-md font-semibold mb-2 border-b pb-1">Follow-ups</h3>
+                   {personFollowUps.length > 0 ? (
+                     <ul className="space-y-2 list-disc pl-5">
+                       {personFollowUps.map(fu => (
+                         <li key={fu.id} className="text-sm text-muted-foreground">
+                            {fu.content} 
+                            <span className="text-xs ml-2"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'Date N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
+                         </li>
+                       ))}
+                     </ul>
+                   ) : (
+                     <p className="text-sm text-center text-muted-foreground italic py-2">No follow-ups found.</p>
+                   )}
+                 </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Close</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

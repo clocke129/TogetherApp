@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { ChevronDown, ChevronUp, Users, User, UserPlus, GripVertical, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Users, User, UserPlus, GripVertical, Loader2, Edit } from "lucide-react";
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ interface SortableGroupCardProps {
   isSavingNumPerDay: boolean;
   onDayToggle: (groupId: string, dayIndex: number) => void;
   onNumPerDayChange: (groupId: string, newValue: number | null) => void;
+  onOpenPersonDetailsModal: (person: Person) => void;
 }
 
 export function SortableGroupCard({
@@ -49,6 +50,7 @@ export function SortableGroupCard({
   isSavingNumPerDay,
   onDayToggle,
   onNumPerDayChange,
+  onOpenPersonDetailsModal,
 }: SortableGroupCardProps) {
   const {
     attributes,
@@ -202,16 +204,27 @@ export function SortableGroupCard({
                   key={person.id}
                   className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
                 >
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span
+                       className="text-sm cursor-pointer hover:underline"
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         onOpenPersonDetailsModal(person);
+                       }}
+                     >
+                       {person.name}
+                    </span>
+                  </div>
                   <div
-                    className="flex items-center gap-2 cursor-pointer"
-                    onClick={(e) => {
-                         e.stopPropagation(); 
-                       openPersonActionsDialog(person);
-                    }}
+                      className="p-1 cursor-pointer text-muted-foreground hover:text-foreground"
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          openPersonActionsDialog(person);
+                      }}
                   >
-                    <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{person.name}</span>
-                    </div>
+                      <Edit className="h-4 w-4" />
+                  </div>
                 </div>
               ))}
             </div>
