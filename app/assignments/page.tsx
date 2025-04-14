@@ -1396,38 +1396,51 @@ export default function AssignmentsPage() {
                            </span>
                         </div>
 
-                        {/* RESTORE Assign to Group Dropdown */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1 text-xs"
-                              disabled={groups.length === 0 || isLoading || isAssigningPerson === person.id}
-                            >
-                              {isAssigningPerson === person.id ? "Assigning..." : "Assign to Group"}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {groups.length === 0 ? (
-                               <DropdownMenuLabel>No groups available</DropdownMenuLabel>
-                            ) : (
-                              <>
-                                <DropdownMenuLabel>Assign to:</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {groups.map((group) => (
-                                  <DropdownMenuItem
-                                    key={group.id}
-                                    onSelect={() => handleAssignPersonToGroup(person.id, group.id)}
-                                    disabled={isAssigningPerson === person.id}
-                                  >
-                                    {group.name}
-                                  </DropdownMenuItem>
-                                ))}
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {/* Right Side: Assign Button + Edit Button */}
+                        <div className="flex items-center gap-1">
+                          {/* RESTORE Assign to Group Dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1 text-xs"
+                                disabled={groups.length === 0 || isLoading || isAssigningPerson === person.id}
+                              >
+                                {isAssigningPerson === person.id ? "Assigning..." : "Assign to Group"}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {groups.length === 0 ? (
+                                 <DropdownMenuLabel>No groups available</DropdownMenuLabel>
+                              ) : (
+                                <>
+                                  <DropdownMenuLabel>Assign to:</DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  {groups.map((group) => (
+                                    <DropdownMenuItem
+                                      key={group.id}
+                                      onSelect={() => handleAssignPersonToGroup(person.id, group.id)}
+                                      disabled={isAssigningPerson === person.id}
+                                    >
+                                      {group.name}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {/* ADD Edit Icon Button */}
+                           <Button 
+                              variant="ghost" 
+                              size="icon" // Correct size
+                              className="h-7 w-7" // Keep explicit dimensions
+                              onClick={() => openPersonActionsDialog(person)}
+                           >
+                              <Edit className="h-4 w-4" />
+                              <span className="sr-only">Edit Person</span>
+                           </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1550,59 +1563,65 @@ export default function AssignmentsPage() {
               </div>
             ) : (
               <div className="py-4 space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                  onClick={() => {
-                    if (selectedPerson?.id && selectedPerson?.groupId) {
-                      handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
-                          setIsPersonActionsDialogOpen(false);
-                    }
-                  }}
-                  disabled={!selectedPerson?.groupId || !!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
-                >
-                  <LogOut className="h-4 w-4" />
-                  Remove from Group
-                  {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
-                </Button>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start gap-2" 
-                      disabled={groups.length <= 1 || !selectedPerson || isAssigningPerson === selectedPerson?.id || isRemovingPersonId === selectedPerson?.id}
+                {/* Conditionally render group-related actions */}
+                {selectedPerson?.groupId && (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-2"
+                      onClick={() => {
+                        if (selectedPerson?.id && selectedPerson?.groupId) {
+                          handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
+                              setIsPersonActionsDialogOpen(false);
+                        }
+                      }}
+                      disabled={!selectedPerson?.groupId || !!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
                     >
-                          <Users className="h-4 w-4" />
-                      Move to Another Group
-                      {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />} 
+                      <LogOut className="h-4 w-4" />
+                      Remove from Group
+                      {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
-                    <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {groups
-                          .filter(group => group.id !== selectedPerson?.groupId)
-                      .map((group) => (
-                        <DropdownMenuItem
-                          key={group.id}
-                          onSelect={() => {
-                            if (selectedPerson?.id) {
-                               handleAssignPersonToGroup(selectedPerson.id, group.id);
-                                   setIsPersonActionsDialogOpen(false);
-                            }
-                          }}
-                              disabled={isAssigningPerson === selectedPerson?.id}
+    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start gap-2" 
+                          disabled={groups.length <= 1 || !selectedPerson || isAssigningPerson === selectedPerson?.id || isRemovingPersonId === selectedPerson?.id}
                         >
-                          {group.name}
-                        </DropdownMenuItem>
-                    ))}
-                    {groups.filter(group => group.id !== selectedPerson?.groupId).length === 0 && (
-                      <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                              <Users className="h-4 w-4" />
+                          Move to Another Group
+                          {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />} 
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+                        <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {groups
+                              .filter(group => group.id !== selectedPerson?.groupId)
+                          .map((group) => (
+                            <DropdownMenuItem
+                              key={group.id}
+                              onSelect={() => {
+                                if (selectedPerson?.id) {
+                                   handleAssignPersonToGroup(selectedPerson.id, group.id);
+                                       setIsPersonActionsDialogOpen(false);
+                                }
+                              }}
+                                  disabled={isAssigningPerson === selectedPerson?.id}
+                            >
+                              {group.name}
+                            </DropdownMenuItem>
+                        ))}
+                        {groups.filter(group => group.id !== selectedPerson?.groupId).length === 0 && (
+                          <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                )}
 
+                {/* Always show Edit Name and Delete Person */}
                 <Button 
                   variant="outline" 
                   className="w-full justify-start gap-2" 
