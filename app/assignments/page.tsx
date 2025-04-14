@@ -442,7 +442,7 @@ export default function AssignmentsPage() {
         // Use the updated prayerSettings structure with defaults
         prayerSettings: {
           strategy: "sequential" as const, // Add 'as const' for stricter typing
-          numPerDay: 1,
+          numPerDay: null, // Default to null (All)
           nextIndex: 0
         },
         createdAt: serverTimestamp(),
@@ -457,11 +457,19 @@ export default function AssignmentsPage() {
         createdBy: newGroupData.createdBy,
         personIds: newGroupData.personIds,
         prayerDays: newGroupData.prayerDays,
-        prayerSettings: newGroupData.prayerSettings,
+        prayerSettings: { // Ensure prayerSettings is defined
+            strategy: newGroupData.prayerSettings.strategy,
+            numPerDay: null, // Default to null (All)
+            nextIndex: newGroupData.prayerSettings.nextIndex
+        },
         createdAt: Timestamp.now(), // Use client-side timestamp for immediate update
         order: newGroupData.order
       };
+      // Ensure local state also reflects numPerDay: null - Handled in object creation below
+      // NO LONGER NEEDED: groupForState.prayerSettings.numPerDay = null; 
       setGroups(prev => [...prev, groupForState]); 
+      // ADD THIS: Update local settings state for the new group
+      setLocalNumPerDaySettings(prev => ({ ...prev, [docRef.id]: null }));
 
       setNewGroupName(""); // Clear input
       setIsAddGroupDialogOpen(false); // Close dialog
