@@ -128,7 +128,39 @@ export function SortableGroupCard({
 
       {isExpanded && (
         <CardContent className="pt-4 pb-4 px-4 border-t space-y-4">
-          <div className="space-y-3">
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">People in group:</p>
+          {peopleInGroup.length === 0 ? (
+              <p className="text-center py-4 text-muted-foreground text-sm">No people in this group</p>
+          ) : (
+              <div className="space-y-2 mb-2">
+              {peopleInGroup.map((person) => (
+                <div
+                  key={person.id}
+                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
+                >
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span
+                       className="text-sm cursor-pointer hover:underline"
+                       onClick={(e) => { e.stopPropagation(); onOpenPersonDetailsModal(person); }}
+                     >
+                       {person.name}
+                    </span>
+                  </div>
+                  <div
+                      className="p-1 cursor-pointer text-muted-foreground hover:text-foreground"
+                      onClick={(e) => { e.stopPropagation(); openPersonActionsDialog(person); }}
+                  >
+                      <Edit className="h-4 w-4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
+
+          <div className="space-y-3 border-t pt-3">
              <div>
                <p className="text-xs text-muted-foreground mb-2">Select prayer days:</p>
                <div className="flex flex-wrap gap-2">
@@ -204,44 +236,6 @@ export function SortableGroupCard({
                </DropdownMenu>
              </div>
            </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground mb-2 border-t pt-3">People in group:</p>
-          {peopleInGroup.length === 0 ? (
-              <p className="text-center py-4 text-muted-foreground text-sm">No people in this group</p>
-          ) : (
-              <div className="space-y-2 mb-2">
-              {peopleInGroup.map((person) => (
-                <div
-                  key={person.id}
-                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span
-                       className="text-sm cursor-pointer hover:underline"
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         onOpenPersonDetailsModal(person);
-                       }}
-                     >
-                       {person.name}
-                    </span>
-                  </div>
-                  <div
-                      className="p-1 cursor-pointer text-muted-foreground hover:text-foreground"
-                      onClick={(e) => {
-                          e.stopPropagation();
-                          openPersonActionsDialog(person);
-                      }}
-                  >
-                      <Edit className="h-4 w-4" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          </div>
         </CardContent>
       )}
     </Card>
