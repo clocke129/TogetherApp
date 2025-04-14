@@ -72,6 +72,7 @@ import { SortableDayGroupCard } from "../../src/components/ui/sortable-day-group
 import { calculateAndSaveDailyPrayerList } from "@/lib/utils";
 import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea"
 
 // Types (Keep local types for now to avoid potential import issues until resolved)
 // type Person = {
@@ -102,7 +103,8 @@ export default function AssignmentsPage() {
   const isMobile = useMobile()
   const [people, setPeople] = useState<Person[]>([])
   const [groups, setGroups] = useState<Group[]>([])
-  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
+  // CHANGE: State to hold multiple expanded group IDs
+  const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
   // Local state for number per day inputs, keyed by groupId (now stores number | null)
@@ -162,6 +164,25 @@ export default function AssignmentsPage() {
   const [personFollowUps, setPersonFollowUps] = useState<FollowUp[]>([]);
   const [isLoadingPersonDetails, setIsLoadingPersonDetails] = useState(false);
   const [personDetailsError, setPersonDetailsError] = useState<string | null>(null);
+
+  // NEW: State for Editing/Deleting Prayer Requests
+  const [isEditRequestDialogOpen, setIsEditRequestDialogOpen] = useState(false);
+  const [requestToEdit, setRequestToEdit] = useState<PrayerRequest | null>(null);
+  const [editingRequestContent, setEditingRequestContent] = useState("");
+  const [isSavingRequestEdit, setIsSavingRequestEdit] = useState(false);
+  const [isDeleteRequestConfirmOpen, setIsDeleteRequestConfirmOpen] = useState(false);
+  const [requestToDelete, setRequestToDelete] = useState<PrayerRequest | null>(null);
+  const [isDeletingRequest, setIsDeletingRequest] = useState(false);
+
+  // NEW: State for Editing/Deleting Follow-Ups
+  const [isEditFollowUpDialogOpen, setIsEditFollowUpDialogOpen] = useState(false);
+  const [followUpToEdit, setFollowUpToEdit] = useState<FollowUp | null>(null);
+  const [editingFollowUpContent, setEditingFollowUpContent] = useState("");
+  // Optional: Add state for editing due date if needed
+  const [isSavingFollowUpEdit, setIsSavingFollowUpEdit] = useState(false);
+  const [isDeleteFollowUpConfirmOpen, setIsDeleteFollowUpConfirmOpen] = useState(false);
+  const [followUpToDelete, setFollowUpToDelete] = useState<FollowUp | null>(null);
+  const [isDeletingFollowUp, setIsDeletingFollowUp] = useState(false);
 
   // NEW: State for formatted date string
   const [currentDateString, setCurrentDateString] = useState(() => {
@@ -297,10 +318,14 @@ export default function AssignmentsPage() {
     return people.filter((person) => person.groupId === groupId)
   }
 
-  // Toggle expanded state for a group - remains the same
+  // CHANGE: Toggle expanded state for a group (add/remove from array)
   const toggleExpandGroup = (groupId: string) => {
-    setExpandedGroupId(expandedGroupId === groupId ? null : groupId)
-  }
+    setExpandedGroupIds(prevIds =>
+      prevIds.includes(groupId)
+        ? prevIds.filter(id => id !== groupId) // Remove ID if already present
+        : [...prevIds, groupId] // Add ID if not present
+    );
+  };
 
   // Toggle day for group - Needs Firestore update
   const toggleDayForGroup = async (groupId: string, dayIndex: number) => {
@@ -1107,6 +1132,116 @@ export default function AssignmentsPage() {
     fetchPersonDetails(person.id); // Fetch data when modal opens
   };
 
+  // --- Handlers for Prayer Request Edit/Delete --- 
+
+  const handleSaveRequestEdit = async () => {
+    if (!requestToEdit || !editingRequestContent.trim() || !user || !selectedPersonForDetails) return;
+
+    setIsSavingRequestEdit(true);
+    const docRef = doc(db, "persons", selectedPersonForDetails.id, "prayerRequests", requestToEdit.id);
+
+    try {
+      await updateDoc(docRef, {
+        content: editingRequestContent.trim(),
+        updatedAt: serverTimestamp()
+      });
+
+      // Update local state
+      setPersonPrayerRequests(prev => prev.map(req => 
+        req.id === requestToEdit.id ? { ...req, content: editingRequestContent.trim() } : req
+      ));
+
+      toast.success("Prayer request updated.");
+      setIsEditRequestDialogOpen(false);
+      setRequestToEdit(null);
+
+    } catch (err) {
+      console.error("Error updating prayer request:", err);
+      toast.error("Failed to update prayer request.");
+    } finally {
+      setIsSavingRequestEdit(false);
+    }
+  };
+
+  const handleConfirmDeleteRequest = async () => {
+    if (!requestToDelete || !user || !selectedPersonForDetails) return;
+
+    setIsDeletingRequest(true);
+    const docRef = doc(db, "persons", selectedPersonForDetails.id, "prayerRequests", requestToDelete.id);
+
+    try {
+      await deleteDoc(docRef);
+
+      // Update local state
+      setPersonPrayerRequests(prev => prev.filter(req => req.id !== requestToDelete.id));
+
+      toast.success("Prayer request deleted.");
+      setIsDeleteRequestConfirmOpen(false);
+      setRequestToDelete(null);
+
+    } catch (err) {
+      console.error("Error deleting prayer request:", err);
+      toast.error("Failed to delete prayer request.");
+    } finally {
+      setIsDeletingRequest(false);
+    }
+  };
+
+  // --- Handlers for Follow-Up Edit/Delete --- 
+
+  const handleSaveFollowUpEdit = async () => {
+    if (!followUpToEdit || !editingFollowUpContent.trim() || !user || !selectedPersonForDetails) return;
+
+    setIsSavingFollowUpEdit(true);
+    const docRef = doc(db, "persons", selectedPersonForDetails.id, "followUps", followUpToEdit.id);
+
+    try {
+      await updateDoc(docRef, {
+        content: editingFollowUpContent.trim(),
+        // TODO: Add logic here if editing dueDate is implemented
+      });
+
+      // Update local state
+      setPersonFollowUps(prev => prev.map(fu => 
+        fu.id === followUpToEdit.id ? { ...fu, content: editingFollowUpContent.trim() } : fu
+      ));
+
+      toast.success("Follow-up updated.");
+      setIsEditFollowUpDialogOpen(false);
+      setFollowUpToEdit(null);
+
+    } catch (err) {
+      console.error("Error updating follow-up:", err);
+      toast.error("Failed to update follow-up.");
+    } finally {
+      setIsSavingFollowUpEdit(false);
+    }
+  };
+
+  const handleConfirmDeleteFollowUp = async () => {
+    if (!followUpToDelete || !user || !selectedPersonForDetails) return;
+
+    setIsDeletingFollowUp(true);
+    const docRef = doc(db, "persons", selectedPersonForDetails.id, "followUps", followUpToDelete.id);
+
+    try {
+      await deleteDoc(docRef);
+
+      // Update local state
+      setPersonFollowUps(prev => prev.filter(fu => fu.id !== followUpToDelete.id));
+
+      toast.success("Follow-up deleted.");
+      setIsDeleteFollowUpConfirmOpen(false);
+      setFollowUpToDelete(null);
+
+    } catch (err) {
+      console.error("Error deleting follow-up:", err);
+      toast.error("Failed to delete follow-up.");
+    } finally {
+      setIsDeletingFollowUp(false);
+    }
+  };
+
   // Loading State
   if (authLoading) { // Use authLoading for the initial check
     return <div className="flex justify-center items-center min-h-screen"><p>Loading...</p></div>;
@@ -1302,7 +1437,7 @@ export default function AssignmentsPage() {
                       {groups.map((group) => {
                         // Prepare props for the consolidated card
                         const peopleInGroup = getPeopleInGroup(group.id);
-                        const isExpanded = expandedGroupId === group.id;
+                        const isExpanded = expandedGroupIds.includes(group.id);
                         const currentNumSetting = localNumPerDaySettings[group.id];
                         const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
                         const groupSize = group.personIds?.length ?? 0;
@@ -1315,7 +1450,7 @@ export default function AssignmentsPage() {
                             key={group.id} 
                             group={group}
                             peopleInGroup={peopleInGroup}
-                            expandedGroupId={expandedGroupId}
+                            expandedGroupIds={expandedGroupIds} // Corrected prop name
                             toggleExpandGroup={toggleExpandGroup} 
                             openGroupActionsDialog={openGroupActionsDialog}
                             openPersonActionsDialog={openPersonActionsDialog}
@@ -1721,10 +1856,12 @@ export default function AssignmentsPage() {
       <Dialog open={isPersonDetailsModalOpen} onOpenChange={setIsPersonDetailsModalOpen}>
         <DialogContent className="sm:max-w-[425px] md:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Details for {selectedPersonForDetails?.name}</DialogTitle>
-            <DialogDescription>
+            {/* Only show the person's name */}
+            <DialogTitle>{selectedPersonForDetails?.name}</DialogTitle>
+            {/* Remove the description */}
+            {/* <DialogDescription>
               Prayer requests and follow-ups associated with this person.
-            </DialogDescription>
+            </DialogDescription> */}
           </DialogHeader>
           <div className="py-4 max-h-[60vh] overflow-y-auto">
             {isLoadingPersonDetails ? (
@@ -1734,41 +1871,86 @@ export default function AssignmentsPage() {
             ) : personDetailsError ? (
               <p className="text-sm text-center text-destructive">{personDetailsError}</p>
             ) : (
-              <div className="space-y-6">
-                 {/* Prayer Requests Section */}
-                 <div>
-                   <h3 className="text-md font-semibold mb-2 border-b pb-1">Prayer Requests</h3>
+              <Tabs defaultValue="requests" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="requests">Prayer Requests</TabsTrigger>
+                  <TabsTrigger value="followups">Follow-Ups</TabsTrigger>
+                </TabsList>
+                <TabsContent value="requests" className="mt-4">
+                  {/* Prayer Requests Section */}
                    {personPrayerRequests.length > 0 ? (
                      <ul className="space-y-2 list-disc pl-5">
                        {personPrayerRequests.map(req => (
-                         <li key={req.id} className="text-sm text-muted-foreground">
-                           {req.content} 
-                           <span className="text-xs ml-2">({req.createdAt instanceof Timestamp ? req.createdAt.toDate().toLocaleDateString() : 'Date N/A'})</span>
+                         <li key={req.id} className="text-sm text-muted-foreground flex justify-between items-start group">
+                           {/* Request Content and Date */}
+                           <div className="flex-1 mr-2">
+                             {req.content} 
+                             <span className="text-xs ml-2 block text-gray-500">({req.createdAt instanceof Timestamp ? req.createdAt.toDate().toLocaleDateString() : 'Date N/A'})</span>
+                           </div>
+                           {/* Edit/Delete Trigger - initially hidden, shows on hover/focus */}
+                           <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                             <DropdownMenu>
+                               <DropdownMenuTrigger asChild>
+                                 <Button variant="ghost" className="h-6 w-6">
+                                    <MoreVertical className="h-4 w-4" />
+                                    <span className="sr-only">Actions</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Edit Dialog */ setRequestToEdit(req); setEditingRequestContent(req.content); setIsEditRequestDialogOpen(true); }}>
+                                     <Edit className="mr-2 h-4 w-4" /> Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Delete Confirm */ setRequestToDelete(req); setIsDeleteRequestConfirmOpen(true); }} className="text-destructive">
+                                     <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                           </div>
                          </li>
                        ))}
                      </ul>
                    ) : (
-                     <p className="text-sm text-center text-muted-foreground italic py-2">No prayer requests found.</p>
+                     <p className="text-sm text-center text-muted-foreground italic py-4">No prayer requests found.</p>
                    )}
-                 </div>
-
-                 {/* Follow Ups Section */}
-                 <div>
-                   <h3 className="text-md font-semibold mb-2 border-b pb-1">Follow-ups</h3>
+                </TabsContent>
+                <TabsContent value="followups" className="mt-4">
+                  {/* Follow Ups Section */}
                    {personFollowUps.length > 0 ? (
                      <ul className="space-y-2 list-disc pl-5">
                        {personFollowUps.map(fu => (
-                         <li key={fu.id} className="text-sm text-muted-foreground">
-                            {fu.content} 
-                            <span className="text-xs ml-2"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'Date N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
+                         <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
+                           {/* Follow-Up Content and Details */}
+                           <div className="flex-1 mr-2">
+                             {fu.content} 
+                             <span className="text-xs ml-2 block text-gray-500"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
+                           </div>
+                           {/* Edit/Delete Trigger */}
+                           <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="h-6 w-6">
+                                    <MoreVertical className="h-4 w-4" />
+                                    <span className="sr-only">Actions</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Edit */ setFollowUpToEdit(fu); setEditingFollowUpContent(fu.content); setIsEditFollowUpDialogOpen(true); }}>
+                                    <Edit className="mr-2 h-4 w-4" /> Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Delete */ setFollowUpToDelete(fu); setIsDeleteFollowUpConfirmOpen(true); }} className="text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                           </div>
                          </li>
                        ))}
                      </ul>
                    ) : (
-                     <p className="text-sm text-center text-muted-foreground italic py-2">No follow-ups found.</p>
+                     <p className="text-sm text-center text-muted-foreground italic py-4">No follow-ups found.</p>
                    )}
-                 </div>
-              </div>
+                </TabsContent>
+              </Tabs>
             )}
           </div>
           <DialogFooter>
@@ -1778,6 +1960,116 @@ export default function AssignmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* --- Prayer Request Edit/Delete Dialogs --- */}
+
+      {/* Edit Prayer Request Dialog */}
+      <Dialog open={isEditRequestDialogOpen} onOpenChange={setIsEditRequestDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Prayer Request</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea 
+              value={editingRequestContent}
+              onChange={(e) => setEditingRequestContent(e.target.value)}
+              placeholder="Enter prayer request details..."
+              rows={4}
+              disabled={isSavingRequestEdit}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isSavingRequestEdit}>Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleSaveRequestEdit} disabled={isSavingRequestEdit || !editingRequestContent.trim()}>
+              {isSavingRequestEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Prayer Request Confirmation Dialog */}
+      <AlertDialog open={isDeleteRequestConfirmOpen} onOpenChange={setIsDeleteRequestConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the prayer request:
+              <p className="italic mt-2 text-sm text-muted-foreground">{requestToDelete?.content}</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingRequest}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDeleteRequest} 
+              disabled={isDeletingRequest}
+              className="bg-destructive hover:bg-destructive/90"
+             >
+              {isDeletingRequest ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Follow-Up Dialog */}
+      <Dialog open={isEditFollowUpDialogOpen} onOpenChange={setIsEditFollowUpDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Follow-Up</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea 
+              value={editingFollowUpContent}
+              onChange={(e) => setEditingFollowUpContent(e.target.value)}
+              placeholder="Enter follow-up details..."
+              rows={4}
+              disabled={isSavingFollowUpEdit}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isSavingFollowUpEdit}>Cancel</Button>
+            </DialogClose>
+            <Button onClick={() => {
+              setIsEditFollowUpDialogOpen(false);
+              setIsSavingFollowUpEdit(false);
+            }} disabled={isSavingFollowUpEdit || !editingFollowUpContent.trim()}>
+              {isSavingFollowUpEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Follow-Up Confirmation Dialog */}
+      <AlertDialog open={isDeleteFollowUpConfirmOpen} onOpenChange={setIsDeleteFollowUpConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the follow-up:
+              <p className="italic mt-2 text-sm text-muted-foreground">{followUpToDelete?.content}</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingFollowUp}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setIsDeleteFollowUpConfirmOpen(false);
+                setIsDeletingFollowUp(false);
+              }}
+              disabled={isDeletingFollowUp}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isDeletingFollowUp ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   )

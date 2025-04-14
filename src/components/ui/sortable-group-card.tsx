@@ -14,7 +14,7 @@ import type { Group, Person } from '@/lib/types';
 interface SortableGroupCardProps {
   group: Group;
   peopleInGroup: Person[];
-  expandedGroupId: string | null;
+  expandedGroupIds: string[];
   toggleExpandGroup: (groupId: string) => void;
   openGroupActionsDialog: (group: Group) => void;
   openPersonActionsDialog: (person: Person) => void;
@@ -35,7 +35,7 @@ interface SortableGroupCardProps {
 export function SortableGroupCard({
   group,
   peopleInGroup,
-  expandedGroupId,
+  expandedGroupIds,
   toggleExpandGroup,
   openGroupActionsDialog,
   openPersonActionsDialog,
@@ -68,7 +68,7 @@ export function SortableGroupCard({
     zIndex: isDragging ? 10 : undefined,
   };
 
-  const isExpanded = expandedGroupId === group.id;
+  const isExpanded = expandedGroupIds.includes(group.id);
 
   return (
     <Card
@@ -79,25 +79,42 @@ export function SortableGroupCard({
       {...attributes}
     >
       <CardHeader
-        className="pb-3 pt-4 px-4 cursor-pointer flex flex-row items-center justify-between hover:bg-muted/50"
+        className="pb-3 pt-4 px-4 flex flex-row items-center justify-between hover:bg-muted/50 cursor-pointer"
         onClick={() => toggleExpandGroup(group.id)}
       >
           <div
-          className="flex items-center gap-2 cursor-pointer flex-grow mr-2" 
-            onClick={(e) => {
-            e.stopPropagation(); 
-              openGroupActionsDialog(group);
-            }}
+            className="flex items-center gap-2 flex-grow mr-2"
           >
-          <Users className="h-5 w-5 text-primary flex-shrink-0" />
-            <CardTitle className="text-base hover:underline">{group.name}</CardTitle>
+            <Users className="h-5 w-5 text-primary flex-shrink-0" />
+            <CardTitle 
+              className="text-base hover:underline"
+              onClick={(e) => {
+                  e.stopPropagation(); 
+                  openGroupActionsDialog(group);
+              }}
+            >
+              {group.name}
+            </CardTitle>
             <Badge variant="outline" className="ml-2 flex-shrink-0">
               {peopleInGroup.length} people
             </Badge>
           </div>
           
           <div className="flex items-center gap-2 flex-shrink-0">
-            {!isMobile && (
+             <div 
+                 className="p-2 md:p-1 text-muted-foreground rounded hover:bg-muted"
+                 onClick={(e) => {
+                    e.stopPropagation(); 
+                    toggleExpandGroup(group.id);
+                 }}
+             >
+                {isExpanded ? (
+                  <ChevronUp className="h-5 w-5" />
+                ) : (
+                  <ChevronDown className="h-5 w-5" />
+                )}
+             </div>
+             {!isMobile && (
                 <span 
                   className="cursor-grab p-2 md:p-1 text-muted-foreground hover:bg-muted rounded opacity-75"
                   {...listeners}
@@ -105,11 +122,6 @@ export function SortableGroupCard({
                 >
                    <GripVertical className="h-4 w-4" />
                 </span>
-            )}
-            {isExpanded ? (
-              <ChevronUp className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-5 w-5 text-muted-foreground" />
             )}
         </div>
       </CardHeader>
