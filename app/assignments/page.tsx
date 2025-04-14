@@ -1383,12 +1383,20 @@ export default function AssignmentsPage() {
                     {/* Display uncategorized people */}
                     {uncategorizedPeople.map((person) => (
                       <div key={person.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
-                        <div className="flex items-center gap-2">
+                        {/* Left Side: Icon + Clickable Name */}
+                        <div 
+                          className="flex items-center gap-2" // Removed cursor-pointer and onClick
+                         >
                           <User className="h-4 w-4 text-muted-foreground" />
-                          <span>{person.name}</span>
+                          <span 
+                            className="cursor-pointer hover:underline" // Make name clickable and underline on hover
+                            onClick={() => handleOpenPersonDetailsModal(person)} // Open details modal on click
+                          >
+                             {person.name}
+                           </span>
                         </div>
 
-                        {/* --- Assign to Group Dropdown --- */}
+                        {/* RESTORE Assign to Group Dropdown */}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -1420,8 +1428,6 @@ export default function AssignmentsPage() {
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        {/* --- End Assign to Group Dropdown --- */}
-
                       </div>
                     ))}
                   </div>
