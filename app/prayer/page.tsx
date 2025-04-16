@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import Link from "next/link"; // Import Link
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -101,6 +101,9 @@ export default function PrayerPage() {
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
   const [dailySelectedIdsCache, setDailySelectedIdsCache] = useState<Map<string, Set<string>>>(new Map());
+
+  // Ref to track effect runs in StrictMode
+  const effectRan = useRef(false);
 
   // Navigate to previous day
   const goToPreviousDay = () => {
@@ -297,155 +300,167 @@ export default function PrayerPage() {
 
   // Fetch initial data and determine list
   useEffect(() => {
-    if (!authLoading && user) {
+    // Define determineList function within the effect scope but outside the conditional
+    const determineList = async () => {
+      setLoadingData(true);
+      // Ensure user and prayerListDate are accessible here
+      if (!user) { // Early exit if user is not available
+          setLoadingData(false);
+          return;
+      }
       const userId = user.uid;
-      const cacheKey = `prayerApp_dailyCache_${userId}`;
-      const targetDate = prayerListDate; // Use state variable
+      const targetDate = prayerListDate;
       const dateKey = targetDate.toISOString().split('T')[0];
+      console.log(`[Prayer Page] Determining list for User: ${userId}, Date: ${dateKey}`);
 
-      const determineList = async () => {
-        setLoadingData(true);
-        console.log(`[Prayer Page] Determining list for User: ${userId}, Date: ${dateKey}`);
+      try {
+        // --- Always Fetch Base People Data (for display) --- //
+        // Note: Groups are fetched inside the calculation function if needed
+        console.log("[Prayer Page] Fetching base people data...");
+        const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId));
+        const peopleSnapshot = await getDocs(peopleQuery);
+        const peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
+        const peopleWithRecentRequestPromises = peopleData.map(async (person) => {
+            const requestsQuery = query(
+                collection(db, "persons", person.id, "prayerRequests"),
+                orderBy("createdAt", "desc"),
+                limit(1)
+            );
+            const requestSnapshot = await getDocs(requestsQuery);
+            const mostRecentRequest = requestSnapshot.empty ? undefined : { id: requestSnapshot.docs[0].id, ...requestSnapshot.docs[0].data() } as PrayerRequest;
+            return { ...person, mostRecentRequest };
+        });
+        const fetchedPeopleWithRecentRequest = await Promise.all(peopleWithRecentRequestPromises);
+        setAllUserPeople(fetchedPeopleWithRecentRequest);
+        // Also fetch groups separately for getGroupName function
+        const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", userId))
+        const groupsSnapshot = await getDocs(groupsQuery)
+        const fetchedGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group))
+        setAllUserGroups(fetchedGroups);
+        console.log("[Prayer Page] Fetched base people and groups data.");
+        // --- End Base Data Fetch --- //
 
-        try {
-          // --- Always Fetch Base People Data (for display) --- //
-          // Note: Groups are fetched inside the calculation function if needed
-          console.log("[Prayer Page] Fetching base people data...");
-          const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId));
-          const peopleSnapshot = await getDocs(peopleQuery);
-          const peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
-          const peopleWithRecentRequestPromises = peopleData.map(async (person) => {
-              const requestsQuery = query(
-                  collection(db, "persons", person.id, "prayerRequests"),
-                  orderBy("createdAt", "desc"),
-                  limit(1)
-              );
-              const requestSnapshot = await getDocs(requestsQuery);
-              const mostRecentRequest = requestSnapshot.empty ? undefined : { id: requestSnapshot.docs[0].id, ...requestSnapshot.docs[0].data() } as PrayerRequest;
-              return { ...person, mostRecentRequest };
-          });
-          const fetchedPeopleWithRecentRequest = await Promise.all(peopleWithRecentRequestPromises);
-          setAllUserPeople(fetchedPeopleWithRecentRequest);
-          // Also fetch groups separately for getGroupName function
-          const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", userId))
-          const groupsSnapshot = await getDocs(groupsQuery)
-          const fetchedGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group))
-          setAllUserGroups(fetchedGroups);
-          console.log("[Prayer Page] Fetched base people and groups data.");
-          // --- End Base Data Fetch --- //
+        let personIdsToPrayFor: Set<string> | null = null;
+        let source: 'session' | 'firestore' | 'calculated' = 'calculated';
 
-          let personIdsToPrayFor: Set<string> | null = null;
-          let source: 'session' | 'firestore' | 'calculated' = 'calculated';
+        // --- 1. Check Firestore First (using NEW path) --- //
+        const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
+        console.log(`[Prayer Page] Checking Firestore for daily list at path: ${dailyListRef.path}`);
+        const dailyListSnap = await getDoc(dailyListRef);
 
-          // --- 1. Check Firestore First (using NEW path) --- //
-          const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
-          console.log(`[Prayer Page] Checking Firestore for daily list at path: ${dailyListRef.path}`);
-          const dailyListSnap = await getDoc(dailyListRef);
+        if (dailyListSnap.exists()) {
+          console.log(`[Prayer Page] Found list in FIRESTORE for date ${dateKey}`);
+          const data = dailyListSnap.data();
+          personIdsToPrayFor = new Set(data.personIds || []);
+          source = 'firestore';
 
-          if (dailyListSnap.exists()) {
-            console.log(`[Prayer Page] Found list in FIRESTORE for date ${dateKey}`);
-            const data = dailyListSnap.data();
-            personIdsToPrayFor = new Set(data.personIds || []);
-            source = 'firestore';
-
-            // Save to session storage (and update state cache)
-            setDailySelectedIdsCache(prevCache => {
-              const newCache = new Map(prevCache);
-              newCache.set(dateKey, personIdsToPrayFor!); // Update state map
-              if (typeof window !== 'undefined') {
-                try {
-                   // Use the helper function to stringify the MAP
-                   sessionStorage.setItem(cacheKey, stringifyMapWithSets(newCache)); 
-                   console.log(`[Prayer Page] Saved Firestore list to session storage.`);
-                } catch (e) {
-                   console.error("Error saving Firestore list to session storage:", e);
-                }
-              }
-              return newCache;
-            });
-
-          } else {
-            console.log(`[Prayer Page] List NOT found in Firestore for date ${dateKey}. Checking session storage.`);
-            // --- 2. Check Session Storage (Only if Firestore miss) --- //
-            const storedSessionCache = sessionStorage.getItem(cacheKey);
-            // Use the helper function to parse the MAP
-            const loadedSessionCache = parseMapWithSets(storedSessionCache);
-            if (loadedSessionCache.has(dateKey)) {
-              console.log(`[Prayer Page] Found list in SESSION storage for date ${dateKey}`);
-              personIdsToPrayFor = loadedSessionCache.get(dateKey)!;
-              source = 'session';
-              // Update state cache MAP if it's empty
-              if (dailySelectedIdsCache.size === 0) {
-                 setDailySelectedIdsCache(loadedSessionCache); 
-              }
-            } else {
-              console.log(`[Prayer Page] List also NOT found in session storage. Calculating...`);
-              // --- 3. Calculate if Both Miss --- //
-              source = 'calculated';
+          // Save to session storage (and update state cache)
+          setDailySelectedIdsCache(prevCache => {
+            const newCache = new Map(prevCache);
+            newCache.set(dateKey, personIdsToPrayFor!); // Update state map
+            if (typeof window !== 'undefined') {
               try {
-                 personIdsToPrayFor = await calculateAndSaveDailyPrayerList(db, userId, targetDate);
-                 console.log(`[Prayer Page] Calculation function finished. Saving result to caches.`);
-                 // Save the *result* to session storage (and update state cache)
-                 setDailySelectedIdsCache(prevCache => {
-                   const newCache = new Map(prevCache);
-                   newCache.set(dateKey, personIdsToPrayFor!); // Update state map
-                   if (typeof window !== 'undefined') {
-                     try {
-                        // Use the helper function to stringify the MAP
-                        sessionStorage.setItem(cacheKey, stringifyMapWithSets(newCache)); 
-                        console.log(`[Prayer Page] Saved calculated list to session storage.`);
-                     } catch (e) {
-                        console.error("Error saving calculated list to session storage:", e);
-                     }
-                   }
-                   return newCache;
-                 });
-              } catch (calcError) {
-                 console.error(`[Prayer Page] Error during calculation:`, calcError);
-                 // Handle calculation error (e.g., show error message, set empty list)
-                 personIdsToPrayFor = new Set(); // Default to empty on error
+                 // Use the helper function to stringify the MAP
+                 sessionStorage.setItem(`prayerApp_dailyCache_${userId}`, stringifyMapWithSets(newCache)); // Use userId in key
+                 console.log(`[Prayer Page] Saved Firestore list to session storage.`);
+              } catch (e) {
+                 console.error("Error saving Firestore list to session storage:", e);
               }
             }
-          }
+            return newCache;
+          });
 
-          // --- Update UI --- //
-          if (personIdsToPrayFor) {
-              const todaysList = fetchedPeopleWithRecentRequest.filter(person => personIdsToPrayFor!.has(person.id));
-              setTodaysPrayerList(todaysList);
-              console.log(`[Prayer Page] Final list ready (source: ${source}). Count: ${todaysList.length}`);
+        } else {
+          console.log(`[Prayer Page] List NOT found in Firestore for date ${dateKey}. Checking session storage.`);
+          // --- 2. Check Session Storage (Only if Firestore miss) --- //
+          const storedSessionCache = sessionStorage.getItem(`prayerApp_dailyCache_${userId}`); // Use userId in key
+          // Use the helper function to parse the MAP
+          const loadedSessionCache = parseMapWithSets(storedSessionCache);
+          if (loadedSessionCache.has(dateKey)) {
+            console.log(`[Prayer Page] Found list in SESSION storage for date ${dateKey}`);
+            personIdsToPrayFor = loadedSessionCache.get(dateKey)!;
+            source = 'session';
+            // Update state cache MAP if it's empty
+            if (dailySelectedIdsCache.size === 0) {
+               setDailySelectedIdsCache(loadedSessionCache);
+            }
           } else {
-             console.error("[Prayer Page] Failed to determine person IDs for today after all checks.");
-             setTodaysPrayerList([]);
+            console.log(`[Prayer Page] List also NOT found in session storage. Calculating...`);
+            // --- 3. Calculate if Both Miss --- //
+            source = 'calculated';
+            try {
+               personIdsToPrayFor = await calculateAndSaveDailyPrayerList(db, userId, targetDate);
+               console.log(`[Prayer Page] Calculation function finished. Saving result to caches.`);
+               // Save the *result* to session storage (and update state cache)
+               setDailySelectedIdsCache(prevCache => {
+                 const newCache = new Map(prevCache);
+                 newCache.set(dateKey, personIdsToPrayFor!); // Update state map
+                 if (typeof window !== 'undefined') {
+                   try {
+                      // Use the helper function to stringify the MAP
+                      sessionStorage.setItem(`prayerApp_dailyCache_${userId}`, stringifyMapWithSets(newCache)); // Use userId in key
+                      console.log(`[Prayer Page] Saved calculated list to session storage.`);
+                   } catch (e) {
+                      console.error("Error saving calculated list to session storage:", e);
+                   }
+                 }
+                 return newCache;
+               });
+            } catch (calcError) {
+               console.error(`[Prayer Page] Error during calculation:`, calcError);
+               // Handle calculation error (e.g., show error message, set empty list)
+               personIdsToPrayFor = new Set(); // Default to empty on error
+            }
           }
-
-        } catch (err) {
-          console.error("[Prayer Page] General error in determineList:", err);
-          setTodaysPrayerList([]);
-          setAllUserGroups([]);
-          setAllUserPeople([]);
-        } finally {
-          setLoadingData(false);
         }
-      };
 
-      determineList();
+        // --- Update UI --- //
+        if (personIdsToPrayFor) {
+            const todaysList = fetchedPeopleWithRecentRequest.filter(person => personIdsToPrayFor!.has(person.id));
+            setTodaysPrayerList(todaysList);
+            console.log(`[Prayer Page] Final list ready (source: ${source}). Count: ${todaysList.length}`);
+        } else {
+           console.error("[Prayer Page] Failed to determine person IDs for today after all checks.");
+           setTodaysPrayerList([]);
+        }
 
-    } else if (!authLoading && !user) {
-      // Handle logged out state
-      setLoadingData(false)
-      setDailySelectedIdsCache(new Map()); // Clear state cache on logout
-      if (typeof window !== 'undefined') {
-          Object.keys(sessionStorage)
-              .filter(key => key.startsWith('prayerApp_dailyCache_'))
-              .forEach(key => sessionStorage.removeItem(key));
-          console.log("[Prayer Debug] User logged out, cleared state cache and relevant sessionStorage items.");
-      } else {
-          console.log("[Prayer Debug] User logged out, cleared state cache.");
+      } catch (err) {
+        console.error("[Prayer Page] General error in determineList:", err);
+        setTodaysPrayerList([]);
+        setAllUserGroups([]);
+        setAllUserPeople([]);
+      } finally {
+        setLoadingData(false);
       }
-      setAllUserGroups([])
-      setAllUserPeople([])
-      setTodaysPrayerList([])
+    };
+
+    // StrictMode check + Auth check
+    if (effectRan.current === true || process.env.NODE_ENV !== 'development') {
+        if (!authLoading && user) {
+          // Call determineList only when conditions are met
+          determineList();
+        } else if (!authLoading && !user) {
+          // Handle logged out state - reset relevant states
+          setLoadingData(false)
+          setDailySelectedIdsCache(new Map()); // Clear state cache on logout
+          if (typeof window !== 'undefined') {
+              Object.keys(sessionStorage)
+                  .filter(key => key.startsWith('prayerApp_dailyCache_'))
+                  .forEach(key => sessionStorage.removeItem(key));
+              console.log("[Prayer Debug] User logged out, cleared state cache and relevant sessionStorage items.");
+          } else {
+              console.log("[Prayer Debug] User logged out, cleared state cache.");
+          }
+          setAllUserGroups([])
+          setAllUserPeople([])
+          setTodaysPrayerList([])
+        }
     }
+
+    // Cleanup function for the effect
+    return () => {
+      effectRan.current = true; // Mark that the first mount+cleanup happened in dev
+    };
   }, [user, authLoading, prayerListDate])
 
   // NEW: Fetch expanded details (Prayer Requests & Follow-ups) for a specific person
