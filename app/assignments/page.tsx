@@ -1046,45 +1046,45 @@ export default function AssignmentsPage() {
     setIsUpdatingAndReturning(true);
     setUpdateError(null); // Clear previous errors
 
-    const today = new Date();
-    const dateKey = today.toISOString().split('T')[0];
+    // Remove today-specific logic
+    // const today = new Date();
+    // const dateKey = today.toISOString().split('T')[0];
     const userId = user.uid;
     const cacheKey = `prayerApp_dailyCache_${userId}`;
 
-    console.log(`[FAB] Starting update and return for user ${userId}, date ${dateKey}`);
+    // console.log(`[FAB] Starting update and return for user ${userId}, date ${dateKey}`);
+    console.log(`[FAB] Clearing cache and returning for user ${userId}`);
 
     try {
-        // 1. Clear local session storage cache
+        // 1. Clear the ENTIRE session storage cache for this user
         if (typeof window !== 'undefined') {
-            const storedSessionCache = sessionStorage.getItem(cacheKey);
-            const loadedSessionCache = parseMapWithSets(storedSessionCache);
-            if (loadedSessionCache.has(dateKey)) {
-                loadedSessionCache.delete(dateKey);
-                sessionStorage.setItem(cacheKey, stringifyMapWithSets(loadedSessionCache));
-                console.log(`[FAB] Cleared session storage entry for ${dateKey}`);
-            }
+            sessionStorage.removeItem(cacheKey);
+            console.log(`[FAB] Cleared entire session storage cache: ${cacheKey}`);
         }
 
-        // 2. Clear central Firestore cache document
-        const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
-        try {
-             await deleteDoc(dailyListRef);
-             console.log(`[FAB] Deleted Firestore document at path ${dailyListRef.path} (if it existed).`);
-        } catch (deleteError) {
-             console.warn(`[FAB] Could not delete Firestore doc (may not exist or other issue):`, deleteError);
-        }
+        // 2. REMOVED: Clear central Firestore cache document for today
+        // const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
+        // try {
+        //      await deleteDoc(dailyListRef);
+        //      console.log(`[FAB] Deleted Firestore document at path ${dailyListRef.path} (if it existed).`);
+        // } catch (deleteError) {
+        //      console.warn(`[FAB] Could not delete Firestore doc (may not exist or other issue):`, deleteError);
+        // }
 
-        // 3. Recalculate and save the list
-        console.log(`[FAB] Calling calculation function...`);
-        await calculateAndSaveDailyPrayerList(db, userId, today);
-        console.log(`[FAB] Calculation function finished successfully.`);
+        // 3. REMOVED: Explicit recalculation for today
+        // console.log(`[FAB] Calling calculation function...`);
+        // await calculateAndSaveDailyPrayerList(db, userId, today);
+        // console.log(`[FAB] Calculation function finished successfully.`);
 
         // 4. Navigate back to prayer page
+        // Use a slight delay to ensure cache removal is processed before navigation (optional but can help)
+        await new Promise(resolve => setTimeout(resolve, 50)); 
         router.push('/prayer');
 
     } catch (error) {
-        console.error("[FAB] Error during update and return process:", error);
-        setUpdateError("Failed to update prayer list before returning. Please try returning manually.");
+        // Catch potential errors during cache removal or navigation
+        console.error("[FAB] Error during cache clear and return process:", error);
+        setUpdateError("Failed to clear cache before returning. Please try returning manually.");
         // Don't navigate if update failed, show error on assignments page
     } finally {
         setIsUpdatingAndReturning(false);
@@ -1093,12 +1093,12 @@ export default function AssignmentsPage() {
 
   // NEW: Fetch details for a specific person
   const fetchPersonDetails = async (personId: string) => {
-    if (!user) return;
+    if (!user) return; // Added missing check
     console.log("Fetching details for person:", personId);
-    setIsLoadingPersonDetails(true);
-    setPersonDetailsError(null);
-    setPersonPrayerRequests([]); // Clear previous data
-    setPersonFollowUps([]);      // Clear previous data
+    setIsLoadingPersonDetails(true); // Correct reference
+    setPersonDetailsError(null); // Correct reference
+    setPersonPrayerRequests([]); // Correct reference
+    setPersonFollowUps([]); // Correct reference
 
     try {
       // Fetch Prayer Requests from the subcollection
