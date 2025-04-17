@@ -33,6 +33,7 @@ export async function calculateAndSaveDailyPrayerList(
 
     const personIdsToPrayFor = new Set<string>();
     const batch = writeBatch(db);
+    const settingsSnapshot: Record<string, { numPerDay: number | null }> = {}; // NEW: Initialize snapshot object
 
     try {
         // 1. Fetch all groups for the user
@@ -59,6 +60,9 @@ export async function calculateAndSaveDailyPrayerList(
             const currentStartIndex = settings?.nextIndex ?? 0;
             const totalPeople = groupPersonIds.length;
             const actualNumToAssign = numPerDaySetting === null ? totalPeople : Math.min(numPerDaySetting, totalPeople);
+
+            // NEW: Record the setting for this group in the snapshot
+            settingsSnapshot[group.id] = { numPerDay: actualNumToAssign }; // Store the *actual* number assigned
 
             console.log(`[Calculation Function] Group: ${group.name} (ID: ${group.id}) - Settings: numPerDay=${numPerDaySetting ?? 'all'}(actual:${actualNumToAssign}), startIndex=${currentStartIndex}, total=${totalPeople}`);
 
@@ -90,15 +94,16 @@ export async function calculateAndSaveDailyPrayerList(
         await batch.commit();
         console.log("[Calculation Function] Batch commit successful for nextIndex updates.");
 
-        // 5. Save the calculated list to dailyPrayerLists using the NEW path
+        // 5. Save the calculated list AND settings snapshot to dailyPrayerLists
         const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
         await setDoc(dailyListRef, {
             userId: userId,
             date: dateKey,
             personIds: Array.from(personIdsToPrayFor),
+            settingsSnapshot: settingsSnapshot, // NEW: Save the snapshot
             createdAt: serverTimestamp()
         });
-        console.log(`[Calculation Function] Saved calculated list to Firestore path: ${dailyListRef.path}`);
+        console.log(`[Calculation Function] Saved calculated list AND settings snapshot to Firestore path: ${dailyListRef.path}`);
 
         return personIdsToPrayFor;
 
