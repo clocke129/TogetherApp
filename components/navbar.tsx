@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { LucideIcon } from "lucide-react";
+import React, { useEffect } from "react"; // Import useEffect
 
 // Define an interface for nav items
 interface NavItem {
@@ -31,6 +32,25 @@ export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter() // Add router hook back
   const { user, loading } = useAuth() // Get user and loading state
+
+  // --- Add this useEffect Hook --- 
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then(registration => {
+          console.log('SW registered manually: ', registration);
+        })
+        .catch(registrationError => {
+          console.error('SW registration failed manually: ', registrationError);
+        });
+    } else if (!('serviceWorker' in navigator)) {
+      console.log('Service Worker not supported in this browser.');
+    } else {
+      console.log('Service Worker registration skipped in development.');
+    }
+  }, []); // Run only once on component mount
+  // --- End of useEffect Hook ---
 
   // Apply the type to the array
   const navItems: NavItem[] = [
