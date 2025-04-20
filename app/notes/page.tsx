@@ -594,7 +594,16 @@ Use #MMDD for follow-up dates.`}
           <h1 className="page-title">Notes</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
-        {/* Removed original Save Button */}
+        {/* Add Save Button back */}
+        <Button
+          size="sm"
+          onClick={handleSaveNotes}
+          disabled={isSaving || parsedData.length === 0}
+          className="bg-shrub hover:bg-shrub/90"
+        >
+          {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Note
+        </Button>
       </div>
 
       {/* Mobile: Tabs for Editor and Preview */}
@@ -615,7 +624,8 @@ Use #MMDD for follow-up dates.`}
         </TabsContent>
       </Tabs>
 
-       {/* Floating Action Button for Save (same as desktop) */}
+       {/* REMOVE Floating Action Button */}
+       {/*
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -634,6 +644,7 @@ Use #MMDD for follow-up dates.`}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+      */}
     </>
   )
 
