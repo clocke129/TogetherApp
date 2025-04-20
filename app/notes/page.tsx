@@ -620,7 +620,7 @@ Use #MMDD for follow-up dates.`}
         <Tooltip>
           <TooltipTrigger asChild>
              <Button
-                className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-10 bg-shrub hover:bg-shrub/90"
+                className="fixed bottom-16 right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full shadow-lg z-10 bg-shrub hover:bg-shrub/90"
                 size="icon"
                 onClick={handleSaveNotes}
                 disabled={isSaving || parsedData.length === 0}
