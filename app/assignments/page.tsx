@@ -1,11 +1,9 @@
 "use client"
 
 import { useState, useEffect, FormEvent } from "react"
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -19,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronUp, Plus, User, UserPlus, X, Users, Minus, Loader2, Check, MoreVertical, Trash2, Edit, LogOut, RefreshCw, ArrowLeft } from "lucide-react"
+import { Plus, User, UserPlus, Users, Loader2, MoreVertical, Trash2, Edit, LogOut, RefreshCw, Calendar as CalendarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
@@ -32,9 +30,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu"
 import { useMobile } from "@/hooks/use-mobile"
 import {
@@ -66,34 +61,14 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { SortableGroupCard } from "../../src/components/ui/sortable-group-card";
-import { SortableDayGroupCard } from "../../src/components/ui/sortable-day-group-card";
-import { calculateAndSaveDailyPrayerList } from "@/lib/utils";
-import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
 
-// Types (Keep local types for now to avoid potential import issues until resolved)
-// type Person = {
-//   id: string
-//   name: string
-//   groupId?: string
-// }
-
-// type Group = {
-//   id: string
-//   name: string
-//   personIds: string[]
-//   prayerDays: number[] // 0-6 for Sunday-Saturday
-//   prayerSettings: {
-//     type: "random" | "recent" | "all"
-//     count?: number
-//   }
-// }
-// --- Removed local type definitions ---
-
-// Day names
+// Day names (Restored)
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const DAYS_OF_WEEK_MOBILE = ["Su", "M", "T", "W", "Th", "F", "Sa"]
 
@@ -103,61 +78,49 @@ export default function AssignmentsPage() {
   const isMobile = useMobile()
   const [people, setPeople] = useState<Person[]>([])
   const [groups, setGroups] = useState<Group[]>([])
-  // CHANGE: State to hold multiple expanded group IDs
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
-  // Local state for number per day inputs, keyed by groupId (now stores number | null)
   const [localNumPerDaySettings, setLocalNumPerDaySettings] = useState<Record<string, number | null>>({});
-  const [isSavingNumPerDay, setIsSavingNumPerDay] = useState<string | null>(null); // groupId being saved
+  const [isSavingNumPerDay, setIsSavingNumPerDay] = useState<string | null>(null);
 
-  // State for Add Person Dialog
   const [isAddPersonDialogOpen, setIsAddPersonDialogOpen] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
-  const [isAddingPerson, setIsAddingPerson] = useState(false); // Loading state for submission
+  const [isAddingPerson, setIsAddingPerson] = useState(false);
 
-  // State for Add Group Dialog
   const [isAddGroupDialogOpen, setIsAddGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [isAddingGroup, setIsAddingGroup] = useState(false);
 
-  // State for Person Actions Dialog
   const [isPersonActionsDialogOpen, setIsPersonActionsDialogOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
-  // State for inline editing within Person Actions Dialog
   const [isEditingPersonName, setIsEditingPersonName] = useState(false);
   const [editingPersonNameValue, setEditingPersonNameValue] = useState("");
   const [isSavingPersonName, setIsSavingPersonName] = useState(false);
   const [editPersonNameError, setEditPersonNameError] = useState<string | null>(null);
-  // State for Merge Conflict
   const [conflictingPerson, setConflictingPerson] = useState<Person | null>(null);
   const [isMergingPerson, setIsMergingPerson] = useState(false);
 
-  // State for Delete Person Confirmation Dialog
   const [isDeletePersonConfirmOpen, setIsDeletePersonConfirmOpen] = useState(false);
   const [isDeletingPerson, setIsDeletingPerson] = useState(false);
   const [deletePersonError, setDeletePersonError] = useState<string | null>(null);
 
-  // State for Group Actions Dialog
   const [isGroupActionsDialogOpen, setIsGroupActionsDialogOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-  // State for inline editing within Group Actions Dialog
   const [isEditingGroupName, setIsEditingGroupName] = useState(false);
   const [editingGroupNameValue, setEditingGroupNameValue] = useState("");
   const [isSavingGroupName, setIsSavingGroupName] = useState(false);
   const [editGroupNameError, setEditGroupNameError] = useState<string | null>(null);
 
-  const [isAssigningPerson, setIsAssigningPerson] = useState<string | null>(null); // Store personId being assigned
-  const [isUpdatingDays, setIsUpdatingDays] = useState<string | null>(null); // Store groupId being updated
-  const [isRemovingPersonId, setIsRemovingPersonId] = useState<string | null>(null); // Store personId being removed
+  const [isAssigningPerson, setIsAssigningPerson] = useState<string | null>(null);
+  const [isUpdatingDays, setIsUpdatingDays] = useState<string | null>(null);
+  const [isRemovingPersonId, setIsRemovingPersonId] = useState<string | null>(null);
 
-  // State for Delete Group Confirmation Dialog
   const [isDeleteGroupConfirmOpen, setIsDeleteGroupConfirmOpen] = useState(false);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null);
   const [deleteGroupMembersOption, setDeleteGroupMembersOption] = useState<"unassign" | "delete">("unassign");
 
-  // NEW: State for Person Details Modal
   const [isPersonDetailsModalOpen, setIsPersonDetailsModalOpen] = useState(false);
   const [selectedPersonForDetails, setSelectedPersonForDetails] = useState<Person | null>(null);
   const [personPrayerRequests, setPersonPrayerRequests] = useState<PrayerRequest[]>([]);
@@ -165,7 +128,15 @@ export default function AssignmentsPage() {
   const [isLoadingPersonDetails, setIsLoadingPersonDetails] = useState(false);
   const [personDetailsError, setPersonDetailsError] = useState<string | null>(null);
 
-  // NEW: State for Editing/Deleting Prayer Requests
+  const [isAddRequestDialogOpen, setIsAddRequestDialogOpen] = useState(false);
+  const [newRequestContent, setNewRequestContent] = useState("");
+  const [isAddingRequest, setIsAddingRequest] = useState(false);
+
+  const [isAddFollowUpDialogOpen, setIsAddFollowUpDialogOpen] = useState(false);
+  const [newFollowUpContent, setNewFollowUpContent] = useState("");
+  const [newFollowUpDueDate, setNewFollowUpDueDate] = useState<Date | null>(null);
+  const [isAddingFollowUp, setIsAddingFollowUp] = useState(false);
+
   const [isEditRequestDialogOpen, setIsEditRequestDialogOpen] = useState(false);
   const [requestToEdit, setRequestToEdit] = useState<PrayerRequest | null>(null);
   const [editingRequestContent, setEditingRequestContent] = useState("");
@@ -174,18 +145,18 @@ export default function AssignmentsPage() {
   const [requestToDelete, setRequestToDelete] = useState<PrayerRequest | null>(null);
   const [isDeletingRequest, setIsDeletingRequest] = useState(false);
 
-  // NEW: State for Editing/Deleting Follow-Ups
   const [isEditFollowUpDialogOpen, setIsEditFollowUpDialogOpen] = useState(false);
   const [followUpToEdit, setFollowUpToEdit] = useState<FollowUp | null>(null);
   const [editingFollowUpContent, setEditingFollowUpContent] = useState("");
-  // Optional: Add state for editing due date if needed
   const [isSavingFollowUpEdit, setIsSavingFollowUpEdit] = useState(false);
   const [isDeleteFollowUpConfirmOpen, setIsDeleteFollowUpConfirmOpen] = useState(false);
   const [followUpToDelete, setFollowUpToDelete] = useState<FollowUp | null>(null);
   const [isDeletingFollowUp, setIsDeletingFollowUp] = useState(false);
 
-  // NEW: State for formatted date string
-  const [currentDateString, setCurrentDateString] = useState(() => {
+  // State to track the active tab in the Person Details modal
+  const [activeDetailsTab, setActiveDetailsTab] = useState<'requests' | 'followups'>('requests');
+
+  const [currentDateString] = useState(() => {
     const today = new Date();
     return today.toLocaleDateString("en-US", {
       weekday: 'long',
@@ -194,7 +165,6 @@ export default function AssignmentsPage() {
     });
   });
 
-  // --- DND Kit Sensors ---
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -202,16 +172,13 @@ export default function AssignmentsPage() {
     })
   );
 
-  // --- DND Kit Drag End Handler ---
-  const handleDragEnd = async (event: DragEndEvent) => { // Make async
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      // Determine the new order locally first
       const oldIndex = groups.findIndex((item) => item.id === active.id);
       const newIndex = groups.findIndex((item) => item.id === over.id);
       
-      // Check if indices are valid before proceeding
       if (oldIndex === -1 || newIndex === -1) {
         console.error("Could not find dragged item or drop target in state.");
         return; 
@@ -219,8 +186,7 @@ export default function AssignmentsPage() {
 
       const newOrderedGroups = arrayMove(groups, oldIndex, newIndex);
 
-      // Optimistic UI Update: Update local state immediately
-      setGroups(newOrderedGroups);
+      setGroups(newOrderedGroups); // Optimistic UI update
       console.log(`Group ${active.id} moved locally from index ${oldIndex} to ${newIndex}`);
       console.log("New Local Order:", newOrderedGroups.map(g => ({ id: g.id, name: g.name })));
 
@@ -228,27 +194,21 @@ export default function AssignmentsPage() {
       try {
         const batch = writeBatch(db);
         newOrderedGroups.forEach((group, index) => {
-          // Only update if the order actually changed or if it's missing
-          // Note: Comparing floating point numbers directly can be tricky, 
-          // but integer indices should be fine.
-          const currentGroupInOldOrder = groups.find(g => g.id === group.id);
-          if (currentGroupInOldOrder?.order !== index || group.order === undefined) {
+          // Find the group's original data to compare its order
+          const originalGroupData = groups.find(g => g.id === group.id);
+          // Update Firestore only if the order changed or was missing
+          if (originalGroupData?.order !== index || group.order === undefined) {
              console.log(`Updating order for ${group.id} to ${index}`);
              const groupRef = doc(db, "groups", group.id);
-             batch.update(groupRef, { order: index }); // Set order based on new array index
+             batch.update(groupRef, { order: index });
           }
         });
         await batch.commit();
         console.log("Successfully updated group order in Firestore.");
-
-        // Optional: Re-fetch or update local state order fields if needed after commit,
-        // but the optimistic update should cover most cases.
-        // setGroups(newOrderedGroups.map((g, index) => ({...g, order: index })));
-
       } catch (error) {
         console.error("Error updating group order in Firestore:", error);
-        // TODO: Consider reverting the optimistic UI update on error
-        // setGroups(groups); // Revert to the order before the drag
+        // Consider reverting the optimistic update on error
+        setGroups(groups); // Revert local state to before drag
         alert("Failed to save the new group order. Please try again.");
       }
     }
@@ -374,12 +334,6 @@ export default function AssignmentsPage() {
     }
   };
 
-  // Toggle selection type for group - Needs Firestore update
-  const toggleSelectionType = (groupId: string, type: "random" | "recent" | "all") => {
-    // TODO: Replace with Firestore updateDoc for the specific group
-    console.log(`Set selection type to ${type} for group ${groupId} (needs Firestore implementation)`);
-  }
-  
   // Add Person Submit Handler
   const handleAddPersonSubmit = async (e: FormEvent, groupIdToAssign?: string) => {
     e.preventDefault();
@@ -388,13 +342,14 @@ export default function AssignmentsPage() {
     setIsAddingPerson(true);
 
     try {
-      const newPersonData: { name: string; createdBy: string; createdAt: any; groupId?: string } = {
+      // Explicitly define the type for newPersonData
+      // Corrected 'any' type to use serverTimestamp() which returns a specific type
+      const newPersonData: { name: string; createdBy: string; createdAt: Timestamp; groupId?: string } = {
         name: newPersonName.trim(),
         createdBy: user.uid,
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp() as Timestamp, // Cast to Timestamp for type safety
       };
 
-      // If assigning to a specific group immediately
       if (groupIdToAssign) {
         newPersonData.groupId = groupIdToAssign;
       }
@@ -552,12 +507,6 @@ export default function AssignmentsPage() {
      }
   };
   
-  // Add Group - Needs Firestore add
-  const handleAddGroup = () => {
-    // TODO: Implement adding a group (likely involves a dialog/form and Firestore addDoc)
-     console.log("Add Group clicked (needs implementation)");
-  };
-  
   // Remove Person from Group - Implement Firestore update for BOTH Person and Group
   const handleRemovePersonFromGroup = async (personId: string, groupId: string) => {
      if (!user || isRemovingPersonId) return; // Prevent concurrent updates
@@ -596,15 +545,10 @@ export default function AssignmentsPage() {
      }
   };
   
-  // Add Person to Specific Group - Needs Firestore update
-  const handleAddPersonToGroup = (groupId: string) => {
-    // Reuse Add Person dialog, passing groupId
-    setNewPersonName(""); // Clear name from previous attempts
+  // Add Person to Specific Group - Note: groupId parameter is unused here as it opens the generic add person dialog
+  const handleAddPersonToGroup = (groupId: string) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+    setNewPersonName(""); 
     setIsAddPersonDialogOpen(true);
-    // We'll handle the group assignment within handleAddPersonSubmit
-    // Need a way to know which group this button was clicked for - maybe pass groupId to dialog?
-    // Or, simpler: have a separate button state/handler?
-    // Let's adjust handleAddPersonSubmit to optionally accept groupId
   };
 
   // NEW: Update numPerDay setting for a group (handles null for "All")
@@ -983,62 +927,8 @@ export default function AssignmentsPage() {
   const isLoading = authLoading || loadingData;
 
   // --- Update Today's List State/Handler (NEW) ---
-  const [isUpdatingTodaysList, setIsUpdatingTodaysList] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUpdatingAndReturning, setIsUpdatingAndReturning] = useState(false); // State for new FAB action
-
-  const handleUpdateTodaysList = async () => {
-    if (!user) return;
-    setUpdateError(null);
-
-    const confirmation = confirm("This will recalculate today's shared prayer list based on current settings for ALL devices. Continue?");
-    if (!confirmation) return;
-
-    setIsUpdatingTodaysList(true);
-    const today = new Date();
-    const dateKey = today.toISOString().split('T')[0];
-    const userId = user.uid;
-    const cacheKey = `prayerApp_dailyCache_${userId}`;
-
-    console.log(`[Update Button] Starting update for user ${userId}, date ${dateKey}`);
-
-    try {
-        // 1. Clear local session storage cache
-        if (typeof window !== 'undefined') {
-            const storedSessionCache = sessionStorage.getItem(cacheKey);
-            const loadedSessionCache = parseMapWithSets(storedSessionCache);
-            if (loadedSessionCache.has(dateKey)) {
-                loadedSessionCache.delete(dateKey);
-                sessionStorage.setItem(cacheKey, stringifyMapWithSets(loadedSessionCache));
-                console.log(`[Update Button] Cleared session storage entry for ${dateKey}`);
-            }
-        }
-
-        // 2. Clear central Firestore cache document (using NEW path)
-        const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey);
-        try {
-             await deleteDoc(dailyListRef);
-             console.log(`[Update Button] Deleted Firestore document at path ${dailyListRef.path} (if it existed).`);
-        } catch (deleteError) {
-             console.warn(`[Update Button] Could not delete Firestore doc (may not exist or other issue):`, deleteError);
-             // Continue even if delete fails (might not exist)
-        }
-
-        // 3. Recalculate and save the list using the utility function
-        console.log(`[Update Button] Calling calculation function...`);
-        await calculateAndSaveDailyPrayerList(db, userId, today);
-        console.log(`[Update Button] Calculation function finished successfully.`);
-
-        alert("Today's shared prayer list has been updated based on the current settings.");
-
-    } catch (error) {
-        console.error("[Update Button] Error during update process:", error);
-        setUpdateError("Failed to update today's prayer list. Please try again.");
-        alert("An error occurred while updating the prayer list. Check console for details.");
-    } finally {
-        setIsUpdatingTodaysList(false);
-    }
-  };
 
   // --- New Handler for FAB: Update and Navigate Back ---
   const handleUpdateAndGoBack = async () => {
@@ -1197,8 +1087,135 @@ export default function AssignmentsPage() {
 
   // --- Handlers for Follow-Up Edit/Delete --- 
 
+  // NEW: Handler to open the Add Prayer Request dialog
+  const handleOpenAddRequestDialog = () => {
+    setNewRequestContent(""); // Clear previous content
+    setIsAddingRequest(false); // Reset loading state
+    setIsAddRequestDialogOpen(true);
+  };
+
+  // NEW: Handler to open the Add Follow-Up dialog
+  const handleOpenAddFollowUpDialog = () => {
+    setNewFollowUpContent(""); // Clear previous content
+    setNewFollowUpDueDate(null); // Reset date
+    setIsAddingFollowUp(false); // Reset loading state
+    setIsAddFollowUpDialogOpen(true);
+  };
+
+  // NEW: Handler to submit a new prayer request
+  const handleAddRequestSubmit = async () => {
+    if (!user || !selectedPersonForDetails || !newRequestContent.trim()) {
+      console.error("Missing user, selected person, or request content.");
+      toast.error("Could not add request. Ensure you are logged in and have entered content.");
+      return;
+    }
+
+    setIsAddingRequest(true);
+    const personId = selectedPersonForDetails.id;
+    const personName = selectedPersonForDetails.name;
+
+    try {
+      const requestsRef = collection(db, "persons", personId, "prayerRequests");
+      const newRequestData = {
+        personId: personId,
+        personName: personName, // Denormalize name
+        content: newRequestContent.trim(),
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+        isCompleted: false
+      };
+      const docRef = await addDoc(requestsRef, newRequestData);
+      console.log("New prayer request added with ID:", docRef.id);
+
+      // Optimistic UI Update: Add to local state
+      setPersonPrayerRequests(prev => [
+        ...prev,
+        { 
+          id: docRef.id, 
+          ...newRequestData, 
+          createdAt: Timestamp.fromDate(new Date()) // Use Timestamp for consistency with Firestore
+        } as unknown as PrayerRequest // Cast after conversion for type safety
+      ]);
+
+      toast.success(`Prayer request added for ${personName}`);
+      setIsAddRequestDialogOpen(false); // Close dialog
+
+    } catch (error) {
+      console.error("Error adding prayer request:", error);
+      toast.error("Error adding prayer request", {
+        description: "Could not save the new request. Please try again.",
+      });
+    } finally {
+      setIsAddingRequest(false);
+    }
+  };
+
+  // NEW: Handler to submit a new follow-up
+  const handleAddFollowUpSubmit = async () => {
+    if (!user || !selectedPersonForDetails || !newFollowUpContent.trim() || !newFollowUpDueDate) {
+      console.error("Missing user, selected person, follow-up content, or due date.");
+      toast.error("Could not add follow-up. Ensure all fields are filled.");
+      return;
+    }
+
+    setIsAddingFollowUp(true);
+    const personId = selectedPersonForDetails.id;
+    const personName = selectedPersonForDetails.name;
+
+    try {
+      const followUpsRef = collection(db, "persons", personId, "followUps");
+      const newFollowUpData = {
+        personId: personId,
+        personName: personName, // Denormalize name
+        content: newFollowUpContent.trim(),
+        dueDate: Timestamp.fromDate(newFollowUpDueDate), // Convert JS Date to Firestore Timestamp
+        completed: false,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+      };
+      const docRef = await addDoc(followUpsRef, newFollowUpData);
+      console.log("New follow-up added with ID:", docRef.id);
+
+      // Optimistic UI Update: Add to local state
+      const timestamp = Timestamp.fromDate(newFollowUpDueDate);
+      setPersonFollowUps(prev => [
+        ...prev,
+        { 
+          id: docRef.id, 
+          ...newFollowUpData, 
+          // Use Timestamp for consistency with Firestore
+          dueDate: timestamp,
+          createdAt: Timestamp.fromDate(new Date())
+        } as unknown as FollowUp // Cast after conversion for type safety
+      ].sort((a, b) => {
+        // Safe timestamp comparison
+        const dateA = a.dueDate instanceof Timestamp ? a.dueDate.toMillis() : 0;
+        const dateB = b.dueDate instanceof Timestamp ? b.dueDate.toMillis() : 0;
+        return dateA - dateB;
+      })); // Keep sorted
+
+      toast.success(`Follow-up added for ${personName}`);
+      setIsAddFollowUpDialogOpen(false); // Close dialog
+
+    } catch (error) {
+      console.error("Error adding follow-up:", error);
+      toast.error("Error adding follow-up", {
+        description: "Could not save the new follow-up. Please try again.",
+      });
+    } finally {
+      setIsAddingFollowUp(false);
+    }
+  };
+
+  // --- Handlers for Follow-Up Edit/Delete --- 
+
+  // NEW: Implement the save handler for follow-up edits
   const handleSaveFollowUpEdit = async () => {
-    if (!followUpToEdit || !editingFollowUpContent.trim() || !user || !selectedPersonForDetails) return;
+    if (!followUpToEdit || !editingFollowUpContent.trim() || !user || !selectedPersonForDetails) {
+      console.error("Missing data for follow-up edit save.");
+      toast.error("Could not save follow-up edit. Please try again.");
+      return;
+    }
 
     setIsSavingFollowUpEdit(true);
     const docRef = doc(db, "persons", selectedPersonForDetails.id, "followUps", followUpToEdit.id);
@@ -1206,17 +1223,24 @@ export default function AssignmentsPage() {
     try {
       await updateDoc(docRef, {
         content: editingFollowUpContent.trim(),
-        // TODO: Add logic here if editing dueDate is implemented
+        // Add updatedAt timestamp if needed for tracking edits, otherwise optional
+        updatedAt: serverTimestamp() 
       });
 
       // Update local state
-      setPersonFollowUps(prev => prev.map(fu => 
-        fu.id === followUpToEdit.id ? { ...fu, content: editingFollowUpContent.trim() } : fu
-      ));
+      setPersonFollowUps(prev => 
+        prev.map(fu => 
+          fu.id === followUpToEdit.id ? { ...fu, content: editingFollowUpContent.trim() } : fu
+        ).sort((a, b) => { // Keep sorted by due date
+           const dateA = a.dueDate instanceof Timestamp ? a.dueDate.toMillis() : 0;
+           const dateB = b.dueDate instanceof Timestamp ? b.dueDate.toMillis() : 0;
+           return dateA - dateB;
+        })
+      );
 
       toast.success("Follow-up updated.");
       setIsEditFollowUpDialogOpen(false);
-      setFollowUpToEdit(null);
+      setFollowUpToEdit(null); // Clear the state after successful save
 
     } catch (err) {
       console.error("Error updating follow-up:", err);
@@ -1226,8 +1250,13 @@ export default function AssignmentsPage() {
     }
   };
 
+  // NEW: Implement the delete handler for follow-ups
   const handleConfirmDeleteFollowUp = async () => {
-    if (!followUpToDelete || !user || !selectedPersonForDetails) return;
+    if (!followUpToDelete || !user || !selectedPersonForDetails) {
+        console.error("Missing data for follow-up delete.");
+        toast.error("Could not delete follow-up. Please try again.");
+        return;
+    }
 
     setIsDeletingFollowUp(true);
     const docRef = doc(db, "persons", selectedPersonForDetails.id, "followUps", followUpToDelete.id);
@@ -1240,7 +1269,7 @@ export default function AssignmentsPage() {
 
       toast.success("Follow-up deleted.");
       setIsDeleteFollowUpConfirmOpen(false);
-      setFollowUpToDelete(null);
+      setFollowUpToDelete(null); // Clear the state after successful delete
 
     } catch (err) {
       console.error("Error deleting follow-up:", err);
@@ -1464,7 +1493,6 @@ export default function AssignmentsPage() {
                       {groups.map((group) => {
                         // Prepare props for the consolidated card
                         const peopleInGroup = getPeopleInGroup(group.id);
-                        const isExpanded = expandedGroupIds.includes(group.id);
                         const currentNumSetting = localNumPerDaySettings[group.id];
                         const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
                         const groupSize = group.personIds?.length ?? 0;
@@ -1889,12 +1917,12 @@ export default function AssignmentsPage() {
       <Dialog open={isPersonDetailsModalOpen} onOpenChange={setIsPersonDetailsModalOpen}>
         <DialogContent className="sm:max-w-[425px] md:max-w-[600px]">
           <DialogHeader>
-            {/* Only show the person's name */}
-            <DialogTitle>{selectedPersonForDetails?.name}</DialogTitle>
-            {/* Remove the description */}
-            {/* <DialogDescription>
-              Prayer requests and follow-ups associated with this person.
-            </DialogDescription> */}
+            {/* Flex container for Title and Add Button - REMOVE BUTTON FROM HERE */}
+            {/* <div className="flex justify-between items-center"> */}
+              <DialogTitle>{selectedPersonForDetails?.name}</DialogTitle>
+              {/* Conditional Add New Button moved to header - REMOVED */}
+              {/* <Button size="sm" ...> ... </Button> */}
+            {/* </div> */}
           </DialogHeader>
           <div className="py-4 max-h-[60vh] overflow-y-auto">
             {isLoadingPersonDetails ? (
@@ -1904,15 +1932,22 @@ export default function AssignmentsPage() {
             ) : personDetailsError ? (
               <p className="text-sm text-center text-destructive">{personDetailsError}</p>
             ) : (
-              <Tabs defaultValue="requests" className="w-full">
+              <Tabs 
+                defaultValue="requests" 
+                className="w-full"
+                onValueChange={(value) => setActiveDetailsTab(value as 'requests' | 'followups')} // Update active tab state
+               >
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="requests">Prayer Requests</TabsTrigger>
                   <TabsTrigger value="followups">Follow-Ups</TabsTrigger>
                 </TabsList>
-                <TabsContent value="requests" className="mt-4">
-                  {/* Prayer Requests Section */}
+                <TabsContent value="requests" className="mt-4 space-y-4"> {/* Added space-y-4 */}
+                  {/* Add New Prayer Request Button - REMOVED FROM HERE */}
+                   {/* <div className="flex justify-end"> ... </div> */}
+                  {/* Prayer Requests List */}
                    {personPrayerRequests.length > 0 ? (
                      <ul className="space-y-2 list-disc pl-5">
+                       {/* ... existing request mapping ... */}
                        {personPrayerRequests.map(req => (
                          <li key={req.id} className="text-sm text-muted-foreground flex justify-between items-start group">
                            {/* Request Content and Date */}
@@ -1920,20 +1955,21 @@ export default function AssignmentsPage() {
                              {req.content} 
                              <span className="text-xs ml-2 block text-gray-500">({req.createdAt instanceof Timestamp ? req.createdAt.toDate().toLocaleDateString() : 'Date N/A'})</span>
                            </div>
-                           {/* Edit/Delete Trigger - initially hidden, shows on hover/focus */}
+                           {/* Edit/Delete Trigger */}
                            <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                             {/* ... existing dropdown ... */}
                              <DropdownMenu>
                                <DropdownMenuTrigger asChild>
-                                 <Button variant="ghost" className="h-6 w-6">
+                                 <Button variant="ghost" className="h-6 w-6 p-0"> {/* Adjusted size/padding */}
                                     <MoreVertical className="h-4 w-4" />
                                     <span className="sr-only">Actions</span>
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Edit Dialog */ setRequestToEdit(req); setEditingRequestContent(req.content); setIsEditRequestDialogOpen(true); }}>
+                                  <DropdownMenuItem onSelect={() => { setRequestToEdit(req); setEditingRequestContent(req.content); setIsEditRequestDialogOpen(true); }}>
                                      <Edit className="mr-2 h-4 w-4" /> Edit
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Delete Confirm */ setRequestToDelete(req); setIsDeleteRequestConfirmOpen(true); }} className="text-destructive">
+                                  <DropdownMenuItem onSelect={() => { setRequestToDelete(req); setIsDeleteRequestConfirmOpen(true); }} className="text-destructive">
                                      <Trash2 className="mr-2 h-4 w-4" /> Delete
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -1946,50 +1982,154 @@ export default function AssignmentsPage() {
                      <p className="text-sm text-center text-muted-foreground italic py-4">No prayer requests found.</p>
                    )}
                 </TabsContent>
-                <TabsContent value="followups" className="mt-4">
-                  {/* Follow Ups Section */}
-                   {personFollowUps.length > 0 ? (
-                     <ul className="space-y-2 list-disc pl-5">
-                       {personFollowUps.map(fu => (
-                         <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
-                           {/* Follow-Up Content and Details */}
-                           <div className="flex-1 mr-2">
-                             {fu.content} 
-                             <span className="text-xs ml-2 block text-gray-500"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
-                           </div>
-                           {/* Edit/Delete Trigger */}
-                           <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-6 w-6">
-                                    <MoreVertical className="h-4 w-4" />
-                                    <span className="sr-only">Actions</span>
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Edit */ setFollowUpToEdit(fu); setEditingFollowUpContent(fu.content); setIsEditFollowUpDialogOpen(true); }}>
-                                    <Edit className="mr-2 h-4 w-4" /> Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => { /* TODO: Open Delete */ setFollowUpToDelete(fu); setIsDeleteFollowUpConfirmOpen(true); }} className="text-destructive">
-                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                           </div>
-                         </li>
-                       ))}
-                     </ul>
-                   ) : (
-                     <p className="text-sm text-center text-muted-foreground italic py-4">No follow-ups found.</p>
-                   )}
+                <TabsContent value="followups" className="mt-4 space-y-4"> {/* Added space-y-4 */}
+                   {/* Add New Follow-Up Button - REMOVED FROM HERE */}
+                    {/* <div className="flex justify-end"> ... </div> */}
+                   {/* Follow Ups List */}
+                    {personFollowUps.length > 0 ? (
+                      <ul className="space-y-2 list-disc pl-5">
+                        {/* ... existing follow-up mapping ... */}
+                        {personFollowUps.map(fu => (
+                          <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
+                            {/* Follow-Up Content and Details */}
+                            <div className="flex-1 mr-2">
+                              {fu.content} 
+                              <span className="text-xs ml-2 block text-gray-500"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
+                            </div>
+                            {/* Edit/Delete Trigger */}
+                            <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                              {/* ... existing dropdown ... */}
+                               <DropdownMenu>
+                                 <DropdownMenuTrigger asChild>
+                                   <Button variant="ghost" className="h-6 w-6 p-0"> {/* Adjusted size/padding */}
+                                     <MoreVertical className="h-4 w-4" />
+                                     <span className="sr-only">Actions</span>
+                                   </Button>
+                                 </DropdownMenuTrigger>
+                                 <DropdownMenuContent align="end">
+                                   <DropdownMenuItem onSelect={() => { setFollowUpToEdit(fu); setEditingFollowUpContent(fu.content); setIsEditFollowUpDialogOpen(true); }}>
+                                     <Edit className="mr-2 h-4 w-4" /> Edit
+                                   </DropdownMenuItem>
+                                   <DropdownMenuItem onSelect={() => { setFollowUpToDelete(fu); setIsDeleteFollowUpConfirmOpen(true); }} className="text-destructive">
+                                     <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                   </DropdownMenuItem>
+                                 </DropdownMenuContent>
+                               </DropdownMenu>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-center text-muted-foreground italic py-4">No follow-ups found.</p>
+                    )}
                 </TabsContent>
               </Tabs>
             )}
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline">Close</Button>
+              <Button type="button" variant="outline">Close</Button> 
             </DialogClose>
+            {/* Conditional Add New Button moved to footer, after Close */}
+            <Button 
+              size="sm" 
+              className="bg-shrub hover:bg-shrub/90 gap-1"
+              onClick={() => {
+                if (activeDetailsTab === 'requests') {
+                  handleOpenAddRequestDialog();
+                } else {
+                  handleOpenAddFollowUpDialog();
+                }
+              }}
+            >
+              <Plus className="h-4 w-4" /> Add New
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Add Prayer Request Dialog --- */}
+      <Dialog open={isAddRequestDialogOpen} onOpenChange={setIsAddRequestDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Prayer Request for {selectedPersonForDetails?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="new-request-content" className="sr-only">Prayer Request</Label>
+            <Textarea
+              id="new-request-content"
+              value={newRequestContent}
+              onChange={(e) => setNewRequestContent(e.target.value)}
+              placeholder="Enter prayer request details..."
+              rows={4}
+              disabled={isAddingRequest}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isAddingRequest}>Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleAddRequestSubmit} disabled={isAddingRequest || !newRequestContent.trim()}>
+              {isAddingRequest ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Add Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Add Follow-Up Dialog --- */}
+      <Dialog open={isAddFollowUpDialogOpen} onOpenChange={setIsAddFollowUpDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Follow-Up for {selectedPersonForDetails?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="new-followup-content">Follow-Up Details</Label>
+              <Textarea
+                id="new-followup-content"
+                value={newFollowUpContent}
+                onChange={(e) => setNewFollowUpContent(e.target.value)}
+                placeholder="Enter follow-up details..."
+                rows={3}
+                disabled={isAddingFollowUp}
+              />
+            </div>
+            <div>
+                <Label htmlFor="new-followup-date">Due Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !newFollowUpDueDate && "text-muted-foreground"
+                      )}
+                      disabled={isAddingFollowUp}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {newFollowUpDueDate ? format(newFollowUpDueDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={newFollowUpDueDate ?? undefined}
+                      onSelect={(date) => setNewFollowUpDueDate(date ?? null)} // Handle undefined from onSelect
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isAddingFollowUp}>Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleAddFollowUpSubmit} disabled={isAddingFollowUp || !newFollowUpContent.trim() || !newFollowUpDueDate}>
+              {isAddingFollowUp ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Add Follow-Up
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2028,9 +2168,12 @@ export default function AssignmentsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the prayer request:
-              <p className="italic mt-2 text-sm text-muted-foreground">{requestToDelete?.content}</p>
+            {/* Use asChild to prevent extra <p> wrapper */}
+            <AlertDialogDescription asChild>
+              <div> {/* Outer div for structure */}
+                This action cannot be undone. This will permanently delete the prayer request:
+                <div className="italic mt-2 text-sm text-muted-foreground">{requestToDelete?.content}</div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2047,14 +2190,20 @@ export default function AssignmentsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Follow-Up Dialog */}
+      {/* Follow-Up Edit/Delete Dialogs */}
       <Dialog open={isEditFollowUpDialogOpen} onOpenChange={setIsEditFollowUpDialogOpen}>
-        <DialogContent>
+         {/* Note: Save button onClick points to currently unused handleSaveFollowUpEdit */}
+         {/* Note: Requires followUpToEdit state which was removed */}
+         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Follow-Up</DialogTitle>
+            {/* Need followUpToEdit to display title properly */}
+            {/* <DialogTitle>Edit Follow-Up for {followUpToEdit?.name}</DialogTitle> */}
+            <DialogTitle>Edit Follow-Up for {selectedPersonForDetails?.name}</DialogTitle> 
           </DialogHeader>
           <div className="py-4">
+            <Label htmlFor="edit-followup-content" className="sr-only">Follow-Up Details</Label>
             <Textarea 
+              id="edit-followup-content" // Add id and associate label
               value={editingFollowUpContent}
               onChange={(e) => setEditingFollowUpContent(e.target.value)}
               placeholder="Enter follow-up details..."
@@ -2066,34 +2215,33 @@ export default function AssignmentsPage() {
             <DialogClose asChild>
               <Button variant="outline" disabled={isSavingFollowUpEdit}>Cancel</Button>
             </DialogClose>
-            <Button onClick={() => {
-              setIsEditFollowUpDialogOpen(false);
-              setIsSavingFollowUpEdit(false);
-            }} disabled={isSavingFollowUpEdit || !editingFollowUpContent.trim()}>
+            {/* Connect Save button to the new handler */}
+            <Button onClick={handleSaveFollowUpEdit} disabled={isSavingFollowUpEdit || !editingFollowUpContent.trim()}>
               {isSavingFollowUpEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
               Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Delete Follow-Up Confirmation Dialog */}
       <AlertDialog open={isDeleteFollowUpConfirmOpen} onOpenChange={setIsDeleteFollowUpConfirmOpen}>
-        <AlertDialogContent>
+         {/* Note: Confirm button onClick points to currently unused handleConfirmDeleteFollowUp */}
+         {/* Note: Requires followUpToDelete state */}
+         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the follow-up:
-              <p className="italic mt-2 text-sm text-muted-foreground">{followUpToDelete?.content}</p>
+            {/* Use asChild to prevent extra <p> wrapper */}
+            <AlertDialogDescription asChild>
+              <div> {/* Outer div for structure */}
+                This action cannot be undone. This will permanently delete the follow-up:
+                <div className="italic mt-2 text-sm text-muted-foreground">{followUpToDelete?.content}</div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeletingFollowUp}>Cancel</AlertDialogCancel>
+            {/* Connect Confirm button to the new handler */}
             <AlertDialogAction 
-              onClick={() => {
-                setIsDeleteFollowUpConfirmOpen(false);
-                setIsDeletingFollowUp(false);
-              }}
+              onClick={handleConfirmDeleteFollowUp}
               disabled={isDeletingFollowUp}
               className="bg-destructive hover:bg-destructive/90"
             >
