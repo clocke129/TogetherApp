@@ -1324,7 +1324,8 @@ export default function AssignmentsPage() {
         </div>
         {/* Right side: Back to Prayer Button */}
         <div className="flex items-center gap-2">
-            <Button 
+            {/* Comment out the Update button */}
+            {/* <Button 
                variant="default"
                size="sm" 
                onClick={handleUpdateAndGoBack} 
@@ -1332,7 +1333,7 @@ export default function AssignmentsPage() {
             >
                {isUpdatingAndReturning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                {isUpdatingAndReturning ? "Returning..." : "Update"}
-            </Button>
+            </Button> */}
         </div>
       </div>
 
