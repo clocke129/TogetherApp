@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import TextareaAutosize from 'react-textarea-autosize'
 import { Badge } from "@/components/ui/badge"
-import { User, Calendar, Maximize2, Minimize2, Eye, Edit, Save } from "lucide-react"
+import { User, Calendar, Maximize2, Minimize2, Eye, Edit, Save, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useMobile } from "@/hooks/use-mobile"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -16,6 +16,8 @@ import { collection, addDoc, serverTimestamp, doc, writeBatch, query, where, get
 import { useAuth } from "@/context/AuthContext"
 import { db } from "@/lib/firebaseConfig"
 import { cn } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { toast } from "sonner"
 
 // Types for our data models
 type Person = {
@@ -54,6 +56,7 @@ export default function NotesPage() {
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor")
   const [isSaving, setIsSaving] = useState(false)
   const [existingPersons, setExistingPersons] = useState<ExistingPerson[]>([]) // State for existing persons
+  const [saveError, setSaveError] = useState<string | null>(null) // State for save errors
 
   // State for the formatted current date
   const [currentDateString, setCurrentDateString] = useState(() => {
@@ -285,104 +288,130 @@ export default function NotesPage() {
     setActiveTab(activeTab === "editor" ? "preview" : "editor")
   }
 
-  // --- Restore Original Save Notes Functionality --- //
+  // Save the parsed data to Firestore
   const handleSaveNotes = async () => {
     if (!user) {
-      alert("Please log in to save notes.");
+      console.error("User not logged in. Cannot save notes.")
+      setSaveError("You must be logged in to save notes.");
       return;
     }
-    // Check if there is actually parsed data from the notes
     if (parsedData.length === 0) {
-      alert("No prayer requests or follow-ups found in the notes to save.");
-      return;
+        toast.info("Nothing to save", {
+            description: "Your note is empty or doesn't contain any @mentions.",
+        });
+        return; // Don\'t attempt to save if nothing is parsed
     }
 
-    setIsSaving(true);
-    console.log("Starting batch write for parsed notes...");
-    const batch = writeBatch(db);
-    const personsRef = collection(db, "persons");
+    setIsSaving(true)
+    setSaveError(null); // Clear previous errors
+    console.log("Starting save process for user:", user.uid);
+    console.log("Data to save:", parsedData);
+
+    // Check for existing persons in Firestore BEFORE batching
+    const personNameChecks = parsedData.map(async (personData) => {
+      const personsRef = collection(db, "persons");
+      const q = query(personsRef, where("name", "==", personData.name), where("createdBy", "==", user.uid));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        // Person exists, use existing ID
+        const existingDoc = querySnapshot.docs[0];
+        console.log(`Person '${personData.name}' already exists with ID: ${existingDoc.id}`);
+        return { ...personData, id: existingDoc.id, isExisting: true };
+      } else {
+        // Person is new
+        console.log(`Person '${personData.name}' is new.`);
+        return { ...personData, isExisting: false };
+      }
+    });
 
     try {
-      // --- Original Batch Logic (Uncommented) --- 
-      for (const person of parsedData) {
+      const resolvedPeopleData = await Promise.all(personNameChecks);
+      console.log("Resolved people data (with existing check):", resolvedPeopleData);
+
+      const batch = writeBatch(db);
+      const successfullySavedNames: string[] = []; // Track names for toast
+
+      for (const personData of resolvedPeopleData) {
+        let personId = personData.id; // Use existing ID if found
+
+        // 1. Create or Get Person document reference
         let personRef;
-        console.log(`Processing person: ${person.name}`);
-
-        // Check if person already exists for this user
-        const q = query(
-          personsRef,
-          where("name", "==", person.name),
-          where("createdBy", "==", user.uid)
-        );
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-          // Person exists, use the existing document reference
-          personRef = querySnapshot.docs[0].ref;
-          console.log(`Found existing person: ${person.name} (ID: ${personRef.id})`);
+        if (personData.isExisting) {
+          personRef = doc(db, "persons", personId);
+          // No need to create/set person data if they already exist
+          console.log(`Using existing person ref for '${personData.name}' (ID: ${personId})`);
         } else {
-          // Person does not exist, create a new document reference and add set operation
-          personRef = doc(personsRef); // Generate new ID
+          // Create a new person document ONLY IF they don\'t exist
+          personRef = doc(collection(db, "persons")); // Generate new ID client-side
+          personId = personRef.id; // Update personId with the new ID
           batch.set(personRef, {
-            name: person.name,
+            name: personData.name,
             createdBy: user.uid,
             createdAt: serverTimestamp(),
-            // groupIds: [], // Initialize if needed
           });
-          console.log(`Creating new person: ${person.name} (New ID: ${personRef.id})`);
+          console.log(`Creating new person '${personData.name}' with ID: ${personId}`);
         }
 
-        // Add prayer requests to subcollection
-        if (person.prayerRequests.length > 0) {
-          const requestsRef = collection(personRef, "prayerRequests");
-          person.prayerRequests.forEach((request) => {
-            const newRequestRef = doc(requestsRef);
-            batch.set(newRequestRef, {
-              content: request.content,
-              createdAt: serverTimestamp(),
-              createdBy: user.uid,
-              personId: personRef.id, // Store parent person ID for potential denormalization/queries
-              // prayedForDates: [] // Initialize if needed
-            });
+        // 2. Add Prayer Requests for this person
+        personData.prayerRequests.forEach((request: PrayerRequest) => {
+          const requestRef = doc(collection(db, "persons", personId, "prayerRequests"));
+          batch.set(requestRef, {
+            personId: personId, // Link back to the person
+            personName: personData.name, // Denormalize name for easier querying later?
+            content: request.content,
+            createdAt: serverTimestamp(), // Use server timestamp
+            createdBy: user.uid, // Track who created it
+            isCompleted: false // Default completion status
           });
-          console.log(`Adding ${person.prayerRequests.length} request(s) for ${person.name}`);
-        }
+          console.log(`Batching prayer request for ${personData.name}: "${request.content.substring(0, 20)}..."`);
+        });
 
-        // Add follow-ups to subcollection
-        if (person.followUps.length > 0) {
-          const followUpsRef = collection(personRef, "followUps");
-          person.followUps.forEach((followUp) => {
-            const newFollowUpRef = doc(followUpsRef);
-            batch.set(newFollowUpRef, {
-              content: followUp.content,
-              dueDate: Timestamp.fromDate(followUp.dueDate), // Convert JS Date to Firestore Timestamp
-              completed: followUp.completed,
-              createdBy: user.uid,
-              personId: personRef.id, // Store parent person ID
-              // isRecurring, recurringPattern if needed
-            });
+        // 3. Add Follow-Ups for this person
+        personData.followUps.forEach((followUp: FollowUp) => {
+          const followUpRef = doc(collection(db, "persons", personId, "followUps"));
+          batch.set(followUpRef, {
+            personId: personId, // Link back to the person
+            personName: personData.name, // Denormalize name
+            content: followUp.content,
+            dueDate: Timestamp.fromDate(followUp.dueDate), // Convert JS Date to Firestore Timestamp
+            completed: followUp.completed,
+            createdAt: serverTimestamp(), // Track creation time
+            createdBy: user.uid, // Track who created it
           });
-          console.log(`Adding ${person.followUps.length} follow-up(s) for ${person.name}`);
-        }
+           console.log(`Batching follow-up for ${personData.name} due ${followUp.dueDate.toISOString().split('T')[0]}: "${followUp.content.substring(0, 20)}..."`);
+        });
+
+        successfullySavedNames.push(personData.name); // Add name to success list
       }
-      // --- End Original Batch Logic --- 
 
-      // Commit all operations in the batch
-      console.log("Committing batch...");
+      // Commit the batch
       await batch.commit();
       console.log("Batch commit successful!");
-      alert("Notes saved successfully!");
-      setText(""); // Clear the textarea on successful save
-      setParsedData([]); // Clear the parsed data as well
+
+      // Show success toast
+      toast.success("Notes saved successfully!", {
+          description: `Saved requests/follow-ups for: ${successfullySavedNames.join(", ")}.`,
+          // action: { // Optional: Add action if needed
+          //   label: "View",
+          //   onClick: () => router.push('/prayer') // Or navigate somewhere else
+          // },
+      });
+
+      // Clear the text area after successful save
+      setText("");
+      setParsedData([]); // Clear parsed data as well
 
     } catch (error) {
-      console.error("Error saving notes: ", error);
-      alert("An error occurred while saving notes. Please check the console.");
+      console.error("Error saving notes:", error);
+      setSaveError("An error occurred while saving. Please try again.");
+      // Show error toast
+      toast.error("Error Saving Notes", {
+          description: "Could not save your prayer requests. Please check your connection and try again.",
+      });
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
-  };
-  // --- End Save Notes Functionality --- //
+  }
 
   // Render the editor component - Added isMobileView prop
   const renderEditor = (isMobileView: boolean) => {
@@ -521,37 +550,91 @@ Use #MMDD for follow-up dates.`}
 
   // Render desktop layout
   const renderDesktopLayout = () => (
-    <div className="grid gap-4 md:gap-6 md:grid-cols-2">
-      {renderEditor(false)} {/* Pass false for desktop */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Preview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {renderPreview()}
-        </CardContent>
-      </Card>
-    </div>
+    <>
+      {/* Title and Date */}
+      <div className="mb-4 md:mb-6">
+        <h1 className="page-title">Notes</h1>
+        <p className="text-muted-foreground">{currentDateString}</p>
+      </div>
+
+      {/* Desktop: Side-by-side Editor and Preview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {renderEditor(false)}
+        {renderPreview()}
+      </div>
+
+      {/* Floating Action Button for Save */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+             <Button
+                className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-10 bg-shrub hover:bg-shrub/90"
+                size="icon"
+                onClick={handleSaveNotes}
+                disabled={isSaving || parsedData.length === 0}
+             >
+               {isSaving ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
+               <span className="sr-only">Save Note</span>
+             </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Save Note</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </>
   )
 
   // Render mobile layout (FIRST DEFINITION - KEEP THIS ONE)
   const renderMobileLayout = () => (
-     <div className="flex flex-col h-[calc(100vh-10rem)]">
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "editor" | "preview")} className="flex-1 flex flex-col">
-        <div className="p-4 border-b">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="editor">Editor</TabsTrigger>
-                <TabsTrigger value="preview">Preview</TabsTrigger>
-            </TabsList>
+    <>
+      {/* Title and Date */}
+      <div className="mb-4 md:mb-6 flex items-center justify-between">
+        <div className="flex flex-col">
+          <h1 className="page-title">Notes</h1>
+          <p className="text-muted-foreground">{currentDateString}</p>
         </div>
-        <TabsContent value="editor" className="flex-1 overflow-auto p-4">
-          {renderEditor(true)} {/* Pass true for mobile */}
+        {/* Removed original Save Button */}
+      </div>
+
+      {/* Mobile: Tabs for Editor and Preview */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "editor" | "preview")} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="editor">
+            <Edit className="mr-2 h-4 w-4" /> Editor
+          </TabsTrigger>
+          <TabsTrigger value="preview">
+            <Eye className="mr-2 h-4 w-4" /> Preview
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="editor" className="mt-4">
+          {renderEditor(true)}
         </TabsContent>
-        <TabsContent value="preview" className="flex-1 overflow-auto p-4">
+        <TabsContent value="preview" className="mt-4">
           {renderPreview()}
         </TabsContent>
       </Tabs>
-    </div>
+
+       {/* Floating Action Button for Save (same as desktop) */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+             <Button
+                className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-10 bg-shrub hover:bg-shrub/90"
+                size="icon"
+                onClick={handleSaveNotes}
+                disabled={isSaving || parsedData.length === 0}
+             >
+               {isSaving ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
+               <span className="sr-only">Save Note</span>
+             </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Save Note</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </>
   )
 
   // Loading State (Only need auth loading here, no data fetch on initial render)
@@ -587,58 +670,13 @@ Use #MMDD for follow-up dates.`}
   // Logged In State (Original Return Content)
   return (
     <div className="mobile-container pb-16 md:pb-6">
-      {/* Consistent Header */}
-      <div className="mb-4 md:mb-6 flex items-center justify-between">
-        <div className="flex flex-col">
-          <h1 className="page-title">Notes</h1>
-          <p className="text-muted-foreground">{currentDateString}</p>
-        </div>
-        <Button onClick={handleSaveNotes} disabled={isSaving} size="sm">
-           {/* Restore Save button content */}
-           {isSaving ? (
-               <>Saving...</>
-           ) : (
-               <><Save className="mr-2 h-4 w-4" /> Save Note</>
-           )}
-        </Button>
-      </div>
-
-      {/* Main Content */}
       {isMobile ? renderMobileLayout() : renderDesktopLayout()}
-
-      {/* <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>
-        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0">
-          <VisuallyHidden>
-            <DialogTitle>Fullscreen Note Editor</DialogTitle>
-          </VisuallyHidden>
-          <div className="flex flex-col h-full">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">Note Editor (Fullscreen)</h2>
-              <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(false)} className="h-8 w-8 p-0">
-                <Minimize2 className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="relative flex-1 p-4">
-              <TextareaAutosize
-                value={text}
-                onChange={handleTextChange}
-                placeholder="Start typing... Use @name for people and #MMDD for follow-up dates"
-                className="w-full resize-none appearance-none overflow-hidden bg-transparent focus:outline-none focus:ring-0 border-0 p-0 font-mono min-h-[calc(90vh-120px)]"
-              />
-            </div>
-            <div className="p-4 border-t flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setIsFullscreen(false)}>Cancel</Button>
-              <Button onClick={handleSaveNotes} disabled={isSaving}>
-                {isSaving ? (
-                    <>Saving...</>
-                ) : (
-                    <><Save className="mr-2 h-4 w-4" /> Save Note & Close</>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog> */}
+       {/* Display save error message */}
+       {saveError && (
+         <div className="mt-4 p-3 rounded-md border border-destructive bg-destructive/10 text-destructive text-sm">
+           {saveError}
+         </div>
+       )}
     </div>
   )
 }
