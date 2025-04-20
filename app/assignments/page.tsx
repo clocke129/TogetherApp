@@ -1951,9 +1951,9 @@ export default function AssignmentsPage() {
                        {/* ... existing request mapping ... */}
                        {personPrayerRequests.map(req => (
                          <li key={req.id} className="text-sm text-muted-foreground flex justify-between items-start group">
-                           {/* Request Content and Date */}
-                           <div className="flex-1 mr-2">
-                             {req.content} 
+                           {/* Request Content and Date - Apply whitespace-pre-wrap */}
+                           <div className="flex-1 mr-2 whitespace-pre-wrap">
+                             {req.content}\
                              <span className="text-xs ml-2 block text-gray-500">({req.createdAt instanceof Timestamp ? req.createdAt.toDate().toLocaleDateString() : 'Date N/A'})</span>
                            </div>
                            {/* Edit/Delete Trigger */}

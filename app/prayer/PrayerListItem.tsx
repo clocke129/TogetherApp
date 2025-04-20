@@ -139,14 +139,8 @@ export function PrayerListItem({
                 ) : expandedRequests.length === 1 ? (
                   // SCENARIO 1: Single Request (potentially multi-line/consolidated)
                   <div>
-                    {/* Split multi-line content and join with comma + space */}
-                    <p className="text-sm">
-                      {expandedRequests[0].content
-                        .split('\n')
-                        .filter(line => line.trim() !== '') // Remove empty lines
-                        .join(', ') // Join with comma and space
-                       }
-                    </p>
+                    {/* Render content preserving whitespace */}
+                    <p className="text-sm whitespace-pre-wrap">{expandedRequests[0].content}</p>
                     <div className="flex items-center text-xs text-muted-foreground pt-1">
                        <span className="flex items-center flex-shrink-0">
                          <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
@@ -160,8 +154,8 @@ export function PrayerListItem({
                     <ul className="space-y-1">
                       {expandedRequests.slice(0, 3).map((req) => (
                         <li key={req.id} className="text-xs py-1 flex justify-between items-start gap-4">
-                          {/* Restore bullet point and content display */}
-                          <p className="text-foreground flex-1"><span className="mr-2">•</span>{req.content}</p>
+                          {/* Restore bullet point and content display, preserve whitespace */}
+                          <p className="text-foreground flex-1 whitespace-pre-wrap"><span className="mr-2">•</span>{req.content}</p>
                           {/* Restore side-aligned date */}
                           <span className="flex items-center text-muted-foreground flex-shrink-0">
                             <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
