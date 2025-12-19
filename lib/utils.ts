@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { db } from "@/lib/firebaseConfig" // Import db instance
-import { collection, query, where, getDocs, getDoc, doc, Timestamp, writeBatch, setDoc, serverTimestamp, type Firestore } from 'firebase/firestore' // Import Firestore types/functions
+import { collection, query, where, getDocs, getDoc, doc, Timestamp, writeBatch, setDoc, addDoc, serverTimestamp, type Firestore } from 'firebase/firestore' // Import Firestore types/functions
 import type { Group } from '@/lib/types' // Import Group type
 
 export function cn(...inputs: ClassValue[]) {
@@ -173,41 +173,41 @@ export async function ensureEveryoneGroup(
     db: Firestore,
     userId: string
 ): Promise<void> {
-    const everyoneGroupId = "__everyone__";
-    const everyoneRef = doc(db, "groups", everyoneGroupId);
-
     try {
-        const everyoneSnap = await getDoc(everyoneRef);
+        console.log(`[ensureEveryoneGroup] Checking for Everyone group for user ${userId}...`);
 
-        if (!everyoneSnap.exists()) {
-            console.log(`[ensureEveryoneGroup] Creating Everyone group for user ${userId}...`);
+        // Query for existing Everyone group for this user
+        const groupsQuery = query(
+            collection(db, "groups"),
+            where("createdBy", "==", userId),
+            where("isSystemGroup", "==", true)
+        );
+        const groupsSnapshot = await getDocs(groupsQuery);
 
-            await setDoc(everyoneRef, {
-                id: everyoneGroupId,
-                name: "Everyone",
-                createdBy: userId,
-                personIds: [], // Always empty - computed dynamically from people with no groupId
-                prayerDays: [0, 1, 2, 3, 4, 5, 6], // All days (editable by user)
-                prayerSettings: {
-                    strategy: "sequential" as const,
-                    numPerDay: 3, // Default to 3 people per day (editable by user)
-                    nextIndex: 0 // Start rotation at index 0
-                },
-                createdAt: serverTimestamp(),
-                order: -1, // Always display first in group lists
-                isSystemGroup: true // Prevent deletion
-            });
-
-            console.log(`[ensureEveryoneGroup] Everyone group created successfully.`);
-        } else {
-            // Group already exists, verify it belongs to this user
-            const data = everyoneSnap.data();
-            if (data.createdBy !== userId) {
-                console.warn(`[ensureEveryoneGroup] Everyone group exists but belongs to different user. This shouldn't happen.`);
-            } else {
-                console.log(`[ensureEveryoneGroup] Everyone group already exists for user ${userId}.`);
-            }
+        if (!groupsSnapshot.empty) {
+            console.log(`[ensureEveryoneGroup] Everyone group already exists for user ${userId}.`);
+            return;
         }
+
+        console.log(`[ensureEveryoneGroup] Creating Everyone group for user ${userId}...`);
+
+        // Create with auto-generated ID
+        await addDoc(collection(db, "groups"), {
+            name: "Everyone",
+            createdBy: userId,
+            personIds: [], // Always empty - computed dynamically from people with no groupId
+            prayerDays: [0, 1, 2, 3, 4, 5, 6], // All days (editable by user)
+            prayerSettings: {
+                strategy: "sequential" as const,
+                numPerDay: 3, // Default to 3 people per day (editable by user)
+                nextIndex: 0 // Start rotation at index 0
+            },
+            createdAt: serverTimestamp(),
+            order: -1, // Always display first in group lists
+            isSystemGroup: true // Prevent deletion
+        });
+
+        console.log(`[ensureEveryoneGroup] Everyone group created successfully.`);
     } catch (error) {
         console.error(`[ensureEveryoneGroup] Error ensuring Everyone group:`, error);
         throw error; // Re-throw so caller can handle
