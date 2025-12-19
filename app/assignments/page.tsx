@@ -1327,18 +1327,17 @@ export default function AssignmentsPage() {
           <h1 className="page-title">People</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
-        {/* Right side: Back to Prayer Button */}
+        {/* Right side: Add Group Button */}
         <div className="flex items-center gap-2">
-            {/* Comment out the Update button */}
-            {/* <Button 
+            <Button
                variant="default"
-               size="sm" 
-               onClick={handleUpdateAndGoBack} 
-               disabled={isUpdatingAndReturning}
+               size="sm"
+               onClick={() => setIsAddGroupDialogOpen(true)}
+               className="bg-shrub hover:bg-shrub/90"
             >
-               {isUpdatingAndReturning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-               {isUpdatingAndReturning ? "Returning..." : "Update"}
-            </Button> */}
+               <Plus className="mr-2 h-4 w-4" />
+               Add Group
+            </Button>
         </div>
       </div>
 
@@ -1740,58 +1739,6 @@ export default function AssignmentsPage() {
 
       </DndContext>
 
-      {/* FAB for Adding Group */}
-      <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
-          <DialogTrigger asChild>
-              <Button
-                  variant="default"
-                  className="fixed bottom-16 right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full shadow-lg z-50 flex items-center justify-center"
-                  size="icon"
-                  aria-label="Add Group"
-              >
-                <Plus className="h-6 w-6" />
-              </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <form onSubmit={handleAddGroupSubmit}>
-              <DialogHeader>
-                <DialogTitle>Add New Group</DialogTitle>
-                <DialogDescription>
-                  Enter the name for the new group.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="group-name" className="text-right">
-                    Name
-                  </Label>
-                  <Input
-                    id="group-name"
-                    value={newGroupName}
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                    className="col-span-3"
-                    placeholder="Group name"
-                    required
-                    disabled={isAddingGroup}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <DialogClose asChild>
-                   <Button type="button" variant="outline" disabled={isAddingGroup}>Cancel</Button>
-                </DialogClose>
-                <Button type="submit" disabled={isAddingGroup || !newGroupName.trim()}>
-                  {isAddingGroup ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding...</>
-                  ) : (
-                      "Add Group"
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
       {/* NEW: Person Details Modal */}
       <Dialog open={isPersonDetailsModalOpen} onOpenChange={setIsPersonDetailsModalOpen}>
         <DialogContent className="sm:max-w-[425px] md:max-w-[600px]">
@@ -2130,6 +2077,48 @@ export default function AssignmentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add Group Dialog */}
+      <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleAddGroupSubmit}>
+            <DialogHeader>
+              <DialogTitle>Add New Group</DialogTitle>
+              <DialogDescription>
+                Enter the name for the new group.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="group-name" className="text-right">
+                  Name
+                </Label>
+                <Input
+                  id="group-name"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  className="col-span-3"
+                  placeholder="Group name"
+                  required
+                  disabled={isAddingGroup}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={isAddingGroup}>Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isAddingGroup || !newGroupName.trim()}>
+                {isAddingGroup ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding...</>
+                ) : (
+                    "Add Group"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

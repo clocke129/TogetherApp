@@ -47,7 +47,7 @@ export function MobileFAB() {
       {/* Floating Action Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full bg-shrub text-white shadow-lg hover:bg-shrub/90 transition-all hover:scale-110 md:hidden flex items-center justify-center"
+        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40 h-14 w-14 rounded-full bg-shrub text-white shadow-lg hover:bg-shrub/90 transition-all hover:scale-110 flex items-center justify-center"
         aria-label="Quick capture"
       >
         <FileText className="h-6 w-6" />
