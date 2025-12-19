@@ -6,8 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import Navbar from "@/components/navbar"
 import { AuthProvider } from "@/context/AuthContext"
 import { Toaster } from "@/components/ui/sonner"
-// Remove this import
-// import { MobileFAB } from "@/components/mobile-fab"
+import { MobileFAB } from "@/components/mobile-fab"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -36,7 +35,7 @@ export default function RootLayout({
               <Navbar />
               <main className="flex-1">{children}</main>
               <div className="h-16 md:hidden"></div> {/* Spacer for mobile navigation */}
-              {/* Remove the MobileFAB component */}
+              <MobileFAB />
               <Toaster richColors />
             </div>
           </ThemeProvider>
