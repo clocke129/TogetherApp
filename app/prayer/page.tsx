@@ -38,7 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSe
 import { Textarea } from "@/components/ui/textarea"
 import { PrayerListItem } from "./PrayerListItem"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
-import { formatDate } from "@/lib/utils"
+import { formatDate, calculateStreak } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { calculateAndSaveDailyPrayerList } from "@/lib/utils"
 import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
@@ -98,6 +98,7 @@ export default function PrayerPage() {
   const [loadingData, setLoadingData] = useState(true)
   const [isMarkingPrayedId, setIsMarkingPrayedId] = useState<string | null>(null)
   const [isCompletingFollowUpId, setIsCompletingFollowUpId] = useState<string | null>(null); // Loading state for follow-up completion
+  const [streak, setStreak] = useState<number>(0) // Prayer streak state
 
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
@@ -599,6 +600,28 @@ export default function PrayerPage() {
   // Key dependencies are user, authLoading, prayerListDate
   }, [user, authLoading, prayerListDate]); // Removed the old determineList function
 
+  // Fetch prayer streak when user logs in
+  useEffect(() => {
+    const fetchStreak = async () => {
+      if (!user) {
+        setStreak(0);
+        return;
+      }
+
+      try {
+        const streakDays = await calculateStreak(db, user.uid);
+        setStreak(streakDays);
+      } catch (error) {
+        console.error('[Streak] Error calculating streak:', error);
+        setStreak(0);
+      }
+    };
+
+    if (!authLoading) {
+      fetchStreak();
+    }
+  }, [user, authLoading]);
+
   // NEW: Fetch expanded details (Prayer Requests & Follow-ups) for a specific person
   const fetchExpandedDetails = async (personId: string) => {
     if (!personId) return;
@@ -677,6 +700,11 @@ export default function PrayerPage() {
         <div className="flex flex-col"> {/* Inner stack for Title and Date */}
           <h1 className="page-title">Prayer List</h1>
           <p className="text-muted-foreground">{currentDateString}</p> {/* Date text */}
+          {streak > 0 && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {streak} {streak === 1 ? 'day' : 'days'} of prayer
+            </p>
+          )}
         </div>
         {/* Action Buttons Row - Removing the Refresh Button */}
         <div className="flex items-center space-x-2">
