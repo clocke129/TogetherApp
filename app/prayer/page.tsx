@@ -100,6 +100,10 @@ export default function PrayerPage() {
   const [isCompletingFollowUpId, setIsCompletingFollowUpId] = useState<string | null>(null); // Loading state for follow-up completion
   const [streak, setStreak] = useState<number>(0) // Prayer streak state
 
+  // PR #3: Follow-ups integration state
+  const [allFollowUps, setAllFollowUps] = useState<FollowUp[]>([])
+  const [isLoadingFollowUps, setIsLoadingFollowUps] = useState(false)
+
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
   const [dailySelectedIdsCache, setDailySelectedIdsCache] = useState<Map<string, Set<string>>>(new Map());
@@ -273,6 +277,12 @@ export default function PrayerPage() {
           fu.id === followUpId ? { ...fu, completed: true } : fu
         )
       }));
+
+      // PR #3: Also update the allFollowUps state (remove completed item from list)
+      setAllFollowUps(prevFollowUps =>
+        prevFollowUps.filter(fu => fu.id !== followUpId)
+      );
+
       console.log(`Follow-up ${followUpId} marked as complete.`);
 
     } catch (err) {
@@ -388,6 +398,36 @@ export default function PrayerPage() {
     return additionalIds;
   };
 
+  // PR #3: Function to fetch all follow-ups for all people
+  const fetchAllFollowUps = async (people: Person[]): Promise<FollowUp[]> => {
+    if (people.length === 0) return []
+
+    try {
+      const followUpPromises = people.map(async (person) => {
+        const followUpsQuery = query(
+          collection(db, "persons", person.id, "followUps"),
+          where("completed", "==", false),
+          where("archived", "==", false)
+        )
+        const snapshot = await getDocs(followUpsQuery)
+        return snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          personId: person.id
+        } as FollowUp))
+      })
+
+      const followUpsArrays = await Promise.all(followUpPromises)
+      const flattenedFollowUps = followUpsArrays.flat()
+
+      console.log(`[Follow-ups] Fetched ${flattenedFollowUps.length} active follow-ups across ${people.length} people`)
+      return flattenedFollowUps
+    } catch (error) {
+      console.error("[Follow-ups] Error fetching follow-ups:", error)
+      return [] // Return empty array on error, don't crash the app
+    }
+  }
+
   // NEW: Function to refresh/determine the prayer list for the current prayerListDate
   const refreshPrayerList = async (forceRecalculate = false) => {
       setLoadingData(true);
@@ -429,6 +469,12 @@ export default function PrayerPage() {
         const fetchedPeopleWithRecentRequest = await Promise.all(peopleWithRecentRequestPromises);
       setAllUserPeople(fetchedPeopleWithRecentRequest); // Update people state
       console.log("[Prayer Page Refresh] Fetched latest base data.");
+
+      // PR #3: Fetch all active follow-ups for all people
+      setIsLoadingFollowUps(true)
+      const followUpsData = await fetchAllFollowUps(fetchedPeopleWithRecentRequest)
+      setAllFollowUps(followUpsData)
+      setIsLoadingFollowUps(false)
       // --- End Base Data Fetch ---
 
         let personIdsToPrayFor: Set<string> | null = null;

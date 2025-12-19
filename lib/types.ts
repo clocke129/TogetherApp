@@ -41,6 +41,7 @@ export interface PrayerRequest {
 // Follow-up Type (Subcollection of Person)
 export interface FollowUp {
   id: string; // Firestore document ID
+  personId: string; // ID of the person this follow-up belongs to
   content: string;
   dueDate?: Timestamp; // Optional due date
   completed: boolean; // Status of the follow-up
