@@ -60,6 +60,11 @@ export default function Navbar() {
       icon: Heart,
     },
     {
+      name: "Follow-ups",
+      href: "/followups",
+      icon: Calendar,
+    },
+    {
       name: "People",
       href: "/assignments",
       icon: Users,

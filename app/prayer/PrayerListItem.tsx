@@ -9,6 +9,7 @@ import { Person, PrayerRequest, FollowUp } from "@/lib/types" // Assuming types 
 import { Timestamp } from "firebase/firestore"
 import { formatDate } from "@/lib/utils" // Assuming formatDate is shareable
 import { cn } from "@/lib/utils"
+import { getUrgencyLevel, sortFollowUpsByUrgency } from "@/lib/followUpUtils"
 
 // Define Props for the component
 interface PrayerListItemProps {
@@ -177,27 +178,61 @@ export function PrayerListItem({
               {/* Follow-ups Section */}
               <div>
                 <h4 className="text-sm font-medium mb-2">Follow-ups:</h4>
-                 {/* Filter for active follow-ups before mapping */}
+                 {/* Filter for active follow-ups and sort by urgency */}
                 {expandedFollowUps.filter(fu => !fu.completed).length > 0 ? (
-                  <ul className="space-y-1">
-                    {expandedFollowUps.filter(fu => !fu.completed).map((fu) => (
-                      <li key={fu.id} className="flex items-center gap-2 py-1">
-                        <Checkbox
-                           id={`followup-${fu.id}`}
-                           onCheckedChange={() => handleCheckboxChange(fu.id)}
-                           className="flex-shrink-0"
-                        />
-                        <label htmlFor={`followup-${fu.id}`} className="text-xs text-muted-foreground">
-                          {fu.content}
-                        </label>
-                        {fu.dueDate && ( // Display due date if available
-                           <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0 whitespace-nowrap">
-                             <Calendar className="h-3 w-3" />
-                             {formatDate(fu.dueDate.toDate())}
-                           </span>
-                        )}
-                      </li>
-                    ))}
+                  <ul className="space-y-2">
+                    {sortFollowUpsByUrgency(expandedFollowUps.filter(fu => !fu.completed)).map((fu) => {
+                      const urgency = getUrgencyLevel(fu.dueDate)
+                      const isOverdue = urgency === "overdue"
+                      const isToday = urgency === "today"
+                      const isSoon = urgency === "soon"
+
+                      return (
+                        <li
+                          key={fu.id}
+                          className={cn(
+                            "flex items-start gap-2 p-2 rounded-lg",
+                            isOverdue && "bg-red-50/50 dark:bg-red-950/10 border border-red-200 dark:border-red-800",
+                            isToday && "bg-orange-50/50 dark:bg-orange-950/10 border border-orange-200 dark:border-orange-800",
+                            isSoon && "bg-blue-50/50 dark:bg-blue-950/10 border border-blue-200 dark:border-blue-800"
+                          )}
+                        >
+                          <Checkbox
+                             id={`followup-${fu.id}`}
+                             onCheckedChange={() => handleCheckboxChange(fu.id)}
+                             className="flex-shrink-0 mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <label htmlFor={`followup-${fu.id}`} className="text-xs block">
+                              {fu.content}
+                            </label>
+                            <div className="flex items-center gap-2 mt-1">
+                              {fu.dueDate && (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Calendar className="h-3 w-3" />
+                                  {formatDate(fu.dueDate.toDate())}
+                                </span>
+                              )}
+                              {isOverdue && (
+                                <Badge className="bg-red-600 dark:bg-red-700 text-white text-[10px] px-1.5 py-0">
+                                  Overdue
+                                </Badge>
+                              )}
+                              {isToday && (
+                                <Badge className="bg-orange-600 dark:bg-orange-700 text-white text-[10px] px-1.5 py-0">
+                                  Today
+                                </Badge>
+                              )}
+                              {isSoon && (
+                                <Badge className="bg-blue-600 dark:bg-blue-700 text-white text-[10px] px-1.5 py-0">
+                                  Soon
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      )
+                    })}
                   </ul>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">No active follow-ups.</p>

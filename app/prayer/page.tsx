@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect, useMemo, useRef } from "react"
 import Link from "next/link"; // Import Link
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,8 +39,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { PrayerListItem } from "./PrayerListItem"
+import { UrgentFollowUpsSection } from "./UrgentFollowUpsSection"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import { formatDate, calculateStreak } from "@/lib/utils"
+import { getUrgencyLevel } from "@/lib/followUpUtils"
 import { Input } from "@/components/ui/input"
 import { calculateAndSaveDailyPrayerList } from "@/lib/utils"
 import { parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
@@ -103,6 +107,14 @@ export default function PrayerPage() {
   // PR #3: Follow-ups integration state
   const [allFollowUps, setAllFollowUps] = useState<FollowUp[]>([])
   const [isLoadingFollowUps, setIsLoadingFollowUps] = useState(false)
+
+  // Debug: Log when allFollowUps changes
+  useEffect(() => {
+    console.log('[Follow-ups State] allFollowUps updated:', allFollowUps.length, 'items')
+    if (allFollowUps.length > 0) {
+      console.log('[Follow-ups State] First item:', allFollowUps[0])
+    }
+  }, [allFollowUps])
 
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
@@ -406,21 +418,25 @@ export default function PrayerPage() {
       const followUpPromises = people.map(async (person) => {
         const followUpsQuery = query(
           collection(db, "persons", person.id, "followUps"),
-          where("completed", "==", false),
-          where("archived", "==", false)
+          where("completed", "==", false)
+          // Note: Not filtering archived since it's optional - filter in code instead
         )
         const snapshot = await getDocs(followUpsQuery)
-        return snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          personId: person.id
-        } as FollowUp))
+        return snapshot.docs.map(doc => {
+          const data = doc.data()
+          return {
+            id: doc.id,
+            ...data,
+            personId: person.id
+          } as FollowUp
+        }).filter(fu => !fu.archived) // Filter archived follow-ups in code
       })
 
       const followUpsArrays = await Promise.all(followUpPromises)
       const flattenedFollowUps = followUpsArrays.flat()
 
       console.log(`[Follow-ups] Fetched ${flattenedFollowUps.length} active follow-ups across ${people.length} people`)
+      console.log('[Follow-ups] Sample data:', flattenedFollowUps.slice(0, 2))
       return flattenedFollowUps
     } catch (error) {
       console.error("[Follow-ups] Error fetching follow-ups:", error)
@@ -768,6 +784,22 @@ export default function PrayerPage() {
       {loadingData ? (
         <div className="text-center py-10 text-muted-foreground">Loading prayer list...</div>
       ) : (
+        <>
+          {/* PR #3: Urgent Follow-ups Section */}
+          <UrgentFollowUpsSection
+            followUps={allFollowUps.filter(fu => {
+              const urgency = getUrgencyLevel(fu.dueDate)
+              return ['overdue', 'today', 'soon'].includes(urgency)
+            })}
+            people={allUserPeople}
+            onComplete={handleCompleteFollowUp}
+            onPersonClick={(personId) => {
+              setExpandedPersonId(personId)
+              fetchExpandedDetails(personId)
+            }}
+            isCompletingId={isCompletingFollowUpId}
+          />
+
         <Tabs defaultValue="pray" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="pray">Pray</TabsTrigger>
@@ -842,6 +874,7 @@ export default function PrayerPage() {
             )}
           </TabsContent>
         </Tabs>
+        </>
       )}
     </div>
   )
