@@ -274,8 +274,13 @@ export default function AssignmentsPage() {
   const uncategorizedPeople = people.filter((person) => !person.groupId)
 
   // Get people in a specific group - uses local state, will update when fetching real data
-  const getPeopleInGroup = (groupId: string) => {
-    return people.filter((person) => person.groupId === groupId)
+  // Special handling: System groups (Everyone) show uncategorized people (groupId === null)
+  const getPeopleInGroup = (group: Group) => {
+    if (group.isSystemGroup) {
+      // Everyone group shows all people with no group assignment
+      return people.filter((person) => !person.groupId)
+    }
+    return people.filter((person) => person.groupId === group.id)
   }
 
   // CHANGE: Toggle expanded state for a group (add/remove from array)
@@ -1365,10 +1370,11 @@ export default function AssignmentsPage() {
                     <div className="space-y-4 pt-4">
                       {groups.map((group) => {
                         // Prepare props for the consolidated card
-                        const peopleInGroup = getPeopleInGroup(group.id);
+                        const peopleInGroup = getPeopleInGroup(group);
                         const currentNumSetting = localNumPerDaySettings[group.id];
                         const displayDays = isMobile ? DAYS_OF_WEEK_MOBILE : DAYS_OF_WEEK;
-                        const groupSize = group.personIds?.length ?? 0;
+                        // For system groups (Everyone), use actual people count, not personIds length
+                        const groupSize = group.isSystemGroup ? peopleInGroup.length : (group.personIds?.length ?? 0);
                         const isUpdatingThisGroupDays = isUpdatingDays === group.id;
                         const isSavingThisGroupNum = isSavingNumPerDay === group.id;
 
@@ -1499,7 +1505,7 @@ export default function AssignmentsPage() {
                         <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         {groups
-                              .filter(group => group.id !== selectedPerson?.groupId)
+                              .filter(group => group.id !== selectedPerson?.groupId && !group.isSystemGroup)
                           .map((group) => (
                             <DropdownMenuItem
                               key={group.id}
@@ -1514,7 +1520,7 @@ export default function AssignmentsPage() {
                               {group.name}
                             </DropdownMenuItem>
                         ))}
-                        {groups.filter(group => group.id !== selectedPerson?.groupId).length === 0 && (
+                        {groups.filter(group => group.id !== selectedPerson?.groupId && !group.isSystemGroup).length === 0 && (
                           <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -1650,18 +1656,18 @@ export default function AssignmentsPage() {
                   <Edit className="h-4 w-4" />
                   Edit Group Name
                 </Button>
-                <Button 
-                   variant="outline" 
+                <Button
+                   variant="outline"
                    className="w-full justify-start gap-2 text-shrub border-shrub hover:bg-shrub/10 hover:text-shrub"
                    onClick={() => {
                      if (selectedGroup) {
                        handleDeleteGroupClick(selectedGroup);
                      }
                    }}
-                   disabled={isSavingGroupName || isDeletingGroup} 
+                   disabled={isSavingGroupName || isDeletingGroup || selectedGroup?.isSystemGroup}
                 >
                   <Trash2 className="h-4 w-4" />
-                  Delete Group
+                  {selectedGroup?.isSystemGroup ? "System Group (Cannot Delete)" : "Delete Group"}
                 </Button>
               </div>
             )}
