@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebaseConfig'; // Import initialized auth
+import { auth, db } from '@/lib/firebaseConfig'; // Import initialized auth and db
+import { ensureEveryoneGroup } from '@/lib/utils'; // Import ensureEveryoneGroup function
 
 interface AuthContextType {
   user: User | null;
@@ -31,10 +32,20 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
     }
 
     console.log("Setting up Firebase Auth listener...");
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setLoading(false);
       console.log('Auth state changed, user:', currentUser?.uid || 'null');
+
+      // Ensure "Everyone" group exists when user logs in
+      if (currentUser) {
+        try {
+          await ensureEveryoneGroup(db, currentUser.uid);
+        } catch (error) {
+          console.error('Failed to ensure Everyone group:', error);
+          // Don't block login if this fails - user can still use the app
+        }
+      }
     }, (error) => {
       // Add error handling for the listener itself
       console.error("Error in onAuthStateChanged listener:", error);

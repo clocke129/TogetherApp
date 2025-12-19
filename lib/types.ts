@@ -22,6 +22,7 @@ export interface Group {
   };
   createdAt?: Timestamp; // Added creation timestamp
   order?: number; // Optional: For manual ordering/drag-and-drop
+  isSystemGroup?: boolean; // True for system groups like "Everyone" that cannot be deleted
 }
 
 // Firestore Timestamp type for convenience if needed elsewhere
