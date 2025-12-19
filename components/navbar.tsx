@@ -55,24 +55,14 @@ export default function Navbar() {
   // Apply the type to the array
   const navItems: NavItem[] = [
     {
-      name: "Note",
-      href: "/notes",
-      icon: FileText,
+      name: "Today",
+      href: "/prayer",
+      icon: Heart,
     },
     {
       name: "People",
       href: "/assignments",
       icon: Users,
-    },
-    {
-      name: "Pray",
-      href: "/prayer",
-      icon: Heart,
-    },
-    {
-      name: "Follow-up",
-      href: "/followups",
-      icon: Calendar,
     },
   ]
 
