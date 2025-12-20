@@ -34,12 +34,15 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+// PR #4: Tabs component removed - using GroupPrayerCard instead
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { PrayerListItem } from "./PrayerListItem"
 import { UrgentFollowUpsSection } from "./UrgentFollowUpsSection"
+import { GroupPrayerCard } from "./GroupPrayerCard"
+import { FocusedPrayerMode } from "./FocusedPrayerMode"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import { formatDate, calculateStreak } from "@/lib/utils"
 import { getUrgencyLevel } from "@/lib/followUpUtils"
@@ -116,6 +119,17 @@ export default function PrayerPage() {
     }
   }, [allFollowUps])
 
+  // PR #4: Focused Prayer Mode state
+  const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null)
+  const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0)
+  const [focusedGroupPeopleOrder, setFocusedGroupPeopleOrder] = useState<string[]>([])
+
+  // PR #5: Quick action dialog state
+  const [quickActionDialogOpen, setQuickActionDialogOpen] = useState<'request' | 'followup' | null>(null)
+  const [quickActionPersonId, setQuickActionPersonId] = useState<string | null>(null)
+  const [quickActionContent, setQuickActionContent] = useState("")
+  const [quickActionDueDate, setQuickActionDueDate] = useState<Date | undefined>(undefined)
+
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
   const [dailySelectedIdsCache, setDailySelectedIdsCache] = useState<Map<string, Set<string>>>(new Map());
@@ -123,12 +137,120 @@ export default function PrayerPage() {
   // Ref to track effect runs in StrictMode
   const effectRan = useRef(false);
 
+  // Helper function to check if a Firestore Timestamp is on the same day as a JS Date
+  const isSameDay = (timestamp: Timestamp | undefined, date: Date): boolean => {
+    if (!timestamp) return false;
+    const tsDate = timestamp.toDate();
+    return (
+      tsDate.getFullYear() === date.getFullYear() &&
+      tsDate.getMonth() === date.getMonth() &&
+      tsDate.getDate() === date.getDate()
+    );
+  };
+
+  // PR #4: Helper function to get people in a group
+  const getPeopleInGroup = (group: Group): Array<Person & { mostRecentRequest?: PrayerRequest }> => {
+    if (group.isSystemGroup && group.name === "Everyone") {
+      // "Everyone" group includes people with no groupId (unassigned people)
+      return allUserPeople.filter(p => !p.groupId)
+    }
+    // Regular groups: only people explicitly assigned
+    return allUserPeople.filter(p => p.groupId === group.id)
+  }
+
+  // PR #4: Derived state - Filter groups scheduled for today
+  const todaysGroups = useMemo(() => {
+    const currentDayIndex = prayerListDate.getDay()
+    const filteredGroups = allUserGroups.filter(group =>
+      group.prayerDays?.includes(currentDayIndex)
+    )
+
+    console.log('[PR #4] Today\'s groups before dedup:', filteredGroups.map(g => ({ id: g.id, name: g.name, isSystem: g.isSystemGroup })))
+    console.log('[PR #4] allUserPeople.length:', allUserPeople.length)
+
+    // Deduplicate groups by name (handle database duplicates)
+    // For duplicates, prefer the one that has people assigned to it
+    const groupsByName = new Map<string, Group>()
+    filteredGroups.forEach(group => {
+      const existing = groupsByName.get(group.name)
+      if (!existing) {
+        groupsByName.set(group.name, group)
+      } else if (allUserPeople.length > 0) {
+        // Only deduplicate by people count if people data is loaded
+        const existingPeopleCount = allUserPeople.filter(p => p.groupId === existing.id).length
+        const currentPeopleCount = allUserPeople.filter(p => p.groupId === group.id).length
+        console.log(`[PR #4] Duplicate group "${group.name}": existing (${existing.id}) has ${existingPeopleCount} people, current (${group.id}) has ${currentPeopleCount}`)
+        if (currentPeopleCount > existingPeopleCount) {
+          console.log(`[PR #4] Keeping group ${group.id} with ${currentPeopleCount} people`)
+          groupsByName.set(group.name, group)
+        } else {
+          console.log(`[PR #4] Keeping existing group ${existing.id} with ${existingPeopleCount} people`)
+        }
+      } else {
+        // If no people data yet, just keep the first one (will recalculate when data loads)
+        console.log(`[PR #4] No people data yet, keeping first "${group.name}" group`)
+      }
+    })
+
+    const uniqueGroups = Array.from(groupsByName.values())
+    console.log('[PR #4] Today\'s groups after dedup:', uniqueGroups.map(g => ({ id: g.id, name: g.name })))
+
+    return uniqueGroups
+  }, [allUserGroups, prayerListDate, allUserPeople])
+
+  // PR #4: Derived state - Calculate people and progress for each group
+  const groupsWithProgress = useMemo(() => {
+    // Don't calculate if people data hasn't loaded yet
+    if (loadingData || allUserPeople.length === 0) {
+      console.log('[PR #4] Skipping groupsWithProgress calculation - data not loaded yet')
+      return []
+    }
+
+    return todaysGroups.map(group => {
+      const peopleInGroup = getPeopleInGroup(group)
+      const prayedCount = peopleInGroup.filter(person =>
+        isSameDay(person.lastPrayedFor, prayerListDate)
+      ).length
+
+      console.log(`[PR #4] Group "${group.name}" (${group.id}):`, {
+        totalPeople: peopleInGroup.length,
+        peopleNames: peopleInGroup.map(p => p.name),
+        prayedCount
+      })
+
+      return {
+        group,
+        people: peopleInGroup,
+        prayedCount,
+        totalCount: peopleInGroup.length
+      }
+    })
+  }, [todaysGroups, allUserPeople, prayerListDate, loadingData])
+
+  // PR #4: Derived state - Get current focused group's people
+  const focusedGroupPeople = useMemo(() => {
+    if (!focusedGroupId) return []
+    const groupData = groupsWithProgress.find(g => g.group.id === focusedGroupId)
+    if (!groupData) return []
+
+    const people = groupData.people
+    if (focusedGroupPeopleOrder.length === 0) return people
+
+    // Reorder based on focusedGroupPeopleOrder
+    return focusedGroupPeopleOrder
+      .map(id => people.find(p => p.id === id))
+      .filter(Boolean) as typeof people
+  }, [focusedGroupId, groupsWithProgress, focusedGroupPeopleOrder])
+
   // Navigate to previous day
   const goToPreviousDay = () => {
     const newDate = new Date(prayerListDate)
     newDate.setDate(newDate.getDate() - 1)
     setPrayerListDate(newDate)
     setExpandedPersonId(null) // Collapse items on date change
+    // PR #4: Close focused mode on date change
+    setFocusedGroupId(null)
+    setCurrentCarouselIndex(0)
   }
 
   // Navigate to next day
@@ -137,6 +259,9 @@ export default function PrayerPage() {
     newDate.setDate(newDate.getDate() + 1)
     setPrayerListDate(newDate)
     setExpandedPersonId(null) // Collapse items on date change
+    // PR #4: Close focused mode on date change
+    setFocusedGroupId(null)
+    setCurrentCarouselIndex(0)
   }
 
   // Toggle expanded state and fetch/clear details
@@ -152,17 +277,6 @@ export default function PrayerPage() {
       fetchExpandedDetails(personId)
     }
   }
-
-  // Helper function to check if a Firestore Timestamp is on the same day as a JS Date
-  const isSameDay = (timestamp: Timestamp | undefined, date: Date): boolean => {
-    if (!timestamp) return false;
-    const tsDate = timestamp.toDate();
-    return (
-      tsDate.getFullYear() === date.getFullYear() &&
-      tsDate.getMonth() === date.getMonth() &&
-      tsDate.getDate() === date.getDate()
-    );
-  };
 
   // Mark a person as prayed for - Implement with Firestore update & Undo
   const markAsPrayedFor = async (person: Person) => { // Pass the whole person object
@@ -199,6 +313,28 @@ export default function PrayerPage() {
           p.id === personId ? { ...p, lastPrayedFor: optimisticTimestamp } : p
         )
       );
+
+      // Also update allUserPeople so focused mode sees the change
+      setAllUserPeople(prevPeople =>
+        prevPeople.map(p =>
+          p.id === personId ? { ...p, lastPrayedFor: optimisticTimestamp } : p
+        )
+      );
+
+      // Auto-advance: move prayed person to back of carousel
+      if (!alreadyPrayedToday && focusedGroupId && focusedGroupPeopleOrder.length > 1) {
+        const currentPersonId = focusedGroupPeopleOrder[currentCarouselIndex]
+        if (currentPersonId === personId) {
+          const newOrder = [
+            ...focusedGroupPeopleOrder.slice(0, currentCarouselIndex),
+            ...focusedGroupPeopleOrder.slice(currentCarouselIndex + 1),
+            currentPersonId
+          ]
+          setFocusedGroupPeopleOrder(newOrder)
+          // Index stays same - now points to next person
+        }
+      }
+
       console.log(`Prayed status toggled successfully for ${personId}.`);
 
     } catch (err) {
@@ -305,6 +441,69 @@ export default function PrayerPage() {
       setIsCompletingFollowUpId(null); // Clear loading state
     }
   };
+
+  // PR #5: Quick action handlers for adding requests and follow-ups from focused mode
+  const handleOpenQuickActionRequest = (personId: string) => {
+    setQuickActionPersonId(personId)
+    setQuickActionDialogOpen('request')
+  }
+
+  const handleOpenQuickActionFollowUp = (personId: string) => {
+    setQuickActionPersonId(personId)
+    setQuickActionDialogOpen('followup')
+  }
+
+  const handleAddQuickRequest = async () => {
+    if (!user || !quickActionContent || !quickActionPersonId) return
+
+    try {
+      const requestRef = collection(db, "persons", quickActionPersonId, "prayerRequests")
+      await addDoc(requestRef, {
+        content: quickActionContent,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(), // Editing updates this
+      })
+
+      // Refresh expanded details if this person is expanded
+      if (expandedPersonId === quickActionPersonId) {
+        fetchExpandedDetails(quickActionPersonId)
+      }
+
+      setQuickActionContent("")
+      setQuickActionDialogOpen(null)
+    } catch (error) {
+      console.error("Error adding request:", error)
+    }
+  }
+
+  const handleAddQuickFollowUp = async () => {
+    if (!user || !quickActionContent || !quickActionPersonId) return
+
+    try {
+      const followUpRef = collection(db, "persons", quickActionPersonId, "followUps")
+      await addDoc(followUpRef, {
+        personId: quickActionPersonId,
+        content: quickActionContent,
+        dueDate: quickActionDueDate ? Timestamp.fromDate(quickActionDueDate) : undefined,
+        completed: false,
+        createdAt: serverTimestamp(),
+      })
+
+      // Refresh expanded details
+      if (expandedPersonId === quickActionPersonId) {
+        fetchExpandedDetails(quickActionPersonId)
+      }
+
+      // Also refresh allFollowUps for urgent section
+      fetchAllFollowUps()
+
+      setQuickActionContent("")
+      setQuickActionDueDate(undefined)
+      setQuickActionDialogOpen(null)
+    } catch (error) {
+      console.error("Error adding follow-up:", error)
+    }
+  }
 
   // Get completed prayers - Filter based on lastPrayedFor date
   const getCompletedPrayers = (): Array<Person & { mostRecentRequest?: PrayerRequest }> => {
@@ -469,6 +668,18 @@ export default function PrayerPage() {
 
       const fetchedPeople = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
       const fetchedGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
+
+      // PR #4 DEBUG: Log all "Everyone" groups
+      const everyoneGroups = fetchedGroups.filter(g => g.name === "Everyone")
+      console.log('[PR #4 DEBUG] All "Everyone" groups in database:', everyoneGroups.map(g => ({
+        id: g.id,
+        name: g.name,
+        prayerDays: g.prayerDays,
+        isSystemGroup: g.isSystemGroup,
+        peopleCount: fetchedPeople.filter(p => p.groupId === g.id).length,
+        peopleNames: fetchedPeople.filter(p => p.groupId === g.id).map(p => p.name)
+      })))
+
       setAllUserGroups(fetchedGroups); // Update groups state
 
       // Fetch most recent request for each person (needed for display)
@@ -684,6 +895,19 @@ export default function PrayerPage() {
     }
   }, [user, authLoading]);
 
+  // PR #4: Load expanded details for current person in carousel
+  useEffect(() => {
+    if (!focusedGroupId || focusedGroupPeople.length === 0) {
+      return
+    }
+
+    const currentPerson = focusedGroupPeople[currentCarouselIndex]
+    if (currentPerson) {
+      setExpandedPersonId(currentPerson.id)
+      fetchExpandedDetails(currentPerson.id)
+    }
+  }, [focusedGroupId, currentCarouselIndex, focusedGroupPeople])
+
   // NEW: Fetch expanded details (Prayer Requests & Follow-ups) for a specific person
   const fetchExpandedDetails = async (personId: string) => {
     if (!personId) return;
@@ -800,80 +1024,99 @@ export default function PrayerPage() {
             isCompletingId={isCompletingFollowUpId}
           />
 
-        <Tabs defaultValue="pray" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="pray">Pray</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
-          </TabsList>
-
-          {/* Pray Tab */}
-          <TabsContent value="pray" className="space-y-4">
-            {getActivePrayers().length === 0 ? (
-              // Conditional Empty State Message
+        {/* PR #4: Group-based prayer cards */}
+          <div className="space-y-4">
+            {groupsWithProgress.length === 0 ? (
+              // Empty state when no groups scheduled for today
               allUserPeople.length > 0 ? (
                 <div className="text-center py-8 px-4 text-muted-foreground">
-                  <p className="mb-2">No one scheduled for prayer today.</p>
-                  <p>Assign people to groups and set prayer days using the <span className="font-semibold">Assign Groups</span> button.</p>
+                  <p className="mb-2">No groups scheduled for prayer today.</p>
+                  <p>Assign people to groups and set prayer days in the <span className="font-semibold">People</span> tab.</p>
                 </div>
               ) : (
-                // Original empty state if no people exist at all
-                <p className="text-center py-8 text-muted-foreground">No one scheduled for prayer today.</p>
+                <p className="text-center py-8 text-muted-foreground">No groups or people yet.</p>
               )
             ) : (
-              getActivePrayers().map((person) => {
-                const groupName = getGroupName(person.groupId);
-                const isExpanded = expandedPersonId === person.id;
-                return (
-                  <PrayerListItem
-                    key={person.id}
-                    person={person}
-                    mostRecentRequest={person.mostRecentRequest}
-                    groupName={groupName}
-                    isExpanded={isExpanded}
-                    isLoadingExpanded={isExpanded && expandedData.loading}
-                    expandedRequests={isExpanded ? expandedData.requests : []}
-                    expandedFollowUps={isExpanded ? expandedData.followUps : []}
-                    onToggleExpand={toggleExpandPerson}
-                    onMarkPrayed={markAsPrayedFor}
-                    onCompleteFollowUp={handleCompleteFollowUp}
-                    isMarkingPrayed={isMarkingPrayedId === person.id}
-                    isPrayedToday={false}
-                  />
-                );
-              })
+              groupsWithProgress.map(({ group, people, prayedCount, totalCount }) => (
+                <GroupPrayerCard
+                  key={group.id}
+                  group={group}
+                  people={people}
+                  prayedCount={prayedCount}
+                  totalCount={totalCount}
+                  onOpenFocusedMode={(groupId) => {
+                    const groupData = groupsWithProgress.find(g => g.group.id === groupId)
+                    setFocusedGroupPeopleOrder(groupData?.people.map(p => p.id) || [])
+                    setFocusedGroupId(groupId)
+                    setCurrentCarouselIndex(0)
+                  }}
+                />
+              ))
             )}
-          </TabsContent>
+          </div>
 
-          {/* Completed Tab */}
-          <TabsContent value="completed" className="space-y-4">
-              {/* ... Completed tab content ... */}
-              {getCompletedPrayers().length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">No prayers completed today.</p>
-            ) : (
-              getCompletedPrayers().map((person) => {
-                  const groupName = getGroupName(person.groupId);
-                  const isExpanded = expandedPersonId === person.id;
-                  return (
-                    <PrayerListItem
-                      key={person.id}
-                      person={person}
-                      mostRecentRequest={person.mostRecentRequest}
-                      groupName={groupName}
-                      isExpanded={isExpanded}
-                      isLoadingExpanded={isExpanded && expandedData.loading}
-                      expandedRequests={isExpanded ? expandedData.requests : []}
-                      expandedFollowUps={isExpanded ? expandedData.followUps : []}
-                      onToggleExpand={toggleExpandPerson}
-                      onMarkPrayed={markAsPrayedFor} // To 'un-complete'
-                      onCompleteFollowUp={handleCompleteFollowUp}
-                      isMarkingPrayed={isMarkingPrayedId === person.id}
-                      isPrayedToday={true}
+          {/* PR #4: Focused Prayer Mode Dialog */}
+          {focusedGroupId && (
+            <FocusedPrayerMode
+              isOpen={!!focusedGroupId}
+              onClose={() => {
+                setFocusedGroupId(null)
+                setCurrentCarouselIndex(0)
+              }}
+              group={groupsWithProgress.find(g => g.group.id === focusedGroupId)?.group!}
+              people={focusedGroupPeople.map(person => ({
+                ...person,
+                mostRecentRequest: person.mostRecentRequest,
+                expandedRequests: expandedPersonId === person.id ? expandedData.requests : [],
+                expandedFollowUps: expandedPersonId === person.id ? expandedData.followUps : [],
+                isLoadingExpanded: expandedPersonId === person.id && expandedData.loading
+              }))}
+              currentPersonIndex={currentCarouselIndex}
+              onPersonIndexChange={setCurrentCarouselIndex}
+              onMarkPrayed={markAsPrayedFor}
+              onCompleteFollowUp={handleCompleteFollowUp}
+              isMarkingPrayed={!!isMarkingPrayedId}
+              isCompletingFollowUpId={isCompletingFollowUpId}
+              prayerListDate={prayerListDate}
+              onAddRequest={handleOpenQuickActionRequest}
+              onAddFollowUp={handleOpenQuickActionFollowUp}
+            />
+          )}
+
+          {/* PR #5: Quick Action Dialogs */}
+          <Dialog open={!!quickActionDialogOpen} onOpenChange={() => setQuickActionDialogOpen(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {quickActionDialogOpen === 'request' ? 'Add Prayer Request' : 'Add Follow-up'}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <Textarea
+                  value={quickActionContent}
+                  onChange={(e) => setQuickActionContent(e.target.value)}
+                  placeholder={quickActionDialogOpen === 'request' ? 'Enter prayer request...' : 'Enter follow-up...'}
+                  rows={3}
+                />
+                {quickActionDialogOpen === 'followup' && (
+                  <div>
+                    <label className="text-sm font-medium">Due Date (optional)</label>
+                    <Input
+                      type="date"
+                      value={quickActionDueDate ? quickActionDueDate.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setQuickActionDueDate(e.target.value ? new Date(e.target.value) : undefined)}
                     />
-                  );
-              })
-            )}
-          </TabsContent>
-        </Tabs>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setQuickActionDialogOpen(null)}>Cancel</Button>
+                <Button onClick={quickActionDialogOpen === 'request' ? handleAddQuickRequest : handleAddQuickFollowUp}>
+                  Add
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>
