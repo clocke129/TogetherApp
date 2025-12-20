@@ -176,16 +176,20 @@ export async function ensureEveryoneGroup(
     try {
         console.log(`[ensureEveryoneGroup] Checking for Everyone group for user ${userId}...`);
 
-        // Query for existing Everyone group for this user
+        // Query for existing Everyone group for this user (check by name to be specific)
         const groupsQuery = query(
             collection(db, "groups"),
             where("createdBy", "==", userId),
-            where("isSystemGroup", "==", true)
+            where("name", "==", "Everyone")
         );
         const groupsSnapshot = await getDocs(groupsQuery);
 
         if (!groupsSnapshot.empty) {
-            console.log(`[ensureEveryoneGroup] Everyone group already exists for user ${userId}.`);
+            console.log(`[ensureEveryoneGroup] Everyone group already exists for user ${userId}. Found ${groupsSnapshot.size} matching groups.`);
+            // If there are somehow duplicates, log a warning
+            if (groupsSnapshot.size > 1) {
+                console.warn(`[ensureEveryoneGroup] WARNING: Found ${groupsSnapshot.size} "Everyone" groups for user ${userId}. There should only be one!`);
+            }
             return;
         }
 
