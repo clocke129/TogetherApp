@@ -129,6 +129,12 @@ export default function PrayerPage() {
   const [quickActionPersonId, setQuickActionPersonId] = useState<string | null>(null)
   const [quickActionContent, setQuickActionContent] = useState("")
 
+  // PR #7: Header add prayer dialog state
+  const [headerAddPrayerOpen, setHeaderAddPrayerOpen] = useState(false)
+  const [headerPrayerPersonId, setHeaderPrayerPersonId] = useState<string>("")
+  const [headerPrayerContent, setHeaderPrayerContent] = useState("")
+  const [isAddingHeaderPrayer, setIsAddingHeaderPrayer] = useState(false)
+
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
   const [dailySelectedIdsCache, setDailySelectedIdsCache] = useState<Map<string, Set<string>>>(new Map());
@@ -478,6 +484,38 @@ export default function PrayerPage() {
       setQuickActionDialogOpen(null)
     } catch (error) {
       console.error("Error adding request:", error)
+    }
+  }
+
+  // PR #7: Header add prayer handler
+  const handleAddHeaderPrayer = async () => {
+    if (!user || !headerPrayerContent || !headerPrayerPersonId) return
+
+    setIsAddingHeaderPrayer(true)
+    try {
+      const requestRef = collection(db, "persons", headerPrayerPersonId, "prayerRequests")
+      await addDoc(requestRef, {
+        content: headerPrayerContent,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+
+      // Refresh expanded details if this person is expanded
+      if (expandedPersonId === headerPrayerPersonId) {
+        fetchExpandedDetails(headerPrayerPersonId)
+      }
+
+      // Refresh the prayer list
+      fetchAllUserPeople()
+
+      // Clear and close
+      setHeaderPrayerContent("")
+      setHeaderPrayerPersonId("")
+      setHeaderAddPrayerOpen(false)
+    } catch (error) {
+      console.error("Error adding prayer request:", error)
+    } finally {
+      setIsAddingHeaderPrayer(false)
     }
   }
 
@@ -968,15 +1006,16 @@ export default function PrayerPage() {
             </p>
           )}
         </div>
-        {/* Action Buttons Row - Removing the Refresh Button */}
+        {/* Action Buttons Row */}
         <div className="flex items-center space-x-2">
-           {/* Refresh Button - REMOVED */}
-           {/* Assign Groups Button - REMOVED */}
-           {/* <Link href="/assignments" passHref>
-              <Button size="sm" variant="default">
-                 <Users className="mr-2 h-4 w-4" /> Assign Groups
-              </Button>
-           </Link> */}
+          <Button
+            size="sm"
+            onClick={() => setHeaderAddPrayerOpen(true)}
+            className="bg-shrub hover:bg-shrub/90"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Prayer
+          </Button>
         </div>
       </div>
 
@@ -1076,6 +1115,54 @@ export default function PrayerPage() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setQuickActionDialogOpen(null)}>Cancel</Button>
                 <Button onClick={handleAddQuickRequest}>Add</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* PR #7: Header Add Prayer Dialog */}
+          <Dialog open={headerAddPrayerOpen} onOpenChange={setHeaderAddPrayerOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Prayer Request</DialogTitle>
+                <DialogDescription>
+                  Add a prayer request for someone
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="person-select">Person</Label>
+                  <Select value={headerPrayerPersonId} onValueChange={setHeaderPrayerPersonId}>
+                    <SelectTrigger id="person-select">
+                      <SelectValue placeholder="Select a person..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allUserPeople.map((person) => (
+                        <SelectItem key={person.id} value={person.id}>
+                          {person.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="prayer-content">Prayer Request</Label>
+                  <Textarea
+                    id="prayer-content"
+                    value={headerPrayerContent}
+                    onChange={(e) => setHeaderPrayerContent(e.target.value)}
+                    placeholder="Enter prayer request..."
+                    rows={4}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setHeaderAddPrayerOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={handleAddHeaderPrayer}
+                  disabled={isAddingHeaderPrayer || !headerPrayerPersonId || !headerPrayerContent}
+                >
+                  {isAddingHeaderPrayer ? "Adding..." : "Add"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

@@ -110,8 +110,8 @@ export function PersonPrayerCard({
               Past Requests ({expandedRequests.length - 1} more)
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-4">
-                {expandedRequests.slice(1).map((request) => (
+              <div className="space-y-4 max-h-60 overflow-y-auto">
+                {expandedRequests.slice(1, 4).map((request) => (
                   <div key={request.id} className="space-y-1">
                     <p className="text-sm whitespace-pre-wrap">{request.content}</p>
                     {request.createdAt && (

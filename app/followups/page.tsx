@@ -491,6 +491,16 @@ export default function FollowupsPage() {
           <h1 className="page-title">Follow-ups</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            size="sm"
+            onClick={() => setIsAddDialogOpen(true)}
+            className="bg-shrub hover:bg-shrub/90"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Follow-up
+          </Button>
+        </div>
       </div>
 
       {/* Removed isLoading check here, handled above */}
