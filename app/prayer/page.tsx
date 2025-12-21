@@ -468,11 +468,15 @@ export default function PrayerPage() {
     if (!user || !quickActionContent || !quickActionPersonId) return
 
     try {
+      const person = allUserPeople.find(p => p.id === quickActionPersonId)
       const requestRef = collection(db, "persons", quickActionPersonId, "prayerRequests")
       await addDoc(requestRef, {
+        personId: quickActionPersonId,
+        personName: person?.name || "Unknown",
         content: quickActionContent,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdBy: user.uid,
+        isCompleted: false
       })
 
       // Refresh expanded details if this person is expanded
@@ -493,11 +497,15 @@ export default function PrayerPage() {
 
     setIsAddingHeaderPrayer(true)
     try {
+      const person = allUserPeople.find(p => p.id === headerPrayerPersonId)
       const requestRef = collection(db, "persons", headerPrayerPersonId, "prayerRequests")
       await addDoc(requestRef, {
+        personId: headerPrayerPersonId,
+        personName: person?.name || "Unknown",
         content: headerPrayerContent,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdBy: user.uid,
+        isCompleted: false
       })
 
       // Refresh expanded details if this person is expanded

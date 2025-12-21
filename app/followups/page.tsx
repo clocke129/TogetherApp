@@ -286,8 +286,10 @@ export default function FollowupsPage() {
       return;
     }
 
+    const person = allUserPeople.find(p => p.id === newFollowUp.personId)
     const docToAdd = {
       personId: newFollowUp.personId,
+      personName: person?.name || "Unknown",
       content: newFollowUp.content,
       dueDate: newFollowUp.dueDate?.seconds === 0 ? deleteField() : newFollowUp.dueDate, // Handle epoch zero case
       completed: false,
@@ -304,6 +306,7 @@ export default function FollowupsPage() {
       const optimisticFollowUp: FollowUp = {
         id: docRef.id, // Use the new ID
         personId: newFollowUp.personId,
+        personName: person?.name || "Unknown",
         content: newFollowUp.content,
         dueDate: newFollowUp.dueDate?.seconds === 0 ? undefined : newFollowUp.dueDate, // Handle epoch zero case
         completed: false,
