@@ -124,11 +124,10 @@ export default function PrayerPage() {
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0)
   const [focusedGroupPeopleOrder, setFocusedGroupPeopleOrder] = useState<string[]>([])
 
-  // PR #5: Quick action dialog state
-  const [quickActionDialogOpen, setQuickActionDialogOpen] = useState<'request' | 'followup' | null>(null)
+  // PR #6: Quick action dialog state (prayer requests only)
+  const [quickActionDialogOpen, setQuickActionDialogOpen] = useState<'request' | null>(null)
   const [quickActionPersonId, setQuickActionPersonId] = useState<string | null>(null)
   const [quickActionContent, setQuickActionContent] = useState("")
-  const [quickActionDueDate, setQuickActionDueDate] = useState<Date | undefined>(undefined)
 
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
@@ -241,6 +240,17 @@ export default function PrayerPage() {
       .map(id => people.find(p => p.id === id))
       .filter(Boolean) as typeof people
   }, [focusedGroupId, groupsWithProgress, focusedGroupPeopleOrder])
+
+  // PR #5: Auto-fetch expanded details when carousel index changes
+  useEffect(() => {
+    if (focusedGroupId && focusedGroupPeople.length > 0) {
+      const currentPerson = focusedGroupPeople[currentCarouselIndex]
+      if (currentPerson && currentPerson.id !== expandedPersonId) {
+        setExpandedPersonId(currentPerson.id)
+        fetchExpandedDetails(currentPerson.id)
+      }
+    }
+  }, [currentCarouselIndex, focusedGroupId, focusedGroupPeople])
 
   // Navigate to previous day
   const goToPreviousDay = () => {
@@ -442,15 +452,10 @@ export default function PrayerPage() {
     }
   };
 
-  // PR #5: Quick action handlers for adding requests and follow-ups from focused mode
+  // PR #6: Quick action handler for adding prayer requests from focused mode
   const handleOpenQuickActionRequest = (personId: string) => {
     setQuickActionPersonId(personId)
     setQuickActionDialogOpen('request')
-  }
-
-  const handleOpenQuickActionFollowUp = (personId: string) => {
-    setQuickActionPersonId(personId)
-    setQuickActionDialogOpen('followup')
   }
 
   const handleAddQuickRequest = async () => {
@@ -461,7 +466,7 @@ export default function PrayerPage() {
       await addDoc(requestRef, {
         content: quickActionContent,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(), // Editing updates this
+        updatedAt: serverTimestamp(),
       })
 
       // Refresh expanded details if this person is expanded
@@ -473,35 +478,6 @@ export default function PrayerPage() {
       setQuickActionDialogOpen(null)
     } catch (error) {
       console.error("Error adding request:", error)
-    }
-  }
-
-  const handleAddQuickFollowUp = async () => {
-    if (!user || !quickActionContent || !quickActionPersonId) return
-
-    try {
-      const followUpRef = collection(db, "persons", quickActionPersonId, "followUps")
-      await addDoc(followUpRef, {
-        personId: quickActionPersonId,
-        content: quickActionContent,
-        dueDate: quickActionDueDate ? Timestamp.fromDate(quickActionDueDate) : undefined,
-        completed: false,
-        createdAt: serverTimestamp(),
-      })
-
-      // Refresh expanded details
-      if (expandedPersonId === quickActionPersonId) {
-        fetchExpandedDetails(quickActionPersonId)
-      }
-
-      // Also refresh allFollowUps for urgent section
-      fetchAllFollowUps()
-
-      setQuickActionContent("")
-      setQuickActionDueDate(undefined)
-      setQuickActionDialogOpen(null)
-    } catch (error) {
-      console.error("Error adding follow-up:", error)
     }
   }
 
@@ -1046,9 +1022,15 @@ export default function PrayerPage() {
                   totalCount={totalCount}
                   onOpenFocusedMode={(groupId) => {
                     const groupData = groupsWithProgress.find(g => g.group.id === groupId)
-                    setFocusedGroupPeopleOrder(groupData?.people.map(p => p.id) || [])
+                    const peopleIds = groupData?.people.map(p => p.id) || []
+                    setFocusedGroupPeopleOrder(peopleIds)
                     setFocusedGroupId(groupId)
                     setCurrentCarouselIndex(0)
+                    // Auto-fetch details for first person
+                    if (peopleIds.length > 0) {
+                      setExpandedPersonId(peopleIds[0])
+                      fetchExpandedDetails(peopleIds[0])
+                    }
                   }}
                 />
               ))
@@ -1068,52 +1050,32 @@ export default function PrayerPage() {
                 ...person,
                 mostRecentRequest: person.mostRecentRequest,
                 expandedRequests: expandedPersonId === person.id ? expandedData.requests : [],
-                expandedFollowUps: expandedPersonId === person.id ? expandedData.followUps : [],
                 isLoadingExpanded: expandedPersonId === person.id && expandedData.loading
               }))}
               currentPersonIndex={currentCarouselIndex}
               onPersonIndexChange={setCurrentCarouselIndex}
               onMarkPrayed={markAsPrayedFor}
-              onCompleteFollowUp={handleCompleteFollowUp}
               isMarkingPrayed={!!isMarkingPrayedId}
-              isCompletingFollowUpId={isCompletingFollowUpId}
               prayerListDate={prayerListDate}
               onAddRequest={handleOpenQuickActionRequest}
-              onAddFollowUp={handleOpenQuickActionFollowUp}
             />
           )}
 
-          {/* PR #5: Quick Action Dialogs */}
-          <Dialog open={!!quickActionDialogOpen} onOpenChange={() => setQuickActionDialogOpen(null)}>
+          {/* PR #6: Prayer Request Dialog */}
+          <Dialog open={quickActionDialogOpen === 'request'} onOpenChange={() => setQuickActionDialogOpen(null)}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>
-                  {quickActionDialogOpen === 'request' ? 'Add Prayer Request' : 'Add Follow-up'}
-                </DialogTitle>
+                <DialogTitle>Add Prayer Request</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
-                <Textarea
-                  value={quickActionContent}
-                  onChange={(e) => setQuickActionContent(e.target.value)}
-                  placeholder={quickActionDialogOpen === 'request' ? 'Enter prayer request...' : 'Enter follow-up...'}
-                  rows={3}
-                />
-                {quickActionDialogOpen === 'followup' && (
-                  <div>
-                    <label className="text-sm font-medium">Due Date (optional)</label>
-                    <Input
-                      type="date"
-                      value={quickActionDueDate ? quickActionDueDate.toISOString().split('T')[0] : ''}
-                      onChange={(e) => setQuickActionDueDate(e.target.value ? new Date(e.target.value) : undefined)}
-                    />
-                  </div>
-                )}
-              </div>
+              <Textarea
+                value={quickActionContent}
+                onChange={(e) => setQuickActionContent(e.target.value)}
+                placeholder="Enter prayer request..."
+                rows={3}
+              />
               <DialogFooter>
                 <Button variant="outline" onClick={() => setQuickActionDialogOpen(null)}>Cancel</Button>
-                <Button onClick={quickActionDialogOpen === 'request' ? handleAddQuickRequest : handleAddQuickFollowUp}>
-                  Add
-                </Button>
+                <Button onClick={handleAddQuickRequest}>Add</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

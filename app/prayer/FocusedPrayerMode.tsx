@@ -11,13 +11,12 @@ import {
   type CarouselApi,
 } from "@/components/ui/carousel"
 import { PersonPrayerCard } from "./PersonPrayerCard"
-import type { Group, Person, PrayerRequest, FollowUp } from "@/lib/types"
+import type { Group, Person, PrayerRequest } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 interface PersonWithDetails extends Person {
   mostRecentRequest?: PrayerRequest
   expandedRequests: PrayerRequest[]
-  expandedFollowUps: FollowUp[]
   isLoadingExpanded: boolean
 }
 
@@ -29,12 +28,9 @@ interface FocusedPrayerModeProps {
   currentPersonIndex: number
   onPersonIndexChange: (index: number) => void
   onMarkPrayed: (person: Person) => void
-  onCompleteFollowUp: (personId: string, followUpId: string) => void
   isMarkingPrayed: boolean
-  isCompletingFollowUpId: string | null
   prayerListDate: Date
   onAddRequest?: (personId: string) => void
-  onAddFollowUp?: (personId: string) => void
 }
 
 export function FocusedPrayerMode({
@@ -45,12 +41,9 @@ export function FocusedPrayerMode({
   currentPersonIndex,
   onPersonIndexChange,
   onMarkPrayed,
-  onCompleteFollowUp,
   isMarkingPrayed,
-  isCompletingFollowUpId,
   prayerListDate,
-  onAddRequest,
-  onAddFollowUp
+  onAddRequest
 }: FocusedPrayerModeProps) {
   const [api, setApi] = useState<CarouselApi>()
 
@@ -143,15 +136,11 @@ export function FocusedPrayerMode({
                     person={person}
                     mostRecentRequest={person.mostRecentRequest}
                     expandedRequests={person.expandedRequests}
-                    expandedFollowUps={person.expandedFollowUps}
                     isLoadingExpanded={person.isLoadingExpanded}
                     onMarkPrayed={onMarkPrayed}
-                    onCompleteFollowUp={onCompleteFollowUp}
                     isMarkingPrayed={isMarkingPrayed}
-                    isCompletingFollowUpId={isCompletingFollowUpId}
                     isPrayedToday={isSameDay(person.lastPrayedFor, prayerListDate)}
                     onAddRequest={onAddRequest ? () => onAddRequest(person.id) : undefined}
-                    onAddFollowUp={onAddFollowUp ? () => onAddFollowUp(person.id) : undefined}
                   />
                 </CarouselItem>
               ))}
