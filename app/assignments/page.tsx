@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, User, UserPlus, Users, Loader2, MoreVertical, Trash2, Edit, LogOut, RefreshCw, Calendar as CalendarIcon } from "lucide-react"
+import { Plus, User, UserPlus, Users, Loader2, MoreVertical, Trash2, Edit, LogOut, RefreshCw, Calendar as CalendarIcon, ChevronUp, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
@@ -291,6 +291,17 @@ export default function AssignmentsPage() {
         : [...prevIds, groupId] // Add ID if not present
     );
   };
+
+  // Expand/Collapse all groups
+  const handleExpandCollapseAll = () => {
+    if (expandedGroupIds.length === groups.length) {
+      // All are expanded, collapse all
+      setExpandedGroupIds([])
+    } else {
+      // Not all expanded, expand all
+      setExpandedGroupIds(groups.map(g => g.id))
+    }
+  }
 
   // Toggle day for group - Needs Firestore update
   const toggleDayForGroup = async (groupId: string, dayIndex: number) => {
@@ -1362,11 +1373,34 @@ export default function AssignmentsPage() {
                 No groups created yet. Click the '+' button to add your first group.
               </div>
             ) : (
+              <>
+                {/* Expand/Collapse All Button */}
+                <div className="flex justify-end pt-4 pb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExpandCollapseAll}
+                    className="gap-2"
+                  >
+                    {expandedGroupIds.length === groups.length ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Collapse All
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Expand All
+                      </>
+                    )}
+                  </Button>
+                </div>
+
                   <SortableContext
-                    items={groups.map(g => g.id)} 
+                    items={groups.map(g => g.id)}
                     strategy={verticalListSortingStrategy}
                   >
-                    <div className="space-y-4 pt-4">
+                    <div className="space-y-4">
                       {groups.map((group) => {
                         // Prepare props for the consolidated card
                         const peopleInGroup = getPeopleInGroup(group);
@@ -1405,6 +1439,7 @@ export default function AssignmentsPage() {
                       })}
                     </div>
                   </SortableContext>
+                </>
             )}
         </div>
 
