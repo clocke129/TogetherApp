@@ -846,20 +846,8 @@ export default function FollowupsPage() {
          </DialogContent> 
        </Dialog> 
 
-      {/* FAB for Adding Follow-up */}
+      {/* Add Follow-up Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogTrigger asChild>
-            <Button
-              variant="default"
-              className="fixed bottom-16 right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full shadow-lg z-50 flex items-center justify-center"
-              size="icon"
-              aria-label="Add Follow-up"
-              disabled={!user} // Disable if not logged in
-            >
-              <Plus className="h-6 w-6" />
-            </Button>
-        </DialogTrigger>
-        {/* Add Follow-up Dialog Content */}
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Add New Follow-up</DialogTitle>
