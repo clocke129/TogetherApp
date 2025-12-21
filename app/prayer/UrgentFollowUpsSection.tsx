@@ -120,11 +120,11 @@ export function UrgentFollowUpsSection({
         {/* Due Today Section */}
         {today.length > 0 && (
           <AccordionItem value="today">
-            <AccordionTrigger className="bg-card border px-4 py-3 hover:no-underline hover:bg-muted transition-colors">
+            <AccordionTrigger className="bg-card border border-shrub/20 px-4 py-3 hover:no-underline hover:bg-muted transition-colors">
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-shrub" />
                 <span className="font-semibold">Due Today</span>
-                <Badge variant="outline">
+                <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground">
                   {today.length}
                 </Badge>
               </div>

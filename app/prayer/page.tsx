@@ -1022,7 +1022,7 @@ export default function PrayerPage() {
             className="bg-shrub hover:bg-shrub/90"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Add Prayer
+            Prayer
           </Button>
         </div>
       </div>

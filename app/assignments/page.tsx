@@ -1296,7 +1296,7 @@ export default function AssignmentsPage() {
         {/* Header structure remains for consistency */}
         <div className="mb-4 md:mb-6 flex items-center justify-between">
           <div className="flex flex-col">
-            <h1 className="page-title">People</h1>
+            <h1 className="page-title">Groups</h1>
             <p className="text-muted-foreground">{currentDateString}</p>
           </div>
           <Dialog>
@@ -1324,7 +1324,7 @@ export default function AssignmentsPage() {
       <div className="mb-4 md:mb-6 flex items-center justify-between">
         {/* Left side: Title and Date */}
         <div className="flex flex-col">
-          <h1 className="page-title">People</h1>
+          <h1 className="page-title">Groups</h1>
           <p className="text-muted-foreground">{currentDateString}</p>
         </div>
         {/* Right side: Add Group Button */}

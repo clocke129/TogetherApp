@@ -65,7 +65,7 @@ export default function Navbar() {
       icon: Calendar,
     },
     {
-      name: "People",
+      name: "Groups",
       href: "/assignments",
       icon: Users,
     },
