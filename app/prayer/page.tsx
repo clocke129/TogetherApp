@@ -134,6 +134,7 @@ export default function PrayerPage() {
   const [headerPrayerPersonId, setHeaderPrayerPersonId] = useState<string>("")
   const [headerPrayerContent, setHeaderPrayerContent] = useState("")
   const [isAddingHeaderPrayer, setIsAddingHeaderPrayer] = useState(false)
+  const [headerGroupFilter, setHeaderGroupFilter] = useState<string>("all")
 
   // NEW: State to cache the calculated person IDs for each day (DateString -> Set<PersonID>)
   // Initialize with empty map - will load from sessionStorage in useEffect
@@ -162,6 +163,16 @@ export default function PrayerPage() {
     // Regular groups: only people explicitly assigned
     return allUserPeople.filter(p => p.groupId === group.id)
   }
+
+  // PR #7: Filtered people for header prayer dialog
+  const filteredPeopleForHeaderDialog = useMemo(() => {
+    if (headerGroupFilter === "all") {
+      return allUserPeople
+    } else if (headerGroupFilter === "uncategorized") {
+      return allUserPeople.filter(p => !p.groupId)
+    }
+    return allUserPeople.filter(p => p.groupId === headerGroupFilter)
+  }, [allUserPeople, headerGroupFilter])
 
   // PR #4: Derived state - Filter groups scheduled for today
   const todaysGroups = useMemo(() => {
@@ -513,12 +524,10 @@ export default function PrayerPage() {
         fetchExpandedDetails(headerPrayerPersonId)
       }
 
-      // Refresh the prayer list
-      fetchAllUserPeople()
-
       // Clear and close
       setHeaderPrayerContent("")
       setHeaderPrayerPersonId("")
+      setHeaderGroupFilter("all")
       setHeaderAddPrayerOpen(false)
     } catch (error) {
       console.error("Error adding prayer request:", error)
@@ -1138,17 +1147,49 @@ export default function PrayerPage() {
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="person-select">Person</Label>
-                  <Select value={headerPrayerPersonId} onValueChange={setHeaderPrayerPersonId}>
-                    <SelectTrigger id="person-select">
-                      <SelectValue placeholder="Select a person..." />
+                  <Label htmlFor="group-filter">Group (Filter)</Label>
+                  <Select
+                    value={headerGroupFilter}
+                    onValueChange={(value) => {
+                      setHeaderGroupFilter(value)
+                      setHeaderPrayerPersonId("") // Reset person selection when group changes
+                    }}
+                  >
+                    <SelectTrigger id="group-filter">
+                      <SelectValue placeholder="Filter by group..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {allUserPeople.map((person) => (
-                        <SelectItem key={person.id} value={person.id}>
-                          {person.name}
+                      <SelectItem value="all">All People</SelectItem>
+                      <SelectItem value="uncategorized">Uncategorized</SelectItem>
+                      {allUserGroups.filter(g => !g.isSystemGroup).length > 0 && <SelectSeparator />}
+                      {allUserGroups.filter(g => !g.isSystemGroup).map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="person-select">Person</Label>
+                  <Select
+                    value={headerPrayerPersonId}
+                    onValueChange={setHeaderPrayerPersonId}
+                    disabled={filteredPeopleForHeaderDialog.length === 0}
+                  >
+                    <SelectTrigger id="person-select">
+                      <SelectValue placeholder={filteredPeopleForHeaderDialog.length > 0 ? "Select a person..." : "No people in selected group"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredPeopleForHeaderDialog.length > 0 ? (
+                        filteredPeopleForHeaderDialog.map((person) => (
+                          <SelectItem key={person.id} value={person.id}>
+                            {person.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-people-placeholder" disabled>No people match filter</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

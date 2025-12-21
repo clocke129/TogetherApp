@@ -501,7 +501,7 @@ export default function FollowupsPage() {
             className="bg-shrub hover:bg-shrub/90"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Add Follow-up
+            Follow-up
           </Button>
         </div>
       </div>

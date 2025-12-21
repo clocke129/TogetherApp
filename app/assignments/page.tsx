@@ -1336,7 +1336,7 @@ export default function AssignmentsPage() {
                className="bg-shrub hover:bg-shrub/90"
             >
                <Plus className="mr-2 h-4 w-4" />
-               Add Group
+               Group
             </Button>
         </div>
       </div>
