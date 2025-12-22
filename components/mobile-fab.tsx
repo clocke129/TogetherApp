@@ -46,6 +46,12 @@ type ExistingPerson = {
   name: string
 }
 
+type DateSuggestion = {
+  label: string        // "Tomorrow", "Next week", "Next month"
+  dateText: string     // "Dec 24", "Dec 29", "Jan 22"
+  dueDate: Date        // Actual Date object for setting field
+}
+
 export function MobileFAB() {
   const [isOpen, setIsOpen] = useState(false)
   const [text, setText] = useState("")
@@ -56,6 +62,11 @@ export function MobileFAB() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestionQuery, setSuggestionQuery] = useState("")
   const [filteredSuggestions, setFilteredSuggestions] = useState<ExistingPerson[]>([])
+
+  // Date autocomplete state (similar to @ mentions)
+  const [showDateSuggestions, setShowDateSuggestions] = useState(false)
+  const [dateSuggestionQuery, setDateSuggestionQuery] = useState("")
+  const [filteredDateSuggestions, setFilteredDateSuggestions] = useState<DateSuggestion[]>([])
 
   const { user } = useAuth()
   const isMobile = useMobile()
@@ -160,6 +171,34 @@ export function MobileFAB() {
     parseText()
   }, [text])
 
+  // Generate date suggestions (Tomorrow, Next week, Next month)
+  const getDateSuggestions = (): DateSuggestion[] => {
+    const today = new Date()
+
+    // Tomorrow
+    const tomorrow = new Date(today)
+    tomorrow.setDate(today.getDate() + 1)
+
+    // Next week
+    const nextWeek = new Date(today)
+    nextWeek.setDate(today.getDate() + 7)
+
+    // Next month
+    const nextMonth = new Date(today)
+    nextMonth.setMonth(today.getMonth() + 1)
+    // JavaScript automatically handles month-end edge cases
+
+    const formatDate = (date: Date) => {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    }
+
+    return [
+      { label: "Tomorrow", dateText: formatDate(tomorrow), dueDate: tomorrow },
+      { label: "Next week", dateText: formatDate(nextWeek), dueDate: nextWeek },
+      { label: "Next month", dateText: formatDate(nextMonth), dueDate: nextMonth },
+    ]
+  }
+
   // Handle text changes and check for @ symbol to show suggestions
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value
@@ -194,6 +233,30 @@ export function MobileFAB() {
       setShowSuggestions(false)
       setSuggestionQuery("")
       setFilteredSuggestions([])
+    }
+
+    // NEW: # date autocomplete logic (same pattern as @)
+    const lastHashSymbolIndex = textBeforeCursor.lastIndexOf("#")
+    if (lastHashSymbolIndex !== -1) {
+      const query = textBeforeCursor.substring(lastHashSymbolIndex + 1)
+      const textBetweenHashAndCursor = textBeforeCursor.substring(lastHashSymbolIndex)
+
+      // Only show if no newline between # and cursor
+      if (!textBetweenHashAndCursor.includes('\n')) {
+        setDateSuggestionQuery(query)
+
+        const allDateSuggestions = getDateSuggestions()
+        const filtered = allDateSuggestions.filter(suggestion =>
+          suggestion.label.toLowerCase().includes(query.toLowerCase())
+        )
+
+        setFilteredDateSuggestions(filtered)
+        setShowDateSuggestions(filtered.length > 0)
+      } else {
+        setShowDateSuggestions(false)
+      }
+    } else {
+      setShowDateSuggestions(false)
     }
   }
 
@@ -239,6 +302,40 @@ export function MobileFAB() {
 
     setExistingPersons(prev => [...prev, newPerson])
     handleSelectPerson(newPerson)
+  }
+
+  // Handle selection of a date from suggestions
+  const handleSelectDate = (suggestion: DateSuggestion) => {
+    if (!textareaRef.current) return
+
+    const currentText = text
+    const currentPosition = textareaRef.current.selectionStart || 0
+    const textBeforeCursor = currentText.substring(0, currentPosition)
+    const lastHashSymbolIndex = textBeforeCursor.lastIndexOf("#")
+
+    if (lastHashSymbolIndex === -1) return
+
+    // Convert date to #MMDD format that the parser recognizes
+    const month = String(suggestion.dueDate.getMonth() + 1).padStart(2, '0')
+    const day = String(suggestion.dueDate.getDate()).padStart(2, '0')
+    const dateFormat = `#${month}${day}`
+
+    // Replace #query with #MMDD format
+    const beforeHash = currentText.substring(0, lastHashSymbolIndex)
+    const afterQuery = currentText.substring(currentPosition)
+    const newText = `${beforeHash}${dateFormat}${afterQuery}`
+
+    setText(newText)
+    setShowDateSuggestions(false)
+
+    // Reset cursor position
+    const newCursorPosition = lastHashSymbolIndex + dateFormat.length
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+      }
+    }, 0)
   }
 
   // Format the date for display
@@ -383,6 +480,28 @@ Use #MMDD for follow-up dates.`}
                 Add new person: "{suggestionQuery.trim()}"
               </Button>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Date Autocomplete Suggestions */}
+      {showDateSuggestions && (
+        <Card
+          className="absolute z-10 mt-1 w-full max-w-xs border rounded-md bg-background shadow-lg"
+          style={{ top: '100%' }}
+        >
+          <CardContent className="p-1 max-h-48 overflow-y-auto">
+            {filteredDateSuggestions.map((suggestion, index) => (
+              <Button
+                key={index}
+                variant="ghost"
+                className="w-full justify-between h-8 px-2 mb-1 text-left text-sm"
+                onClick={() => handleSelectDate(suggestion)}
+              >
+                <span>{suggestion.label}</span>
+                <span className="text-muted-foreground text-xs">{suggestion.dateText}</span>
+              </Button>
+            ))}
           </CardContent>
         </Card>
       )}
