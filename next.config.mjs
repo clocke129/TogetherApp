@@ -28,6 +28,8 @@ const baseNextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  // Empty turbopack config to silence Next.js 16 warning about webpack config from PWA plugin
+  turbopack: {},
 };
 
 // Function to merge configs (revised to return the merged config)
