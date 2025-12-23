@@ -92,11 +92,13 @@ export default function PrayerPage() {
   const filteredPeopleForRequestDialog = useMemo(() => {
     if (selectedGroupIdForFilter === "all") {
       return allUserPeople;
-    } else if (selectedGroupIdForFilter === "uncategorized") {
+    }
+    const everyoneGroup = allUserGroups.find(g => g.isSystemGroup && g.name === "Everyone");
+    if (selectedGroupIdForFilter === everyoneGroup?.id) {
       return allUserPeople.filter(p => !p.groupId);
     }
     return allUserPeople.filter(p => p.groupId === selectedGroupIdForFilter);
-  }, [allUserPeople, selectedGroupIdForFilter]);
+  }, [allUserPeople, allUserGroups, selectedGroupIdForFilter]);
 
   // State for today's prayer list derived from fetched data
   const [todaysPrayerList, setTodaysPrayerList] = useState<Array<Person & { mostRecentRequest?: PrayerRequest }>>([])
@@ -168,11 +170,13 @@ export default function PrayerPage() {
   const filteredPeopleForHeaderDialog = useMemo(() => {
     if (headerGroupFilter === "all") {
       return allUserPeople
-    } else if (headerGroupFilter === "uncategorized") {
+    }
+    const everyoneGroup = allUserGroups.find(g => g.isSystemGroup && g.name === "Everyone");
+    if (headerGroupFilter === everyoneGroup?.id) {
       return allUserPeople.filter(p => !p.groupId)
     }
     return allUserPeople.filter(p => p.groupId === headerGroupFilter)
-  }, [allUserPeople, headerGroupFilter])
+  }, [allUserPeople, allUserGroups, headerGroupFilter])
 
   // PR #4: Derived state - Filter groups scheduled for today
   const todaysGroups = useMemo(() => {
@@ -223,13 +227,18 @@ export default function PrayerPage() {
     }
 
     return todaysGroups.map(group => {
-      const peopleInGroup = getPeopleInGroup(group)
+      const allPeopleInGroup = getPeopleInGroup(group)
+      // Filter to only show people selected for today's prayer list
+      const todaysPrayerIds = new Set(todaysPrayerList.map(p => p.id))
+      const peopleInGroup = allPeopleInGroup.filter(p => todaysPrayerIds.has(p.id))
+
       const prayedCount = peopleInGroup.filter(person =>
         isSameDay(person.lastPrayedFor, prayerListDate)
       ).length
 
       console.log(`[PR #4] Group "${group.name}" (${group.id}):`, {
-        totalPeople: peopleInGroup.length,
+        allPeopleInGroup: allPeopleInGroup.length,
+        selectedForToday: peopleInGroup.length,
         peopleNames: peopleInGroup.map(p => p.name),
         prayedCount
       })
@@ -241,7 +250,7 @@ export default function PrayerPage() {
         totalCount: peopleInGroup.length
       }
     })
-  }, [todaysGroups, allUserPeople, prayerListDate, loadingData])
+  }, [todaysGroups, allUserPeople, todaysPrayerList, prayerListDate, loadingData])
 
   // PR #4: Derived state - Get current focused group's people
   const focusedGroupPeople = useMemo(() => {
@@ -560,8 +569,8 @@ export default function PrayerPage() {
 
     // If person has no group or group has no prayerDays, they are not eligible through group scheduling
     if (!group || !group.prayerDays) {
-        // You might have other rules for uncategorized people, but based on
-        // calculateAndSaveDailyPrayerList, only people in active groups are selected.
+        // People without groups are handled by the "Everyone" system group.
+        // Only people in groups with scheduled prayer days are eligible.
         // console.log(`Person ${person.id} not eligible: No group or group has no prayer days.`);
         return false;
     }
@@ -1160,7 +1169,11 @@ export default function PrayerPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All People</SelectItem>
-                      <SelectItem value="uncategorized">Uncategorized</SelectItem>
+                      {allUserGroups.filter(g => g.isSystemGroup).map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name}
+                        </SelectItem>
+                      ))}
                       {allUserGroups.filter(g => !g.isSystemGroup).length > 0 && <SelectSeparator />}
                       {allUserGroups.filter(g => !g.isSystemGroup).map((group) => (
                         <SelectItem key={group.id} value={group.id}>

@@ -16,9 +16,9 @@ export interface Group {
   personIds: string[]; // Array of Person document IDs in this group
   prayerDays: number[]; // 0-6 representing Sun-Sat
   prayerSettings?: {
-    strategy: "sequential"; // Selection method (only sequential for now)
+    strategy: "sequential"; // DEPRECATED: Algorithm changed to lastPrayedFor sorting
     numPerDay: number | null; // How many people to pray for each time (null means 'all')
-    nextIndex: number; // Index to start selection from next time
+    nextIndex: number; // DEPRECATED: No longer used, kept for backward compatibility
   };
   createdAt?: Timestamp; // Added creation timestamp
   order?: number; // Optional: For manual ordering/drag-and-drop

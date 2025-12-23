@@ -1,8 +1,8 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { db } from "@/lib/firebaseConfig" // Import db instance
-import { collection, query, where, getDocs, getDoc, doc, Timestamp, writeBatch, setDoc, addDoc, serverTimestamp, type Firestore } from 'firebase/firestore' // Import Firestore types/functions
-import type { Group } from '@/lib/types' // Import Group type
+import { collection, query, where, getDocs, getDoc, doc, Timestamp, setDoc, addDoc, serverTimestamp, type Firestore } from 'firebase/firestore' // Import Firestore types/functions
+import type { Group, Person } from '@/lib/types' // Import Group and Person types
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -18,11 +18,32 @@ export const formatDate = (date: Date | undefined): string => {
 // if it's only used there, or move it here too if needed elsewhere.
 
 /**
- * Calculates the daily prayer list for a user and date, updates group nextIndex,
- * saves the list to Firestore, and returns the set of person IDs.
+ * Sorts people by lastPrayedFor timestamp (oldest first).
+ * People who have never been prayed for (null/undefined) are prioritized.
+ * Tie-breaking uses personId for stable, deterministic ordering.
+ */
+function sortByLastPrayedFor(people: Person[]): Person[] {
+  return people.slice().sort((a, b) => {
+    // Convert timestamps to milliseconds, treat null/undefined as 0 (epoch) to prioritize
+    const timeA = a.lastPrayedFor?.toMillis() ?? 0
+    const timeB = b.lastPrayedFor?.toMillis() ?? 0
+
+    if (timeA !== timeB) {
+      return timeA - timeB  // Ascending: oldest first
+    }
+
+    // Tie-breaker: stable sort by personId
+    return a.id.localeCompare(b.id)
+  })
+}
+
+/**
+ * Calculates the daily prayer list for a user and date using "last prayed for" algorithm.
+ * Selects people who haven't been prayed for in the longest time.
+ * Saves the list to Firestore with settings snapshot validation.
  *
- * CRITICAL FIX: Now checks if list already exists and validates settings before recalculating.
- * This prevents the rotation bug where nextIndex gets updated on every page refresh.
+ * CRITICAL: Now checks if list already exists and validates settings before recalculating.
+ * This prevents unnecessary recalculation on every page refresh.
  */
 export async function calculateAndSaveDailyPrayerList(
     db: Firestore, // Pass Firestore instance
@@ -55,12 +76,25 @@ export async function calculateAndSaveDailyPrayerList(
             const currentSettingsSnapshot: Record<string, { numPerDay: number | null }> = {};
             const activeGroups = fetchedGroups.filter(group => group.prayerDays?.includes(currentDayIndex));
 
+            // Fetch all people to handle Everyone group correctly
+            const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId));
+            const peopleSnapshot = await getDocs(peopleQuery);
+            const allPeople = peopleSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Person));
+
             activeGroups.forEach(group => {
-                const groupPersonIds = group.personIds ?? [];
-                if (groupPersonIds.length > 0) {
+                let totalPeople: number;
+
+                // Handle Everyone group specially (has empty personIds array)
+                if (group.isSystemGroup && group.name === "Everyone") {
+                    totalPeople = allPeople.filter(p => !p.groupId).length;
+                } else {
+                    const groupPersonIds = group.personIds ?? [];
+                    totalPeople = groupPersonIds.length;
+                }
+
+                if (totalPeople > 0) {
                     const settings = group.prayerSettings;
                     const numPerDaySetting = settings?.numPerDay ?? null;
-                    const totalPeople = groupPersonIds.length;
                     const actualNumToAssign = numPerDaySetting === null ? totalPeople : Math.min(numPerDaySetting, totalPeople);
                     currentSettingsSnapshot[group.id] = { numPerDay: actualNumToAssign };
                 }
@@ -89,8 +123,14 @@ export async function calculateAndSaveDailyPrayerList(
         const fetchedGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
         console.log(`[Calculation Function] Fetched ${fetchedGroups.length} groups.`);
 
+        // Fetch all people for this user (needed for lastPrayedFor sorting)
+        console.log(`[Calculation Function] Fetching people for calculation...`);
+        const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId));
+        const peopleSnapshot = await getDocs(peopleQuery);
+        const allPeople = peopleSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Person));
+        console.log(`[Calculation Function] Fetched ${allPeople.length} people.`);
+
         const personIdsToPrayFor = new Set<string>();
-        const batch = writeBatch(db);
         const settingsSnapshot: Record<string, { numPerDay: number | null }> = {};
 
         // 2. Filter for active groups
@@ -99,51 +139,44 @@ export async function calculateAndSaveDailyPrayerList(
         );
         console.log(`[Calculation Function] Found ${activeGroups.length} active groups for day index ${currentDayIndex}.`);
 
-        // 3. Calculate assignments and stage nextIndex updates
+        // 3. Calculate assignments using lastPrayedFor algorithm
         activeGroups.forEach(group => {
-            const groupPersonIds = group.personIds ?? [];
-            if (groupPersonIds.length === 0) {
+            // Get people in group (handles Everyone group dynamically)
+            let groupPeople: Person[]
+            if (group.isSystemGroup && group.name === "Everyone") {
+                groupPeople = allPeople.filter(p => !p.groupId)
+                console.log(`[Calculation Function] Everyone group: ${groupPeople.length} people without groupId`)
+            } else {
+                groupPeople = allPeople.filter(p => p.groupId === group.id)
+            }
+
+            if (groupPeople.length === 0) {
                 console.log(`[Calculation Function] Skipping group ${group.id} (${group.name}) - no members.`);
                 return;
             }
+
             const settings = group.prayerSettings;
             const numPerDaySetting = settings?.numPerDay ?? null;
-            const currentStartIndex = settings?.nextIndex ?? 0;
-            const totalPeople = groupPersonIds.length;
-            const actualNumToAssign = numPerDaySetting === null ? totalPeople : Math.min(numPerDaySetting, totalPeople);
+            const actualNumToAssign = numPerDaySetting === null
+                ? groupPeople.length
+                : Math.min(numPerDaySetting, groupPeople.length);
 
-            // NEW: Record the setting for this group in the snapshot
-            settingsSnapshot[group.id] = { numPerDay: actualNumToAssign }; // Store the *actual* number assigned
+            // Record the setting for this group in the snapshot
+            settingsSnapshot[group.id] = { numPerDay: actualNumToAssign };
 
-            console.log(`[Calculation Function] Group: ${group.name} (ID: ${group.id}) - Settings: numPerDay=${numPerDaySetting ?? 'all'}(actual:${actualNumToAssign}), startIndex=${currentStartIndex}, total=${totalPeople}`);
+            console.log(`[Calculation Function] Group: ${group.name} (ID: ${group.id}) - Settings: numPerDay=${numPerDaySetting ?? 'all'}(actual:${actualNumToAssign}), total=${groupPeople.length}`);
 
-            let assignedCount = 0;
-            let newNextIndex = currentStartIndex;
-            for (let i = 0; i < actualNumToAssign; i++) {
-                const personIndex = (currentStartIndex + i) % totalPeople;
-                const personId = groupPersonIds[personIndex];
-                personIdsToPrayFor.add(personId);
-                assignedCount++;
-            }
-            newNextIndex = (currentStartIndex + assignedCount) % totalPeople;
-
-            // Stage update for nextIndex if it changed or wasn't set
-            if (!settings || settings.nextIndex !== newNextIndex) {
-                const groupRef = doc(db, "groups", group.id);
-                batch.update(groupRef, {
-                    "prayerSettings.nextIndex": newNextIndex,
-                    "prayerSettings.strategy": settings?.strategy ?? "sequential",
-                    "prayerSettings.numPerDay": numPerDaySetting === undefined ? null : numPerDaySetting
-                });
-                console.log(`[Calculation Function] Staging update for group ${group.id}: set prayerSettings.nextIndex to ${newNextIndex}`);
-            }
+            // NEW ALGORITHM: Sort by lastPrayedFor and select top N
+            const sortedPeople = sortByLastPrayedFor(groupPeople);
+            const selectedPeople = sortedPeople.slice(0, actualNumToAssign);
+            selectedPeople.forEach(p => {
+                personIdsToPrayFor.add(p.id);
+                const lastPrayed = p.lastPrayedFor ? new Date(p.lastPrayedFor.toMillis()).toLocaleDateString() : 'never';
+                console.log(`[Calculation Function]   Selected: ${p.name} (last prayed: ${lastPrayed})`);
+            });
         });
 
         console.log(`[Calculation Function] Final Person IDs determined:`, Array.from(personIdsToPrayFor));
-
-        // 4. Commit nextIndex updates
-        await batch.commit();
-        console.log("[Calculation Function] Batch commit successful for nextIndex updates.");
 
         // 5. Save the calculated list AND settings snapshot to dailyPrayerLists
         await setDoc(dailyListRef, {

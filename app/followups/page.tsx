@@ -154,11 +154,13 @@ export default function FollowupsPage() {
   const filteredPeopleForDialog = useMemo(() => {
     if (selectedGroupIdForFilter === "all") {
       return allUserPeople;
-    } else if (selectedGroupIdForFilter === "uncategorized") {
+    }
+    const everyoneGroup = allUserGroups.find(g => g.isSystemGroup && g.name === "Everyone");
+    if (selectedGroupIdForFilter === everyoneGroup?.id) {
       return allUserPeople.filter(p => !p.groupId);
     }
     return allUserPeople.filter(p => p.groupId === selectedGroupIdForFilter);
-  }, [allUserPeople, selectedGroupIdForFilter]);
+  }, [allUserPeople, allUserGroups, selectedGroupIdForFilter]);
 
   // Toggle follow-up completion
   const toggleFollowUpCompletion = async (followUpId: string) => {
@@ -876,9 +878,13 @@ export default function FollowupsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All People</SelectItem>
-                    <SelectItem value="uncategorized">Uncategorized</SelectItem>
-                    {allUserGroups.filter(g => g.id !== 'archive').length > 0 && <SelectSeparator />}
-                    {allUserGroups.filter(g => g.id !== 'archive').map((group) => (
+                    {allUserGroups.filter(g => g.isSystemGroup && g.id !== 'archive').map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                    {allUserGroups.filter(g => !g.isSystemGroup && g.id !== 'archive').length > 0 && <SelectSeparator />}
+                    {allUserGroups.filter(g => !g.isSystemGroup && g.id !== 'archive').map((group) => (
                       <SelectItem key={group.id} value={group.id}>
                         {group.name}
                       </SelectItem>
