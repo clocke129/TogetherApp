@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { ChevronDown, ChevronUp, Users, User, UserPlus, GripVertical, Loader2, Edit } from "lucide-react";
-import { useSortable } from '@dnd-kit/sortable';
+import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from "@/lib/utils";
 import type { Group, Person } from '@/lib/types';
+import { DraggablePerson } from './draggable-person';
 
 // Props needed by the CONSOLIDATED SortableGroupCard
 interface SortableGroupCardProps {
@@ -30,6 +32,9 @@ interface SortableGroupCardProps {
   onDayToggle: (groupId: string, dayIndex: number) => void;
   onNumPerDayChange: (groupId: string, newValue: number | null) => void;
   onOpenPersonDetailsModal: (person: Person) => void;
+  // Drag-and-drop props
+  isPersonDragActive: boolean;
+  isDropTarget: boolean;
 }
 
 export function SortableGroupCard({
@@ -45,12 +50,14 @@ export function SortableGroupCard({
   currentNumSetting,
   displayDays,
   groupSize,
-  isLoading, 
+  isLoading,
   isUpdatingDays,
   isSavingNumPerDay,
   onDayToggle,
   onNumPerDayChange,
   onOpenPersonDetailsModal,
+  isPersonDragActive,
+  isDropTarget,
 }: SortableGroupCardProps) {
   const {
     attributes,
@@ -59,7 +66,22 @@ export function SortableGroupCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: group.id });
+  } = useSortable({
+    id: `group-${group.id}`,
+    data: { type: 'group', group }
+  });
+
+  // Separate droppable for accepting person drops
+  const droppable = useDroppable({
+    id: `group-${group.id}`,
+    data: { type: 'group-drop', groupId: group.id }
+  });
+
+  // Merge both refs
+  const setRefs = useCallback((node: HTMLElement | null) => {
+    setNodeRef(node);
+    droppable.setNodeRef(node);
+  }, [setNodeRef, droppable]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -72,10 +94,13 @@ export function SortableGroupCard({
 
   return (
     <Card
-      ref={setNodeRef}
+      ref={setRefs}
       style={style}
       key={group.id}
-      className="mb-4 overflow-hidden"
+      className={cn(
+        "mb-4 overflow-hidden transition-colors",
+        isDropTarget && "border-2 border-shrub bg-shrub/5"
+      )}
       {...attributes}
     >
       <CardHeader
@@ -133,30 +158,21 @@ export function SortableGroupCard({
           {peopleInGroup.length === 0 ? (
               <p className="text-center py-4 text-muted-foreground text-sm">No people in this group</p>
           ) : (
-              <div className="space-y-2 mb-2">
-              {peopleInGroup.map((person) => (
-                <div
-                  key={person.id}
-                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span
-                       className="text-sm cursor-pointer hover:underline"
-                       onClick={(e) => { e.stopPropagation(); onOpenPersonDetailsModal(person); }}
-                     >
-                       {person.name}
-                    </span>
-                  </div>
-                  <div
-                      className="p-1 cursor-pointer text-muted-foreground hover:text-foreground"
-                      onClick={(e) => { e.stopPropagation(); openPersonActionsDialog(person); }}
-                  >
-                      <Edit className="h-4 w-4" />
-                  </div>
+              <SortableContext
+                items={peopleInGroup.map(p => `person-${p.id}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2 mb-2">
+                  {peopleInGroup.map((person) => (
+                    <DraggablePerson
+                      key={person.id}
+                      person={person}
+                      onOpenPersonDetailsModal={onOpenPersonDetailsModal}
+                      onOpenPersonActionsDialog={openPersonActionsDialog}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
           )}
           </div>
 

@@ -54,6 +54,9 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
+  DragOverEvent,
+  DragOverlay,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -156,6 +159,12 @@ export default function AssignmentsPage() {
   // State to track the active tab in the Person Details modal
   const [activeDetailsTab, setActiveDetailsTab] = useState<'requests' | 'followups'>('requests');
 
+  // Drag state for people
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [activeDragType, setActiveDragType] = useState<"group" | "person" | null>(null);
+  const [activePersonDrag, setActivePersonDrag] = useState<Person | null>(null);
+  const [overGroupId, setOverGroupId] = useState<string | null>(null);
+
   const [currentDateString] = useState(() => {
     const today = new Date();
     return today.toLocaleDateString("en-US", {
@@ -172,45 +181,167 @@ export default function AssignmentsPage() {
     })
   );
 
+  // Handler for reordering groups
+  const handleGroupReorder = async (activeId: string, overId: string) => {
+    const groupIdA = activeId.replace('group-', '');
+    const groupIdB = overId.replace('group-', '');
+
+    if (groupIdA === groupIdB) return;
+
+    const oldIndex = groups.findIndex((item) => item.id === groupIdA);
+    const newIndex = groups.findIndex((item) => item.id === groupIdB);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      console.error("Could not find dragged item or drop target in state.");
+      return;
+    }
+
+    const newOrderedGroups = arrayMove(groups, oldIndex, newIndex);
+
+    setGroups(newOrderedGroups); // Optimistic UI update
+    console.log(`Group ${groupIdA} moved locally from index ${oldIndex} to ${newIndex}`);
+    console.log("New Local Order:", newOrderedGroups.map(g => ({ id: g.id, name: g.name })));
+
+    // --- Persist the new order in Firestore ---
+    try {
+      const batch = writeBatch(db);
+      newOrderedGroups.forEach((group, index) => {
+        const originalGroupData = groups.find(g => g.id === group.id);
+        if (originalGroupData?.order !== index || group.order === undefined) {
+           console.log(`Updating order for ${group.id} to ${index}`);
+           const groupRef = doc(db, "groups", group.id);
+           batch.update(groupRef, { order: index });
+        }
+      });
+      await batch.commit();
+      console.log("Successfully updated group order in Firestore.");
+    } catch (error) {
+      console.error("Error updating group order in Firestore:", error);
+      setGroups(groups); // Revert local state to before drag
+      alert("Failed to save the new group order. Please try again.");
+    }
+  };
+
+  // Handler for moving people between groups
+  const handlePersonDrop = async (activeId: string, overId: string) => {
+    const personId = activeId.replace('person-', '');
+    let targetGroupId: string;
+
+    // Handle dropping on a group or on a person within a group
+    if (overId.startsWith('group-')) {
+      targetGroupId = overId.replace('group-', '');
+    } else if (overId.startsWith('person-')) {
+      // Dropped on another person - find that person's group
+      const targetPersonId = overId.replace('person-', '');
+      const targetPerson = people.find(p => p.id === targetPersonId);
+      if (!targetPerson) return;
+      // If target person has no group, they're in Everyone
+      targetGroupId = targetPerson.groupId || groups.find(g => g.isSystemGroup)?.id || '';
+    } else {
+      return;
+    }
+
+    const person = people.find(p => p.id === personId);
+    const targetGroup = groups.find(g => g.id === targetGroupId);
+    if (!person || !targetGroup) return;
+
+    // Special handling for Everyone group (isSystemGroup)
+    const finalGroupId = targetGroup.isSystemGroup ? undefined : targetGroupId;
+
+    // No-op if dropped on current group (compare with finalGroupId, not targetGroupId)
+    if (person.groupId === finalGroupId) {
+      return;
+    }
+
+    // Optimistic UI update
+    setPeople(prev => prev.map(p =>
+      p.id === personId ? { ...p, groupId: finalGroupId } : p
+    ));
+
+    // Firestore batch write
+    try {
+      const batch = writeBatch(db);
+      const personRef = doc(db, 'persons', personId);
+
+      if (finalGroupId === undefined) {
+        // Moving to Everyone - remove groupId
+        batch.update(personRef, { groupId: deleteField() });
+      } else {
+        // Moving to regular group
+        batch.update(personRef, { groupId: finalGroupId });
+        const newGroupRef = doc(db, 'groups', finalGroupId);
+        batch.update(newGroupRef, { personIds: arrayUnion(personId) });
+      }
+
+      // Remove from old group if exists
+      if (person.groupId) {
+        const oldGroupRef = doc(db, 'groups', person.groupId);
+        batch.update(oldGroupRef, { personIds: arrayRemove(personId) });
+      }
+
+      await batch.commit();
+      toast.success(`Moved ${person.name} to ${targetGroup.name}`);
+    } catch (error) {
+      console.error('Error moving person:', error);
+      // Revert optimistic update
+      setPeople(prev => prev.map(p =>
+        p.id === personId ? { ...p, groupId: person.groupId } : p
+      ));
+      toast.error('Failed to move person');
+    }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const activeId = active.id as string;
+
+    if (activeId.startsWith('person-')) {
+      const personId = activeId.replace('person-', '');
+      const person = people.find(p => p.id === personId);
+      setActiveDragType('person');
+      setActiveDragId(activeId);
+      setActivePersonDrag(person || null);
+    } else if (activeId.startsWith('group-')) {
+      setActiveDragType('group');
+      setActiveDragId(activeId);
+    }
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over, active } = event;
+    const activeId = String(active.id);
+
+    // Track drop target for person drags only
+    if (activeId.startsWith('person-') && over) {
+      const overId = String(over.id);
+      if (overId.startsWith('group-')) {
+        const groupId = overId.replace('group-', '');
+        setOverGroupId(groupId);
+      }
+    } else {
+      setOverGroupId(null);
+    }
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (over && active.id !== over.id) {
-      const oldIndex = groups.findIndex((item) => item.id === active.id);
-      const newIndex = groups.findIndex((item) => item.id === over.id);
-      
-      if (oldIndex === -1 || newIndex === -1) {
-        console.error("Could not find dragged item or drop target in state.");
-        return; 
-      }
+    // Reset drag state
+    setActiveDragId(null);
+    setActiveDragType(null);
+    setActivePersonDrag(null);
+    setOverGroupId(null);
 
-      const newOrderedGroups = arrayMove(groups, oldIndex, newIndex);
+    if (!over) return;
 
-      setGroups(newOrderedGroups); // Optimistic UI update
-      console.log(`Group ${active.id} moved locally from index ${oldIndex} to ${newIndex}`);
-      console.log("New Local Order:", newOrderedGroups.map(g => ({ id: g.id, name: g.name })));
+    const activeId = String(active.id);
+    const overId = String(over.id);
 
-      // --- Persist the new order in Firestore --- 
-      try {
-        const batch = writeBatch(db);
-        newOrderedGroups.forEach((group, index) => {
-          // Find the group's original data to compare its order
-          const originalGroupData = groups.find(g => g.id === group.id);
-          // Update Firestore only if the order changed or was missing
-          if (originalGroupData?.order !== index || group.order === undefined) {
-             console.log(`Updating order for ${group.id} to ${index}`);
-             const groupRef = doc(db, "groups", group.id);
-             batch.update(groupRef, { order: index });
-          }
-        });
-        await batch.commit();
-        console.log("Successfully updated group order in Firestore.");
-      } catch (error) {
-        console.error("Error updating group order in Firestore:", error);
-        // Consider reverting the optimistic update on error
-        setGroups(groups); // Revert local state to before drag
-        alert("Failed to save the new group order. Please try again.");
-      }
+    // Route to appropriate handler
+    if (activeId.startsWith('person-')) {
+      await handlePersonDrop(activeId, overId);
+    } else if (activeId.startsWith('group-')) {
+      await handleGroupReorder(activeId, overId);
     }
   };
 
@@ -1328,6 +1459,36 @@ export default function AssignmentsPage() {
     );
   }
 
+  // Custom collision detection to separate person and group drags
+  const customCollisionDetection = (args: any) => {
+    const { active, droppableContainers } = args;
+    const activeId = String(active.id);
+
+    // For person drags, only consider group zones
+    if (activeId.startsWith('person-')) {
+      const groupDropZones = Array.from(droppableContainers.entries()).filter(
+        ([id]) => String(id).startsWith('group-')
+      );
+      return closestCenter({
+        ...args,
+        droppableContainers: new Map(groupDropZones)
+      });
+    }
+
+    // For group drags, only consider other groups
+    if (activeId.startsWith('group-')) {
+      const groupContainers = Array.from(droppableContainers.entries()).filter(
+        ([id]) => String(id).startsWith('group-')
+      );
+      return closestCenter({
+        ...args,
+        droppableContainers: new Map(groupContainers)
+      });
+    }
+
+    return closestCenter(args);
+  };
+
   // Logged In State
   return (
     <div className="mobile-container pb-16 md:pb-6">
@@ -1362,8 +1523,20 @@ export default function AssignmentsPage() {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
+        <DragOverlay>
+          {activePersonDrag ? (
+            <div className="flex items-center justify-between p-2 rounded-md bg-background border shadow-lg">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm">{activePersonDrag.name}</span>
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
         <div className="space-y-6">
             {/* Groups Section - Renders directly now */}
             {isLoading ? (
@@ -1397,7 +1570,7 @@ export default function AssignmentsPage() {
                 </div>
 
                   <SortableContext
-                    items={groups.map(g => g.id)}
+                    items={groups.map(g => `group-${g.id}`)}
                     strategy={verticalListSortingStrategy}
                   >
                     <div className="space-y-4">
@@ -1414,11 +1587,11 @@ export default function AssignmentsPage() {
                         // Pass ALL required props to the consolidated card
                         return (
                           <SortableGroupCard
-                            key={group.id} 
+                            key={group.id}
                             group={group}
                             peopleInGroup={peopleInGroup}
                             expandedGroupIds={expandedGroupIds} // Corrected prop name
-                            toggleExpandGroup={toggleExpandGroup} 
+                            toggleExpandGroup={toggleExpandGroup}
                             openGroupActionsDialog={openGroupActionsDialog}
                             openPersonActionsDialog={openPersonActionsDialog}
                             handleAddPersonToGroup={handleAddPersonToGroup}
@@ -1434,6 +1607,9 @@ export default function AssignmentsPage() {
                             onNumPerDayChange={handleNumPerDayChange}
                             // NEW: Pass the details modal handler
                             onOpenPersonDetailsModal={handleOpenPersonDetailsModal}
+                            // Drag-and-drop props
+                            isPersonDragActive={activeDragType === 'person'}
+                            isDropTarget={overGroupId === group.id}
                           />
                         );
                       })}
