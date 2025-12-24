@@ -174,16 +174,14 @@ export function FocusedPrayerMode({
           >
             <CarouselContent className="h-full">
               {people.map((person) => (
-                <CarouselItem key={person.id} className="h-full flex">
-                  <div className="h-full w-full overflow-hidden">
-                    <PersonPrayerCard
-                      person={person}
-                      mostRecentRequest={person.mostRecentRequest}
-                      expandedRequests={person.expandedRequests}
-                      isLoadingExpanded={person.isLoadingExpanded}
-                      onAddRequest={onAddRequest ? () => onAddRequest(person.id) : undefined}
-                    />
-                  </div>
+                <CarouselItem key={person.id} className="h-full">
+                  <PersonPrayerCard
+                    person={person}
+                    mostRecentRequest={person.mostRecentRequest}
+                    expandedRequests={person.expandedRequests}
+                    isLoadingExpanded={person.isLoadingExpanded}
+                    onAddRequest={onAddRequest ? () => onAddRequest(person.id) : undefined}
+                  />
                 </CarouselItem>
               ))}
             </CarouselContent>
