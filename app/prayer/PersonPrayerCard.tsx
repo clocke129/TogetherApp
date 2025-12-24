@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import type { Person, PrayerRequest } from "@/lib/types"
@@ -10,6 +11,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface PersonPrayerCardProps {
   person: Person
@@ -26,9 +34,15 @@ export function PersonPrayerCard({
   isLoadingExpanded,
   onAddRequest
 }: PersonPrayerCardProps) {
+  const isMobile = useMobile()
+  const [isPastRequestsOpen, setIsPastRequestsOpen] = useState(false)
+  const pastRequestsToShow = expandedRequests.slice(1, 6) // Show up to 5 past requests
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-y-auto overscroll-contain prayer-card-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div className="flex-1 flex flex-col p-6 overflow-y-auto overscroll-contain prayer-card-scroll" style={{
+      WebkitOverflowScrolling: 'touch',
+      touchAction: 'pan-y'
+    }}>
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold">{person.name}</h2>
@@ -75,29 +89,65 @@ export function PersonPrayerCard({
         )}
       </div>
 
-      {/* Past Requests (Accordion) */}
+      {/* Past Requests */}
       {expandedRequests.length > 1 && (
-        <Accordion type="single" collapsible className="mb-6">
-          <AccordionItem value="past-requests">
-            <AccordionTrigger className="text-base font-semibold">
-              Past Requests ({expandedRequests.length - 1} more)
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-4 max-h-60 overflow-y-auto">
-                {expandedRequests.slice(1, 4).map((request) => (
-                  <div key={request.id} className="space-y-1">
-                    <p className="text-sm whitespace-pre-wrap">{request.content}</p>
-                    {request.createdAt && (
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(request.createdAt.toDate())}
-                      </p>
-                    )}
+        <>
+          {isMobile ? (
+            // Mobile: Button that opens Dialog modal
+            <>
+              <Button
+                variant="outline"
+                className="w-full justify-start text-base font-semibold mb-6"
+                onClick={() => setIsPastRequestsOpen(true)}
+              >
+                See Past Requests ({pastRequestsToShow.length} recent)
+              </Button>
+
+              <Dialog open={isPastRequestsOpen} onOpenChange={setIsPastRequestsOpen}>
+                <DialogContent className="max-w-lg max-h-[70vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle>Past Requests for {person.name}</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                    {pastRequestsToShow.map((request) => (
+                      <div key={request.id} className="space-y-1 pb-4 border-b last:border-0">
+                        <p className="text-sm whitespace-pre-wrap">{request.content}</p>
+                        {request.createdAt && (
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(request.createdAt.toDate())}
+                          </p>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+                </DialogContent>
+              </Dialog>
+            </>
+          ) : (
+            // Desktop: Keep Accordion
+            <Accordion type="single" collapsible className="mb-6">
+              <AccordionItem value="past-requests">
+                <AccordionTrigger className="text-base font-semibold">
+                  Past Requests ({pastRequestsToShow.length} recent)
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-4 max-h-60 overflow-y-auto">
+                    {pastRequestsToShow.map((request) => (
+                      <div key={request.id} className="space-y-1">
+                        <p className="text-sm whitespace-pre-wrap">{request.content}</p>
+                        {request.createdAt && (
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(request.createdAt.toDate())}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
+        </>
       )}
 
     </div>

@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, ChevronDown, Heart, Check } from "lucide-react"
 import {
@@ -13,6 +18,7 @@ import {
 import { PersonPrayerCard } from "./PersonPrayerCard"
 import type { Group, Person, PrayerRequest } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface PersonWithDetails extends Person {
   mostRecentRequest?: PrayerRequest
@@ -52,6 +58,7 @@ export function FocusedPrayerMode({
   const [api, setApi] = useState<CarouselApi>()
   const [isGroupSwitcherOpen, setIsGroupSwitcherOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const isMobile = useMobile()
 
   // Sync carousel to state
   useEffect(() => {
@@ -73,19 +80,19 @@ export function FocusedPrayerMode({
     }
   }, [currentPersonIndex, api, isOpen])
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (desktop only)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (!isMobile && dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsGroupSwitcherOpen(false)
       }
     }
 
-    if (isGroupSwitcherOpen) {
+    if (isGroupSwitcherOpen && !isMobile) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isGroupSwitcherOpen])
+  }, [isGroupSwitcherOpen, isMobile])
 
   const canScrollPrev = api?.canScrollPrev() ?? false
   const canScrollNext = api?.canScrollNext() ?? false
@@ -136,36 +143,71 @@ export function FocusedPrayerMode({
         <div className="flex items-center justify-center h-16 px-6 border-b bg-background shrink-0 relative">
           <DialogTitle className="sr-only">{group.name}</DialogTitle>
           {allGroups.length > 0 && onSwitchGroup ? (
-            <div ref={dropdownRef} className="relative">
-              <Button
-                variant="ghost"
-                className="text-lg font-semibold gap-2"
-                onClick={() => setIsGroupSwitcherOpen(!isGroupSwitcherOpen)}
-              >
-                {group.name}
-                <ChevronDown className={cn("h-4 w-4 transition-transform", isGroupSwitcherOpen && "rotate-180")} />
-              </Button>
+            isMobile ? (
+              // Mobile: Drawer (bottom sheet with drag handle)
+              <>
+                <Button
+                  variant="ghost"
+                  className="text-lg font-semibold gap-2"
+                  onClick={() => setIsGroupSwitcherOpen(true)}
+                >
+                  {group.name}
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+                <Drawer open={isGroupSwitcherOpen} onOpenChange={setIsGroupSwitcherOpen}>
+                  <DrawerContent>
+                    <DrawerTitle className="sr-only">Switch Group</DrawerTitle>
+                    <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
+                      {allGroups.map((g) => (
+                        <Button
+                          key={g.id}
+                          variant={g.id === group.id ? "secondary" : "ghost"}
+                          className="w-full justify-start text-base"
+                          onClick={() => {
+                            onSwitchGroup(g.id)
+                            setIsGroupSwitcherOpen(false)
+                          }}
+                        >
+                          {g.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </DrawerContent>
+                </Drawer>
+              </>
+            ) : (
+              // Desktop: Custom dropdown
+              <div ref={dropdownRef} className="relative">
+                <Button
+                  variant="ghost"
+                  className="text-lg font-semibold gap-2"
+                  onClick={() => setIsGroupSwitcherOpen(!isGroupSwitcherOpen)}
+                >
+                  {group.name}
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", isGroupSwitcherOpen && "rotate-180")} />
+                </Button>
 
-              {isGroupSwitcherOpen && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 max-h-80 overflow-y-auto bg-popover border rounded-md shadow-lg z-50">
-                  <div className="p-2 space-y-1">
-                    {allGroups.map((g) => (
-                      <Button
-                        key={g.id}
-                        variant={g.id === group.id ? "secondary" : "ghost"}
-                        className="w-full justify-start"
-                        onClick={() => {
-                          onSwitchGroup(g.id)
-                          setIsGroupSwitcherOpen(false)
-                        }}
-                      >
-                        {g.name}
-                      </Button>
-                    ))}
+                {isGroupSwitcherOpen && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 max-h-80 overflow-y-auto bg-popover border rounded-md shadow-lg z-50">
+                    <div className="p-2 space-y-1">
+                      {allGroups.map((g) => (
+                        <Button
+                          key={g.id}
+                          variant={g.id === group.id ? "secondary" : "ghost"}
+                          className="w-full justify-start"
+                          onClick={() => {
+                            onSwitchGroup(g.id)
+                            setIsGroupSwitcherOpen(false)
+                          }}
+                        >
+                          {g.name}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )
           ) : (
             <h2 className="text-lg font-semibold">{group.name}</h2>
           )}
@@ -184,14 +226,16 @@ export function FocusedPrayerMode({
           >
             <CarouselContent className="h-full">
               {people.map((person) => (
-                <CarouselItem key={person.id} className="h-full">
-                  <PersonPrayerCard
-                    person={person}
-                    mostRecentRequest={person.mostRecentRequest}
-                    expandedRequests={person.expandedRequests}
-                    isLoadingExpanded={person.isLoadingExpanded}
-                    onAddRequest={onAddRequest ? () => onAddRequest(person.id) : undefined}
-                  />
+                <CarouselItem key={person.id} className="h-full flex flex-col">
+                  <div className="h-full overflow-hidden flex flex-col">
+                    <PersonPrayerCard
+                      person={person}
+                      mostRecentRequest={person.mostRecentRequest}
+                      expandedRequests={person.expandedRequests}
+                      isLoadingExpanded={person.isLoadingExpanded}
+                      onAddRequest={onAddRequest ? () => onAddRequest(person.id) : undefined}
+                    />
+                  </div>
                 </CarouselItem>
               ))}
             </CarouselContent>
