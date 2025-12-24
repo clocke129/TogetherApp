@@ -22,10 +22,7 @@ export function GroupPrayerCard({
   totalCount,
   onOpenFocusedMode
 }: GroupPrayerCardProps) {
-  // Don't render if no people in group
-  if (totalCount === 0) return null
-
-  const allPrayed = prayedCount === totalCount
+  const allPrayed = totalCount > 0 && prayedCount === totalCount
 
   return (
     <Card className="relative hover:bg-muted/50 transition-colors">
@@ -47,6 +44,7 @@ export function GroupPrayerCard({
             size="sm"
             className="shrink-0"
             onClick={() => onOpenFocusedMode(group.id)}
+            disabled={totalCount === 0}
             aria-label={`Pray for ${group.name}`}
           >
             {allPrayed ? (
