@@ -160,6 +160,10 @@ export default function AssignmentsPage() {
   // State to track the active tab in the Person Details modal
   const [activeDetailsTab, setActiveDetailsTab] = useState<'requests' | 'followups'>('requests');
 
+  // State for showing all requests/follow-ups in person details modal
+  const [showAllRequests, setShowAllRequests] = useState(false);
+  const [showAllFollowUps, setShowAllFollowUps] = useState(false);
+
   // Drag state for people
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [activeDragType, setActiveDragType] = useState<"group" | "person" | null>(null);
@@ -1211,6 +1215,19 @@ export default function AssignmentsPage() {
     fetchPersonDetails(person.id); // Fetch data when modal opens
   };
 
+  const handleClosePersonDetailsModal = (open: boolean) => {
+    setIsPersonDetailsModalOpen(open);
+    if (!open) {
+      // Reset state when closing
+      setSelectedPersonForDetails(null);
+      setPersonPrayerRequests([]);
+      setPersonFollowUps([]);
+      setActiveDetailsTab('requests');
+      setShowAllRequests(false);
+      setShowAllFollowUps(false);
+    }
+  };
+
   // --- Handlers for Prayer Request Edit/Delete --- 
 
   const handleSaveRequestEdit = async () => {
@@ -1986,7 +2003,7 @@ export default function AssignmentsPage() {
       </DndContext>
 
       {/* NEW: Person Details Modal */}
-      <Dialog open={isPersonDetailsModalOpen} onOpenChange={setIsPersonDetailsModalOpen}>
+      <Dialog open={isPersonDetailsModalOpen} onOpenChange={handleClosePersonDetailsModal}>
         <DialogContent className="sm:max-w-[425px] md:max-w-[600px]">
           <DialogHeader>
             {/* Flex container for Title and Add Button - REMOVE BUTTON FROM HERE */}
@@ -2018,15 +2035,16 @@ export default function AssignmentsPage() {
                    {/* <div className="flex justify-end"> ... </div> */}
                   {/* Prayer Requests List */}
                    {personPrayerRequests.length > 0 ? (
-                     <ul className="space-y-2 list-disc pl-5">
-                       {/* ... existing request mapping ... */}
-                       {personPrayerRequests.map(req => (
-                         <li key={req.id} className="text-sm text-muted-foreground flex justify-between items-start group">
-                           {/* Request Content and Date - Apply whitespace-pre-wrap */}
-                           <div className="flex-1 mr-2 whitespace-pre-wrap">
-                             {req.content}\
-                             <span className="text-xs ml-2 block text-gray-500">({req.createdAt instanceof Timestamp ? req.createdAt.toDate().toLocaleDateString() : 'Date N/A'})</span>
-                           </div>
+                     <>
+                       <ul className="space-y-2 list-disc pl-5">
+                         {/* ... existing request mapping ... */}
+                         {(showAllRequests ? personPrayerRequests : personPrayerRequests.slice(0, 3)).map(req => (
+                           <li key={req.id} className="text-sm text-muted-foreground flex justify-between items-start group">
+                             {/* Request Content and Date - Apply whitespace-pre-wrap */}
+                             <div className="flex-1 mr-2 whitespace-pre-wrap">
+                               {req.content}
+                               <span className="text-xs ml-2 block text-gray-500">({req.createdAt instanceof Timestamp ? req.createdAt.toDate().toLocaleDateString() : 'Date N/A'})</span>
+                             </div>
                            {/* Edit/Delete Trigger */}
                            <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                              {/* ... existing dropdown ... */}
@@ -2050,6 +2068,17 @@ export default function AssignmentsPage() {
                          </li>
                        ))}
                      </ul>
+                     {personPrayerRequests.length > 3 && (
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         onClick={() => setShowAllRequests(!showAllRequests)}
+                         className="mt-2 w-full"
+                       >
+                         {showAllRequests ? 'Show Less' : `Show ${personPrayerRequests.length - 3} More`}
+                       </Button>
+                     )}
+                   </>
                    ) : (
                      <p className="text-sm text-center text-muted-foreground italic py-4">No prayer requests found.</p>
                    )}
@@ -2059,15 +2088,16 @@ export default function AssignmentsPage() {
                     {/* <div className="flex justify-end"> ... </div> */}
                    {/* Follow Ups List */}
                     {personFollowUps.length > 0 ? (
-                      <ul className="space-y-2 list-disc pl-5">
-                        {/* ... existing follow-up mapping ... */}
-                        {personFollowUps.map(fu => (
-                          <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
-                            {/* Follow-Up Content and Details */}
-                            <div className="flex-1 mr-2">
-                              {fu.content} 
-                              <span className="text-xs ml-2 block text-gray-500"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
-                            </div>
+                      <>
+                        <ul className="space-y-2 list-disc pl-5">
+                          {/* ... existing follow-up mapping ... */}
+                          {(showAllFollowUps ? personFollowUps : personFollowUps.slice(0, 3)).map(fu => (
+                            <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
+                              {/* Follow-Up Content and Details */}
+                              <div className="flex-1 mr-2">
+                                {fu.content}
+                                <span className="text-xs ml-2 block text-gray-500"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
+                              </div>
                             {/* Edit/Delete Trigger */}
                             <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                               {/* ... existing dropdown ... */}
@@ -2091,6 +2121,17 @@ export default function AssignmentsPage() {
                           </li>
                         ))}
                       </ul>
+                      {personFollowUps.length > 3 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowAllFollowUps(!showAllFollowUps)}
+                          className="mt-2 w-full"
+                        >
+                          {showAllFollowUps ? 'Show Less' : `Show ${personFollowUps.length - 3} More`}
+                        </Button>
+                      )}
+                    </>
                     ) : (
                       <p className="text-sm text-center text-muted-foreground italic py-4">No follow-ups found.</p>
                     )}
