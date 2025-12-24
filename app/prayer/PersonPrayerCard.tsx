@@ -36,6 +36,8 @@ export function PersonPrayerCard({
 }: PersonPrayerCardProps) {
   const isMobile = useMobile()
   const [isPastRequestsOpen, setIsPastRequestsOpen] = useState(false)
+  const [isCurrentRequestExpanded, setIsCurrentRequestExpanded] = useState(false)
+  const MAX_CHARS = 200
   const pastRequestsToShow = expandedRequests.slice(1, 6) // Show up to 5 past requests
 
   return (
@@ -68,7 +70,28 @@ export function PersonPrayerCard({
           <p className="text-sm text-muted-foreground italic">Loading...</p>
         ) : expandedRequests.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-base whitespace-pre-wrap">{expandedRequests[0].content}</p>
+            {(() => {
+              const content = expandedRequests[0].content
+              const shouldTruncate = content.length > MAX_CHARS
+              const displayText = isCurrentRequestExpanded || !shouldTruncate
+                ? content
+                : content.slice(0, MAX_CHARS) + '...'
+
+              return (
+                <>
+                  <p className="text-base whitespace-pre-wrap">{displayText}</p>
+                  {shouldTruncate && (
+                    <Button
+                      variant="link"
+                      onClick={() => setIsCurrentRequestExpanded(!isCurrentRequestExpanded)}
+                      className="p-0 h-auto text-sm"
+                    >
+                      {isCurrentRequestExpanded ? 'Show less' : 'Read more'}
+                    </Button>
+                  )}
+                </>
+              )
+            })()}
             {expandedRequests[0].createdAt && (
               <p className="text-xs text-muted-foreground">
                 {formatDate(expandedRequests[0].createdAt.toDate())}
@@ -77,7 +100,28 @@ export function PersonPrayerCard({
           </div>
         ) : mostRecentRequest ? (
           <div className="space-y-2">
-            <p className="text-base whitespace-pre-wrap">{mostRecentRequest.content}</p>
+            {(() => {
+              const content = mostRecentRequest.content
+              const shouldTruncate = content.length > MAX_CHARS
+              const displayText = isCurrentRequestExpanded || !shouldTruncate
+                ? content
+                : content.slice(0, MAX_CHARS) + '...'
+
+              return (
+                <>
+                  <p className="text-base whitespace-pre-wrap">{displayText}</p>
+                  {shouldTruncate && (
+                    <Button
+                      variant="link"
+                      onClick={() => setIsCurrentRequestExpanded(!isCurrentRequestExpanded)}
+                      className="p-0 h-auto text-sm"
+                    >
+                      {isCurrentRequestExpanded ? 'Show less' : 'Read more'}
+                    </Button>
+                  )}
+                </>
+              )
+            })()}
             {mostRecentRequest.createdAt && (
               <p className="text-xs text-muted-foreground">
                 {formatDate(mostRecentRequest.createdAt.toDate())}

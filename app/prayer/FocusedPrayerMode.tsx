@@ -138,7 +138,10 @@ export function FocusedPrayerMode({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col">
+      <DialogContent className={cn(
+        "w-full flex flex-col",
+        isMobile ? "max-h-[95vh]" : "max-w-2xl max-h-[85vh]"
+      )}>
         {/* Header */}
         <div className="flex items-center justify-center h-16 px-6 border-b bg-background shrink-0 relative">
           <DialogTitle className="sr-only">{group.name}</DialogTitle>
