@@ -14,6 +14,17 @@ export const formatDate = (date: Date | undefined): string => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
+// Check if a Firestore Timestamp is on the same day as a JS Date
+export const isSameDay = (timestamp: Timestamp | undefined, date: Date): boolean => {
+  if (!timestamp) return false;
+  const tsDate = timestamp.toDate();
+  return (
+    tsDate.getFullYear() === date.getFullYear() &&
+    tsDate.getMonth() === date.getMonth() &&
+    tsDate.getDate() === date.getDate()
+  );
+};
+
 // You might want to keep formatDateWithTime in the page component
 // if it's only used there, or move it here too if needed elsewhere.
 

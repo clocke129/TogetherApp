@@ -44,7 +44,7 @@ import { UrgentFollowUpsSection } from "./UrgentFollowUpsSection"
 import { GroupPrayerCard } from "./GroupPrayerCard"
 import { FocusedPrayerMode } from "./FocusedPrayerMode"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
-import { formatDate, calculateStreak } from "@/lib/utils"
+import { formatDate, calculateStreak, isSameDay } from "@/lib/utils"
 import { getUrgencyLevel } from "@/lib/followUpUtils"
 import { Input } from "@/components/ui/input"
 import { calculateAndSaveDailyPrayerList } from "@/lib/utils"
@@ -144,17 +144,6 @@ export default function PrayerPage() {
 
   // Ref to track effect runs in StrictMode
   const effectRan = useRef(false);
-
-  // Helper function to check if a Firestore Timestamp is on the same day as a JS Date
-  const isSameDay = (timestamp: Timestamp | undefined, date: Date): boolean => {
-    if (!timestamp) return false;
-    const tsDate = timestamp.toDate();
-    return (
-      tsDate.getFullYear() === date.getFullYear() &&
-      tsDate.getMonth() === date.getMonth() &&
-      tsDate.getDate() === date.getDate()
-    );
-  };
 
   // PR #4: Helper function to get people in a group
   const getPeopleInGroup = (group: Group): Array<Person & { mostRecentRequest?: PrayerRequest }> => {
@@ -1085,6 +1074,7 @@ export default function PrayerPage() {
                   people={people}
                   prayedCount={prayedCount}
                   totalCount={totalCount}
+                  prayerListDate={prayerListDate}
                   onOpenFocusedMode={(groupId) => {
                     const groupData = groupsWithProgress.find(g => g.group.id === groupId)
                     const peopleIds = groupData?.people.map(p => p.id) || []
