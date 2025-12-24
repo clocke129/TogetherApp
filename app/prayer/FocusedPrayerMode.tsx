@@ -243,33 +243,26 @@ export function FocusedPrayerMode({
           </Carousel>
         </div>
 
-        {/* Footer */}
-        <div className="border-t bg-background shrink-0">
-          {/* Pray Button */}
-          <div className="flex items-center justify-center px-6 pt-4 pb-2">
-            <Button
-              variant={isSameDay(people[currentPersonIndex]?.lastPrayedFor, prayerListDate) ? "secondary" : "default"}
-              size="lg"
-              onClick={() => people[currentPersonIndex] && onMarkPrayed(people[currentPersonIndex])}
-              disabled={isMarkingPrayed || !people[currentPersonIndex]}
-              className="w-full max-w-sm"
-            >
-              {isSameDay(people[currentPersonIndex]?.lastPrayedFor, prayerListDate) ? (
-                <>
-                  <Check className="mr-2 h-5 w-5" />
-                  Prayed
-                </>
-              ) : (
-                <>
-                  <Heart className="mr-2 h-5 w-5" />
-                  Pray
-                </>
-              )}
-            </Button>
-          </div>
+        {/* Floating Action Button - Pray */}
+        <Button
+          variant={isSameDay(people[currentPersonIndex]?.lastPrayedFor, prayerListDate) ? "secondary" : "default"}
+          size="lg"
+          onClick={() => people[currentPersonIndex] && onMarkPrayed(people[currentPersonIndex])}
+          disabled={isMarkingPrayed || !people[currentPersonIndex]}
+          className="fixed bottom-24 right-6 h-14 w-14 rounded-full shadow-lg z-50 p-0"
+          aria-label={isSameDay(people[currentPersonIndex]?.lastPrayedFor, prayerListDate) ? "Prayed" : "Pray"}
+        >
+          {isSameDay(people[currentPersonIndex]?.lastPrayedFor, prayerListDate) ? (
+            <Check className="h-6 w-6" />
+          ) : (
+            <Heart className="h-6 w-6" />
+          )}
+        </Button>
 
+        {/* Footer - Navigation Only */}
+        <div className="border-t bg-background shrink-0">
           {/* Navigation and Counter */}
-          <div className="flex items-center justify-between h-16 px-6 pb-4">
+          <div className="flex items-center justify-between h-16 px-6 py-4">
             <Button
               variant="outline"
               onClick={handlePrevious}
