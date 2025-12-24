@@ -1,14 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, ChevronDown, Heart, Check } from "lucide-react"
 import {
@@ -58,6 +51,7 @@ export function FocusedPrayerMode({
 }: FocusedPrayerModeProps) {
   const [api, setApi] = useState<CarouselApi>()
   const [isGroupSwitcherOpen, setIsGroupSwitcherOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Sync carousel to state
   useEffect(() => {
@@ -78,6 +72,20 @@ export function FocusedPrayerMode({
       api.scrollTo(currentPersonIndex, false)
     }
   }, [currentPersonIndex, api, isOpen])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsGroupSwitcherOpen(false)
+      }
+    }
+
+    if (isGroupSwitcherOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isGroupSwitcherOpen])
 
   const canScrollPrev = api?.canScrollPrev() ?? false
   const canScrollNext = api?.canScrollNext() ?? false
@@ -125,37 +133,39 @@ export function FocusedPrayerMode({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-center h-16 px-6 border-b bg-background shrink-0">
+        <div className="flex items-center justify-center h-16 px-6 border-b bg-background shrink-0 relative">
           <DialogTitle className="sr-only">{group.name}</DialogTitle>
           {allGroups.length > 0 && onSwitchGroup ? (
-            <Sheet open={isGroupSwitcherOpen} onOpenChange={setIsGroupSwitcherOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" className="text-lg font-semibold gap-2">
-                  {group.name}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="bottom" className="max-h-[80vh]">
-                <SheetHeader>
-                  <SheetTitle>Switch Group</SheetTitle>
-                </SheetHeader>
-                <div className="mt-4 space-y-2 overflow-y-auto max-h-[calc(80vh-8rem)]">
-                  {allGroups.map((g) => (
-                    <Button
-                      key={g.id}
-                      variant={g.id === group.id ? "secondary" : "ghost"}
-                      className="w-full justify-start"
-                      onClick={() => {
-                        onSwitchGroup(g.id)
-                        setIsGroupSwitcherOpen(false)
-                      }}
-                    >
-                      {g.name}
-                    </Button>
-                  ))}
+            <div ref={dropdownRef} className="relative">
+              <Button
+                variant="ghost"
+                className="text-lg font-semibold gap-2"
+                onClick={() => setIsGroupSwitcherOpen(!isGroupSwitcherOpen)}
+              >
+                {group.name}
+                <ChevronDown className={cn("h-4 w-4 transition-transform", isGroupSwitcherOpen && "rotate-180")} />
+              </Button>
+
+              {isGroupSwitcherOpen && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 max-h-80 overflow-y-auto bg-popover border rounded-md shadow-lg z-50">
+                  <div className="p-2 space-y-1">
+                    {allGroups.map((g) => (
+                      <Button
+                        key={g.id}
+                        variant={g.id === group.id ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                        onClick={() => {
+                          onSwitchGroup(g.id)
+                          setIsGroupSwitcherOpen(false)
+                        }}
+                      >
+                        {g.name}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-              </SheetContent>
-            </Sheet>
+              )}
+            </div>
           ) : (
             <h2 className="text-lg font-semibold">{group.name}</h2>
           )}
