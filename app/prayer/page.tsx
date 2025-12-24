@@ -1127,6 +1127,7 @@ export default function PrayerPage() {
               onSwitchGroup={(groupId) => {
                 setFocusedGroupId(groupId)
                 setCurrentCarouselIndex(0)
+                setFocusedGroupPeopleOrder([]) // Reset people order when switching groups
               }}
             />
           )}

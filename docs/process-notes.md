@@ -400,7 +400,211 @@ Current Session:
 
 ---
 
-**Last Updated**: December 23, 2024
-**Session**: Context continuation after auto-compact
+## Current Session (Continued): Groups Tab Mobile UX & Modal Fixes
+
+### Part 4: Mobile Group Assignment (Groups Tab)
+
+#### User Request
+Fix mobile UX for switching people between groups in the Groups tab (assignments page). Desktop should keep drag handles, mobile should have a different interaction pattern.
+
+#### User Preferences (via AskUserQuestion)
+1. **Icon**: Three-dot menu (MoreVertical)
+2. **UI Pattern**: Bottom sheet drawer (native mobile feel)
+3. **Mobile Drag**: Remove drag handles on mobile completely
+4. **Group List**: Show all groups including "Everyone"
+
+#### Implementation
+
+**1. Created GroupSwitcherDrawer Component**
+- **File**: `/src/components/ui/group-switcher-drawer.tsx` (NEW)
+- **Pattern**: Portal-based Drawer (vaul) to avoid Dialog nesting
+- **Features**:
+  - Shows all groups with Users icon
+  - Highlights current group with "(Current)" label
+  - Handles "Everyone" system group (groupId = undefined)
+  - Bottom sheet slides up from bottom
+
+**2. Modified DraggablePerson Component**
+- **File**: `/src/components/ui/draggable-person.tsx`
+- **Changes**:
+  - Added `useMobile()` hook detection
+  - Conditional rendering:
+    - Mobile: MoreVertical icon → opens group switcher drawer
+    - Desktop: GripVertical icon → drag handle with dnd-kit
+  - Added `onOpenGroupSwitcher` prop
+
+**3. Updated SortableGroupCard Component**
+- **File**: `/src/components/ui/sortable-group-card.tsx`
+- **Changes**:
+  - Added `onOpenGroupSwitcher` prop
+  - Passed through to DraggablePerson
+
+**4. Integrated into Assignments Page**
+- **File**: `/app/assignments/page.tsx`
+- **State Added**:
+  ```typescript
+  const [groupSwitcherState, setGroupSwitcherState] = useState<{
+    isOpen: boolean
+    person: Person | null
+  }>({ isOpen: false, person: null })
+  ```
+
+- **Handlers Added**:
+  - `handleOpenGroupSwitcher()` - Opens drawer with person context
+  - `handleSelectGroupFromDrawer()` - Reuses `handlePersonDrop()` logic
+
+- **Key Pattern**: Reused existing drag-drop logic for consistency
+
+**Commit**: `cf7fe36` - Add drag-and-drop for moving people between groups
+
+---
+
+### Part 5: Everyone Group Visibility Fix
+
+#### Issue
+"Everyone" system group stopped appearing in Today menu. User asked if recent changes caused it (they didn't).
+
+#### Root Cause
+**File**: `/app/prayer/GroupPrayerCard.tsx:26`
+```typescript
+if (totalCount === 0) return null  // ← Filtering out groups with 0 people
+```
+
+This was pre-existing code, not caused by recent changes.
+
+#### Fix Applied
+1. **Removed the filter** - Groups with 0 people should still show
+2. **Updated allPrayed calculation**:
+   ```typescript
+   // Before
+   const allPrayed = prayedCount === totalCount
+
+   // After
+   const allPrayed = totalCount > 0 && prayedCount === totalCount
+   ```
+3. **Added disabled state** to Pray button:
+   ```typescript
+   disabled={totalCount === 0}
+   ```
+
+#### Result
+- Everyone group now appears even when no one scheduled
+- Shows "0/0 prayed today" badge
+- Pray button disabled with appropriate state
+- Clean, informative UX
+
+**Commit**: (included in cf7fe36)
+
+---
+
+### Part 6: Person Details Modal Fixes
+
+#### Issues Found
+1. **Trailing backslash bug**: Literal `\` character appearing after prayer requests and follow-ups
+2. **No list limiting**: All items showing, no way to collapse long lists
+
+#### Investigation
+**File**: `/app/assignments/page.tsx`
+- Line 2027: `{req.content}\` ← Backslash rendered literally
+- Line 2068: `{fu.content} \` ← Same issue with space
+- No slice logic or pagination
+
+#### Implementation
+
+**1. Removed Trailing Backslashes**
+- Simple character deletion on lines 2027, 2068
+- No longer renders unprofessional slashes
+
+**2. Added Show More/Less Pattern**
+
+**State Variables** (Lines 163-165):
+```typescript
+const [showAllRequests, setShowAllRequests] = useState(false)
+const [showAllFollowUps, setShowAllFollowUps] = useState(false)
+```
+
+**Prayer Requests Section** (Lines 2024-2071):
+```typescript
+{(showAllRequests ? personPrayerRequests : personPrayerRequests.slice(0, 3)).map(req => (
+  <li key={req.id}>
+    <div className="flex-1 mr-2 whitespace-pre-wrap">
+      {req.content}  {/* ← Removed backslash */}
+      <span className="text-xs ml-2 block text-gray-500">
+        ({req.createdAt.toDate().toLocaleDateString()})
+      </span>
+    </div>
+    {/* edit/delete buttons */}
+  </li>
+))}
+
+{personPrayerRequests.length > 3 && (
+  <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => setShowAllRequests(!showAllRequests)}
+    className="mt-2 w-full"
+  >
+    {showAllRequests ? 'Show Less' : `Show ${personPrayerRequests.length - 3} More`}
+  </Button>
+)}
+```
+
+**Follow-Ups Section** (Lines 2077-2124):
+- Same pattern as prayer requests
+- Shows first 3 items by default
+- "Show More/Less" button with count
+
+**Reset State on Modal Close** (Lines 1218-1229):
+```typescript
+const handleClosePersonDetailsModal = (open: boolean) => {
+  setIsPersonDetailsModalOpen(open);
+  if (!open) {
+    setSelectedPersonForDetails(null);
+    setPersonPrayerRequests([]);
+    setPersonFollowUps([]);
+    setActiveDetailsTab('requests');
+    setShowAllRequests(false);  // ← Reset
+    setShowAllFollowUps(false);  // ← Reset
+  }
+};
+```
+
+#### User Experience
+- **Initial state**: Shows first 3 items, "Show N More" button if applicable
+- **Expanded**: Shows all items, "Show Less" button
+- **Clean**: Resets to collapsed state when modal closes
+
+**Commit**: `4ba8247` - Fix person details modal in Groups tab
+
+---
+
+## Commits Added This Session
+
+- `cf7fe36`: Add drag-and-drop for moving people between groups
+- `ce43983`: Add date autocomplete to Quick Capture modal
+- `65c60e7`: Add expand/collapse all button to Groups page
+- `f68d376`: Fix add prayer error and enhance dialogs
+- `433af29`: UI polish: Tab names, button text, and badge styling
+- `4ba8247`: Fix person details modal in Groups tab
+
+---
+
+### Known Issues (Pending Next Session)
+
+#### Critical
+1. **Group switching doesn't work** - Shows empty group "No people in this group"
+
+#### High Priority
+2. **Add expandable dropdown to Today prayer cards** - Show all people and their prayer status
+3. **Mobile prayer request overflow** - Long requests exceed card space, scroll not working
+
+#### Medium Priority
+4. **Missing past prayer requests** - Some people (e.g., Nick Wong) not showing past requests
+5. **Follow-ups sorting backwards** - Older follow-ups showing first instead of newest
+
+---
+
+**Last Updated**: December 24, 2024
+**Session**: Context continuation after auto-compact (Part 2)
 **Branch**: pr-2-navigation-restructure
-**Latest Commit**: 386560e
+**Latest Commit**: 4ba8247

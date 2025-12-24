@@ -1193,7 +1193,7 @@ export default function AssignmentsPage() {
         collection(db, "persons", personId, "followUps"), // Corrected path
         // where("personId", "==", personId), // No longer needed when querying subcollection
         where("createdBy", "==", user.uid),
-        orderBy("dueDate", "asc") // Corrected orderBy based on FollowUp type
+        orderBy("dueDate", "desc") // Show newest follow-ups first
       );
       const followUpsSnapshot = await getDocs(followUpsQuery);
       const followUpsData = followUpsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FollowUp));
