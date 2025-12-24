@@ -2,8 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronDown, Heart, Check } from "lucide-react"
 import {
   Carousel,
   CarouselContent,
@@ -31,6 +38,8 @@ interface FocusedPrayerModeProps {
   isMarkingPrayed: boolean
   prayerListDate: Date
   onAddRequest?: (personId: string) => void
+  allGroups?: Group[]
+  onSwitchGroup?: (groupId: string) => void
 }
 
 export function FocusedPrayerMode({
@@ -43,9 +52,12 @@ export function FocusedPrayerMode({
   onMarkPrayed,
   isMarkingPrayed,
   prayerListDate,
-  onAddRequest
+  onAddRequest,
+  allGroups = [],
+  onSwitchGroup
 }: FocusedPrayerModeProps) {
   const [api, setApi] = useState<CarouselApi>()
+  const [isGroupSwitcherOpen, setIsGroupSwitcherOpen] = useState(false)
 
   // Sync carousel to state
   useEffect(() => {
@@ -114,9 +126,39 @@ export function FocusedPrayerMode({
       <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-center h-16 px-6 border-b bg-background shrink-0">
-          <DialogTitle className="text-lg font-semibold">
-            {group.name}
-          </DialogTitle>
+          <DialogTitle className="sr-only">{group.name}</DialogTitle>
+          {allGroups.length > 0 && onSwitchGroup ? (
+            <Sheet open={isGroupSwitcherOpen} onOpenChange={setIsGroupSwitcherOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" className="text-lg font-semibold gap-2">
+                  {group.name}
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="max-h-[80vh]">
+                <SheetHeader>
+                  <SheetTitle>Switch Group</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 space-y-2 overflow-y-auto max-h-[calc(80vh-8rem)]">
+                  {allGroups.map((g) => (
+                    <Button
+                      key={g.id}
+                      variant={g.id === group.id ? "secondary" : "ghost"}
+                      className="w-full justify-start"
+                      onClick={() => {
+                        onSwitchGroup(g.id)
+                        setIsGroupSwitcherOpen(false)
+                      }}
+                    >
+                      {g.name}
+                    </Button>
+                  ))}
+                </div>
+              </SheetContent>
+            </Sheet>
+          ) : (
+            <h2 className="text-lg font-semibold">{group.name}</h2>
+          )}
         </div>
 
         {/* Carousel Area */}
@@ -126,6 +168,7 @@ export function FocusedPrayerMode({
             opts={{
               startIndex: currentPersonIndex,
               loop: false,
+              duration: 40, // Slower, smoother animation (default is 25)
             }}
             className="h-full"
           >
@@ -137,9 +180,6 @@ export function FocusedPrayerMode({
                     mostRecentRequest={person.mostRecentRequest}
                     expandedRequests={person.expandedRequests}
                     isLoadingExpanded={person.isLoadingExpanded}
-                    onMarkPrayed={onMarkPrayed}
-                    isMarkingPrayed={isMarkingPrayed}
-                    isPrayedToday={isSameDay(person.lastPrayedFor, prayerListDate)}
                     onAddRequest={onAddRequest ? () => onAddRequest(person.id) : undefined}
                   />
                 </CarouselItem>
@@ -149,30 +189,56 @@ export function FocusedPrayerMode({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between h-20 px-6 border-t bg-background shrink-0">
-          <Button
-            variant="outline"
-            onClick={handlePrevious}
-            disabled={!canScrollPrev}
-            className={cn("gap-2", !canScrollPrev && "invisible")}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
-          </Button>
-
-          <div className="text-sm font-medium text-muted-foreground">
-            {currentPersonIndex + 1} / {people.length}
+        <div className="border-t bg-background shrink-0">
+          {/* Pray Button */}
+          <div className="flex items-center justify-center px-6 pt-4 pb-2">
+            <Button
+              variant={isSameDay(people[currentPersonIndex]?.lastPrayedFor, prayerListDate) ? "secondary" : "default"}
+              size="lg"
+              onClick={() => people[currentPersonIndex] && onMarkPrayed(people[currentPersonIndex])}
+              disabled={isMarkingPrayed || !people[currentPersonIndex]}
+              className="w-full max-w-sm"
+            >
+              {isSameDay(people[currentPersonIndex]?.lastPrayedFor, prayerListDate) ? (
+                <>
+                  <Check className="mr-2 h-5 w-5" />
+                  Prayed
+                </>
+              ) : (
+                <>
+                  <Heart className="mr-2 h-5 w-5" />
+                  Pray
+                </>
+              )}
+            </Button>
           </div>
 
-          <Button
-            variant="outline"
-            onClick={handleNext}
-            disabled={!canScrollNext}
-            className={cn("gap-2", !canScrollNext && "invisible")}
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          {/* Navigation and Counter */}
+          <div className="flex items-center justify-between h-16 px-6 pb-4">
+            <Button
+              variant="outline"
+              onClick={handlePrevious}
+              disabled={!canScrollPrev}
+              className={cn("gap-2", !canScrollPrev && "invisible")}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+
+            <div className="text-sm font-medium text-muted-foreground">
+              {currentPersonIndex + 1} / {people.length}
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={handleNext}
+              disabled={!canScrollNext}
+              className={cn("gap-2", !canScrollNext && "invisible")}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

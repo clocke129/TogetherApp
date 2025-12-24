@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Heart, Check, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import type { Person, PrayerRequest } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
 import {
@@ -16,9 +16,6 @@ interface PersonPrayerCardProps {
   mostRecentRequest?: PrayerRequest
   expandedRequests: PrayerRequest[]
   isLoadingExpanded: boolean
-  onMarkPrayed: (person: Person) => void
-  isMarkingPrayed: boolean
-  isPrayedToday: boolean
   onAddRequest?: () => void
 }
 
@@ -27,43 +24,19 @@ export function PersonPrayerCard({
   mostRecentRequest,
   expandedRequests,
   isLoadingExpanded,
-  onMarkPrayed,
-  isMarkingPrayed,
-  isPrayedToday,
   onAddRequest
 }: PersonPrayerCardProps) {
 
   return (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold">{person.name}</h2>
-          {person.lastPrayedFor && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Last prayed: {formatDate(person.lastPrayedFor.toDate())}
-            </p>
-          )}
-        </div>
-        <Button
-          variant={isPrayedToday ? "secondary" : "default"}
-          size="lg"
-          onClick={() => onMarkPrayed(person)}
-          disabled={isMarkingPrayed}
-          className="shrink-0"
-        >
-          {isPrayedToday ? (
-            <>
-              <Check className="mr-2 h-5 w-5" />
-              Prayed
-            </>
-          ) : (
-            <>
-              <Heart className="mr-2 h-5 w-5" />
-              Pray
-            </>
-          )}
-        </Button>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold">{person.name}</h2>
+        {person.lastPrayedFor && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Last prayed: {formatDate(person.lastPrayedFor.toDate())}
+          </p>
+        )}
       </div>
 
       {/* Current Requests */}

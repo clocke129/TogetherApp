@@ -1123,6 +1123,11 @@ export default function PrayerPage() {
               isMarkingPrayed={!!isMarkingPrayedId}
               prayerListDate={prayerListDate}
               onAddRequest={handleOpenQuickActionRequest}
+              allGroups={groupsWithProgress.map(g => g.group)}
+              onSwitchGroup={(groupId) => {
+                setFocusedGroupId(groupId)
+                setCurrentCarouselIndex(0)
+              }}
             />
           )}
 
