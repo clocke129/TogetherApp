@@ -37,8 +37,56 @@ export function PersonPrayerCard({
   const isMobile = useMobile()
   const [isPastRequestsOpen, setIsPastRequestsOpen] = useState(false)
   const [isCurrentRequestExpanded, setIsCurrentRequestExpanded] = useState(false)
-  const MAX_CHARS = 200
+  const MAX_CHARS = 150 // Reduced to ensure "See Past Requests" is visible
   const pastRequestsToShow = expandedRequests.slice(1, 6) // Show up to 5 past requests
+
+  // Helper function to render content with bullet points for newline-separated items
+  const renderContent = (content: string, isExpanded: boolean) => {
+    const shouldTruncate = content.length > MAX_CHARS
+    const displayText = isExpanded || !shouldTruncate
+      ? content
+      : content.slice(0, MAX_CHARS) + '...'
+
+    // Split by newlines and filter out empty lines
+    const lines = displayText.split('\n').filter(line => line.trim())
+
+    // If multiple lines, render as bullets; otherwise render as paragraph
+    if (lines.length > 1) {
+      return (
+        <>
+          <ul className="list-disc list-inside space-y-1 text-base">
+            {lines.map((line, index) => (
+              <li key={index} className="whitespace-pre-wrap">{line.trim()}</li>
+            ))}
+          </ul>
+          {shouldTruncate && (
+            <Button
+              variant="link"
+              onClick={() => setIsCurrentRequestExpanded(!isCurrentRequestExpanded)}
+              className="p-0 h-auto text-sm"
+            >
+              {isCurrentRequestExpanded ? 'Show less' : 'Read more'}
+            </Button>
+          )}
+        </>
+      )
+    } else {
+      return (
+        <>
+          <p className="text-base whitespace-pre-wrap">{displayText}</p>
+          {shouldTruncate && (
+            <Button
+              variant="link"
+              onClick={() => setIsCurrentRequestExpanded(!isCurrentRequestExpanded)}
+              className="p-0 h-auto text-sm"
+            >
+              {isCurrentRequestExpanded ? 'Show less' : 'Read more'}
+            </Button>
+          )}
+        </>
+      )
+    }
+  }
 
   return (
     <div className="flex-1 flex flex-col p-6 overflow-y-auto overscroll-contain prayer-card-scroll" style={{
@@ -70,28 +118,7 @@ export function PersonPrayerCard({
           <p className="text-sm text-muted-foreground italic">Loading...</p>
         ) : expandedRequests.length > 0 ? (
           <div className="space-y-2">
-            {(() => {
-              const content = expandedRequests[0].content
-              const shouldTruncate = content.length > MAX_CHARS
-              const displayText = isCurrentRequestExpanded || !shouldTruncate
-                ? content
-                : content.slice(0, MAX_CHARS) + '...'
-
-              return (
-                <>
-                  <p className="text-base whitespace-pre-wrap">{displayText}</p>
-                  {shouldTruncate && (
-                    <Button
-                      variant="link"
-                      onClick={() => setIsCurrentRequestExpanded(!isCurrentRequestExpanded)}
-                      className="p-0 h-auto text-sm"
-                    >
-                      {isCurrentRequestExpanded ? 'Show less' : 'Read more'}
-                    </Button>
-                  )}
-                </>
-              )
-            })()}
+            {renderContent(expandedRequests[0].content, isCurrentRequestExpanded)}
             {expandedRequests[0].createdAt && (
               <p className="text-xs text-muted-foreground">
                 {formatDate(expandedRequests[0].createdAt.toDate())}
@@ -100,28 +127,7 @@ export function PersonPrayerCard({
           </div>
         ) : mostRecentRequest ? (
           <div className="space-y-2">
-            {(() => {
-              const content = mostRecentRequest.content
-              const shouldTruncate = content.length > MAX_CHARS
-              const displayText = isCurrentRequestExpanded || !shouldTruncate
-                ? content
-                : content.slice(0, MAX_CHARS) + '...'
-
-              return (
-                <>
-                  <p className="text-base whitespace-pre-wrap">{displayText}</p>
-                  {shouldTruncate && (
-                    <Button
-                      variant="link"
-                      onClick={() => setIsCurrentRequestExpanded(!isCurrentRequestExpanded)}
-                      className="p-0 h-auto text-sm"
-                    >
-                      {isCurrentRequestExpanded ? 'Show less' : 'Read more'}
-                    </Button>
-                  )}
-                </>
-              )
-            })()}
+            {renderContent(mostRecentRequest.content, isCurrentRequestExpanded)}
             {mostRecentRequest.createdAt && (
               <p className="text-xs text-muted-foreground">
                 {formatDate(mostRecentRequest.createdAt.toDate())}
