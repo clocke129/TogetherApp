@@ -32,6 +32,7 @@ interface SortableGroupCardProps {
   onDayToggle: (groupId: string, dayIndex: number) => void;
   onNumPerDayChange: (groupId: string, newValue: number | null) => void;
   onOpenPersonDetailsModal: (person: Person) => void;
+  onOpenGroupSwitcher?: (person: Person) => void;
   // Drag-and-drop props
   isPersonDragActive: boolean;
   isDropTarget: boolean;
@@ -56,6 +57,7 @@ export function SortableGroupCard({
   onDayToggle,
   onNumPerDayChange,
   onOpenPersonDetailsModal,
+  onOpenGroupSwitcher,
   isPersonDragActive,
   isDropTarget,
 }: SortableGroupCardProps) {
@@ -169,6 +171,7 @@ export function SortableGroupCard({
                       person={person}
                       onOpenPersonDetailsModal={onOpenPersonDetailsModal}
                       onOpenPersonActionsDialog={openPersonActionsDialog}
+                      onOpenGroupSwitcher={onOpenGroupSwitcher}
                     />
                   ))}
                 </div>

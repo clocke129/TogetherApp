@@ -65,6 +65,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { SortableGroupCard } from "../../src/components/ui/sortable-group-card";
+import { GroupSwitcherDrawer } from "@/src/components/ui/group-switcher-drawer";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -164,6 +165,12 @@ export default function AssignmentsPage() {
   const [activeDragType, setActiveDragType] = useState<"group" | "person" | null>(null);
   const [activePersonDrag, setActivePersonDrag] = useState<Person | null>(null);
   const [overGroupId, setOverGroupId] = useState<string | null>(null);
+
+  // Group switcher drawer state (mobile)
+  const [groupSwitcherState, setGroupSwitcherState] = useState<{
+    isOpen: boolean
+    person: Person | null
+  }>({ isOpen: false, person: null })
 
   const [currentDateString] = useState(() => {
     const today = new Date();
@@ -290,6 +297,33 @@ export default function AssignmentsPage() {
       toast.error('Failed to move person');
     }
   };
+
+  // Mobile group switcher handlers
+  const handleOpenGroupSwitcher = (person: Person) => {
+    setGroupSwitcherState({ isOpen: true, person })
+  }
+
+  const handleSelectGroupFromDrawer = async (newGroupId: string | undefined) => {
+    if (!groupSwitcherState.person) return
+
+    const person = groupSwitcherState.person
+    const personId = person.id
+
+    // Close drawer immediately
+    setGroupSwitcherState({ isOpen: false, person: null })
+
+    // Find target group
+    const targetGroup = newGroupId
+      ? groups.find(g => g.id === newGroupId)
+      : groups.find(g => g.isSystemGroup) // Everyone group
+
+    if (!targetGroup) return
+
+    // Use handlePersonDrop with the correct format
+    const activeId = `person-${personId}`
+    const overId = `group-${targetGroup.id}`
+    await handlePersonDrop(activeId, overId)
+  }
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -1607,6 +1641,7 @@ export default function AssignmentsPage() {
                             onNumPerDayChange={handleNumPerDayChange}
                             // NEW: Pass the details modal handler
                             onOpenPersonDetailsModal={handleOpenPersonDetailsModal}
+                            onOpenGroupSwitcher={handleOpenGroupSwitcher}
                             // Drag-and-drop props
                             isPersonDragActive={activeDragType === 'person'}
                             isDropTarget={overGroupId === group.id}
@@ -2330,6 +2365,18 @@ export default function AssignmentsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Group Switcher Drawer (Mobile) */}
+      {groupSwitcherState.person && (
+        <GroupSwitcherDrawer
+          isOpen={groupSwitcherState.isOpen}
+          onClose={() => setGroupSwitcherState({ isOpen: false, person: null })}
+          person={groupSwitcherState.person}
+          groups={groups}
+          currentGroupId={groupSwitcherState.person.groupId}
+          onSelectGroup={handleSelectGroupFromDrawer}
+        />
+      )}
 
     </div>
   )

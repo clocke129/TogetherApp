@@ -2,13 +2,15 @@
 
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { User, Edit, GripVertical } from 'lucide-react'
+import { User, Edit, GripVertical, MoreVertical } from 'lucide-react'
 import type { Person } from '@/lib/types'
+import { useMobile } from '@/hooks/use-mobile'
 
 interface DraggablePersonProps {
   person: Person
   onOpenPersonDetailsModal: (person: Person) => void
   onOpenPersonActionsDialog: (person: Person) => void
+  onOpenGroupSwitcher?: (person: Person) => void
   isDragOverlay?: boolean
 }
 
@@ -16,8 +18,11 @@ export function DraggablePerson({
   person,
   onOpenPersonDetailsModal,
   onOpenPersonActionsDialog,
+  onOpenGroupSwitcher,
   isDragOverlay = false
 }: DraggablePersonProps) {
+  const isMobile = useMobile()
+
   const {
     attributes,
     listeners,
@@ -43,14 +48,28 @@ export function DraggablePerson({
       className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
       {...attributes}
     >
-      {/* Drag Handle - left side */}
+      {/* Drag Handle (desktop) or Three-Dot Menu (mobile) */}
       <div className="flex items-center gap-2">
-        <span
-          className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:bg-muted hover:text-foreground rounded"
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </span>
+        {isMobile ? (
+          // Mobile: Three dots that opens group drawer
+          <span
+            className="cursor-pointer p-1 text-muted-foreground hover:bg-muted hover:text-foreground rounded"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenGroupSwitcher?.(person)
+            }}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </span>
+        ) : (
+          // Desktop: Drag handle
+          <span
+            className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:bg-muted hover:text-foreground rounded"
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </span>
+        )}
         <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <span
           className="text-sm cursor-pointer hover:underline"
