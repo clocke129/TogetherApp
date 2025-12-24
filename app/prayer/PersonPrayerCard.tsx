@@ -28,7 +28,7 @@ export function PersonPrayerCard({
 }: PersonPrayerCardProps) {
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-y-auto">
+    <div className="h-full flex flex-col p-6 overflow-y-auto overscroll-contain prayer-card-scroll" style={{ WebkitOverflowScrolling: 'touch' }}>
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold">{person.name}</h2>
