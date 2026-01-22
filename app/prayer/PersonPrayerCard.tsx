@@ -2,7 +2,10 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Plus, MessageSquarePlus, CalendarIcon } from "lucide-react"
 import type { Person, PrayerRequest } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
 import {
@@ -17,7 +20,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { useMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils"
 
 interface PersonPrayerCardProps {
   person: Person
@@ -25,6 +35,7 @@ interface PersonPrayerCardProps {
   expandedRequests: PrayerRequest[]
   isLoadingExpanded: boolean
   onAddRequest?: () => void
+  onAddFollowUp?: (content: string, dueDate?: Date) => Promise<void>
 }
 
 export function PersonPrayerCard({
@@ -32,11 +43,17 @@ export function PersonPrayerCard({
   mostRecentRequest,
   expandedRequests,
   isLoadingExpanded,
-  onAddRequest
+  onAddRequest,
+  onAddFollowUp
 }: PersonPrayerCardProps) {
   const isMobile = useMobile()
   const [isPastRequestsOpen, setIsPastRequestsOpen] = useState(false)
   const [isCurrentRequestExpanded, setIsCurrentRequestExpanded] = useState(false)
+  const [isFollowUpExpanded, setIsFollowUpExpanded] = useState(false)
+  const [followUpContent, setFollowUpContent] = useState("")
+  const [followUpDueDate, setFollowUpDueDate] = useState<Date | undefined>(undefined)
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
+  const [isAddingFollowUp, setIsAddingFollowUp] = useState(false)
   const MAX_CHARS = 150 // Reduced to ensure "See Past Requests" is visible
   const pastRequestsToShow = expandedRequests.slice(1, 6) // Show up to 5 past requests
 
@@ -100,6 +117,108 @@ export function PersonPrayerCard({
           <p className="text-sm text-muted-foreground mt-1">
             Last prayed: {formatDate(person.lastPrayedFor.toDate())}
           </p>
+        )}
+
+        {/* Quick Follow-up Link */}
+        {onAddFollowUp && !isFollowUpExpanded && (
+          <Button
+            variant="link"
+            size="sm"
+            onClick={() => setIsFollowUpExpanded(true)}
+            className="p-0 h-auto text-sm text-muted-foreground hover:text-foreground mt-1"
+          >
+            <MessageSquarePlus className="h-3 w-3 mr-1" />
+            Add follow-up
+          </Button>
+        )}
+
+        {/* Inline Follow-up Form */}
+        {isFollowUpExpanded && (
+          <div className="mt-3 space-y-3">
+            <Textarea
+              placeholder="Quick note or follow-up..."
+              value={followUpContent}
+              onChange={(e) => setFollowUpContent(e.target.value)}
+              rows={2}
+              className="text-sm"
+            />
+
+            {/* Due Date Picker */}
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground shrink-0">Due date:</Label>
+              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "justify-start text-left font-normal flex-1",
+                      !followUpDueDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {followUpDueDate ? formatDate(followUpDueDate) : "Optional"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={followUpDueDate}
+                    onSelect={(date) => {
+                      setFollowUpDueDate(date)
+                      setIsDatePickerOpen(false)
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              {followUpDueDate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFollowUpDueDate(undefined)}
+                  className="text-muted-foreground h-8 px-2"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsFollowUpExpanded(false)
+                  setFollowUpContent("")
+                  setFollowUpDueDate(undefined)
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={!followUpContent.trim() || isAddingFollowUp}
+                onClick={async () => {
+                  if (onAddFollowUp && followUpContent.trim()) {
+                    setIsAddingFollowUp(true)
+                    try {
+                      await onAddFollowUp(followUpContent.trim(), followUpDueDate)
+                      setIsFollowUpExpanded(false)
+                      setFollowUpContent("")
+                      setFollowUpDueDate(undefined)
+                    } catch (error) {
+                      console.error("Error adding follow-up:", error)
+                    } finally {
+                      setIsAddingFollowUp(false)
+                    }
+                  }
+                }}
+              >
+                {isAddingFollowUp ? "Adding..." : "Add"}
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 

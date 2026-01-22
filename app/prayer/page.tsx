@@ -44,6 +44,21 @@ import { UrgentFollowUpsSection } from "./UrgentFollowUpsSection"
 import { GroupPrayerCard } from "./GroupPrayerCard"
 import { FocusedPrayerMode } from "./FocusedPrayerMode"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
+import { SummaryCard } from "./SummaryCard"
+
+// Unified Prayer Loop Types
+interface UnifiedLoopPerson {
+  person: Person & { mostRecentRequest?: PrayerRequest }
+  groupId: string
+  groupName: string
+}
+
+interface PrayedPerson {
+  person: Person & { mostRecentRequest?: PrayerRequest }
+  groupId: string
+  groupName: string
+  prayedAt: Date
+}
 import { formatDate, calculateStreak, isSameDay } from "@/lib/utils"
 import { getUrgencyLevel } from "@/lib/followUpUtils"
 import { Input } from "@/components/ui/input"
@@ -121,10 +136,18 @@ export default function PrayerPage() {
     }
   }, [allFollowUps])
 
-  // PR #4: Focused Prayer Mode state
+  // PR #4: Focused Prayer Mode state (legacy - kept for reference)
   const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null)
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0)
   const [focusedGroupPeopleOrder, setFocusedGroupPeopleOrder] = useState<string[]>([])
+
+  // Unified Prayer Loop State
+  const [isUnifiedPrayerMode, setIsUnifiedPrayerMode] = useState(false)
+  const [unifiedLoopIndex, setUnifiedLoopIndex] = useState(0)
+  const [unifiedLoopPeople, setUnifiedLoopPeople] = useState<UnifiedLoopPerson[]>([])
+  const [prayedThisSession, setPrayedThisSession] = useState<PrayedPerson[]>([])
+  const [showSummaryCard, setShowSummaryCard] = useState(false)
+  const [additionalPeopleLoaded, setAdditionalPeopleLoaded] = useState(false)
 
   // PR #6: Quick action dialog state (prayer requests only)
   const [quickActionDialogOpen, setQuickActionDialogOpen] = useState<'request' | null>(null)
@@ -306,7 +329,7 @@ export default function PrayerPage() {
   // Mark a person as prayed for - Implement with Firestore update & Undo
   const markAsPrayedFor = async (person: Person) => { // Pass the whole person object
     if (isMarkingPrayedId) return; // Prevent concurrent updates
-    
+
     const personId = person.id;
     const alreadyPrayedToday = isSameDay(person.lastPrayedFor, prayerListDate);
 
@@ -321,7 +344,7 @@ export default function PrayerPage() {
       if (alreadyPrayedToday) {
         // Undo: Remove the lastPrayedFor field
         updatedData = { lastPrayedFor: deleteField() };
-        optimisticTimestamp = undefined; 
+        optimisticTimestamp = undefined;
         console.log(`Undoing prayed status for ${personId}.`);
       } else {
         // Mark as prayed: Set server timestamp
@@ -346,8 +369,35 @@ export default function PrayerPage() {
         )
       );
 
-      // Auto-advance: move prayed person to back of carousel
-      if (!alreadyPrayedToday && focusedGroupId && focusedGroupPeopleOrder.length > 1) {
+      // Unified Prayer Loop: Remove from loop and track in prayedThisSession
+      if (!alreadyPrayedToday && isUnifiedPrayerMode && unifiedLoopPeople.length > 0) {
+        const currentLoopItem = unifiedLoopPeople.find(item => item.person.id === personId)
+        if (currentLoopItem) {
+          // Add to prayed this session
+          setPrayedThisSession(prev => [...prev, {
+            person: { ...currentLoopItem.person, lastPrayedFor: optimisticTimestamp },
+            groupId: currentLoopItem.groupId,
+            groupName: currentLoopItem.groupName,
+            prayedAt: new Date()
+          }])
+
+          // Remove from loop
+          const newLoop = unifiedLoopPeople.filter(item => item.person.id !== personId)
+          setUnifiedLoopPeople(newLoop)
+
+          // If loop is now empty, show summary card
+          if (newLoop.length === 0) {
+            setShowSummaryCard(true)
+          } else {
+            // Adjust index if needed
+            if (unifiedLoopIndex >= newLoop.length) {
+              setUnifiedLoopIndex(Math.max(0, newLoop.length - 1))
+            }
+          }
+        }
+      }
+      // Legacy: Auto-advance for single group focused mode
+      else if (!alreadyPrayedToday && focusedGroupId && focusedGroupPeopleOrder.length > 1) {
         const currentPersonId = focusedGroupPeopleOrder[currentCarouselIndex]
         if (currentPersonId === personId) {
           const newOrder = [
@@ -500,6 +550,39 @@ export default function PrayerPage() {
     }
   }
 
+  // Quick follow-up handler for PersonPrayerCard
+  const handleAddQuickFollowUp = async (personId: string, content: string, dueDate?: Date) => {
+    if (!user || !content) return
+
+    try {
+      const followUpRef = collection(db, "persons", personId, "followUps")
+      const followUpData: any = {
+        personId: personId,
+        content: content,
+        createdAt: serverTimestamp(),
+        completed: false,
+        archived: false
+      }
+
+      // Add dueDate if provided
+      if (dueDate) {
+        followUpData.dueDate = Timestamp.fromDate(dueDate)
+      }
+
+      await addDoc(followUpRef, followUpData)
+
+      console.log(`Quick follow-up added for person ${personId}${dueDate ? ` with due date ${dueDate}` : ''}`)
+
+      // Optionally refresh expanded details if this person is expanded
+      if (expandedPersonId === personId) {
+        fetchExpandedDetails(personId)
+      }
+    } catch (error) {
+      console.error("Error adding quick follow-up:", error)
+      throw error // Re-throw so the UI can show error state
+    }
+  }
+
   // PR #7: Header add prayer handler
   const handleAddHeaderPrayer = async () => {
     if (!user || !headerPrayerContent || !headerPrayerPersonId) return
@@ -637,6 +720,203 @@ export default function PrayerPage() {
     console.log(`Selected ${additionalIds.size} additional people out of ${countNeeded} needed.`);
     return additionalIds;
   };
+
+  // Unified Prayer Loop Builder
+  // Combines all Today's people across all groups into one swipeable loop
+  // - System groups first, then alphabetically by name
+  // - Within each group: sort people by lastPrayedFor (oldest first)
+  // - Filter out already prayed today
+  // - If starting from specific group, rotate array to start there
+  const buildUnifiedPrayerLoop = (
+    startingGroupId?: string,
+    excludePrayedToday: boolean = true
+  ): UnifiedLoopPerson[] => {
+    // Sort groups: system groups first, then alphabetically
+    const sortedGroups = [...groupsWithProgress].sort((a, b) => {
+      // System groups first
+      if (a.group.isSystemGroup && !b.group.isSystemGroup) return -1
+      if (!a.group.isSystemGroup && b.group.isSystemGroup) return 1
+      // Then alphabetically
+      return a.group.name.localeCompare(b.group.name)
+    })
+
+    // Build the unified list
+    const unifiedList: UnifiedLoopPerson[] = []
+
+    for (const { group, people } of sortedGroups) {
+      // Sort people within group by lastPrayedFor (oldest/null first)
+      const sortedPeople = [...people].sort((a, b) => {
+        if (!a.lastPrayedFor && !b.lastPrayedFor) return 0
+        if (!a.lastPrayedFor) return -1
+        if (!b.lastPrayedFor) return 1
+        return a.lastPrayedFor.toMillis() - b.lastPrayedFor.toMillis()
+      })
+
+      for (const person of sortedPeople) {
+        // Filter out already prayed today if requested
+        if (excludePrayedToday && isSameDay(person.lastPrayedFor, prayerListDate)) {
+          continue
+        }
+
+        unifiedList.push({
+          person,
+          groupId: group.id,
+          groupName: group.name
+        })
+      }
+    }
+
+    // If starting from a specific group, rotate array to start there
+    if (startingGroupId) {
+      const startIndex = unifiedList.findIndex(item => item.groupId === startingGroupId)
+      if (startIndex > 0) {
+        return [...unifiedList.slice(startIndex), ...unifiedList.slice(0, startIndex)]
+      }
+    }
+
+    return unifiedList
+  }
+
+  // Open unified prayer mode
+  const openUnifiedPrayerMode = (startingGroupId?: string) => {
+    const loop = buildUnifiedPrayerLoop(startingGroupId, true)
+
+    if (loop.length === 0) {
+      // All people already prayed today - show them in the summary
+      const alreadyPrayedToday = buildUnifiedPrayerLoop(startingGroupId, false).filter(
+        item => isSameDay(item.person.lastPrayedFor, prayerListDate)
+      ).map(item => ({
+        person: item.person,
+        groupId: item.groupId,
+        groupName: item.groupName,
+        prayedAt: item.person.lastPrayedFor?.toDate() || new Date()
+      }))
+
+      setPrayedThisSession(alreadyPrayedToday)
+      setUnifiedLoopPeople([])
+      setShowSummaryCard(true)
+      setAdditionalPeopleLoaded(true) // Mark as loaded since everyone is already prayed
+      setIsUnifiedPrayerMode(true)
+      return
+    }
+
+    setUnifiedLoopPeople(loop)
+    setUnifiedLoopIndex(0)
+    setPrayedThisSession([])
+    setShowSummaryCard(false)
+    setAdditionalPeopleLoaded(false)
+    setIsUnifiedPrayerMode(true)
+
+    // Auto-fetch details for first person
+    if (loop.length > 0) {
+      setExpandedPersonId(loop[0].person.id)
+      fetchExpandedDetails(loop[0].person.id)
+    }
+  }
+
+  // Close unified prayer mode
+  const closeUnifiedPrayerMode = () => {
+    setIsUnifiedPrayerMode(false)
+    setUnifiedLoopPeople([])
+    setUnifiedLoopIndex(0)
+    setPrayedThisSession([])
+    setShowSummaryCard(false)
+    setAdditionalPeopleLoaded(false)
+  }
+
+  // Restore a person from the prayed list back to the loop
+  const restorePersonToLoop = (prayedPerson: PrayedPerson) => {
+    // Find the right position to insert them back (at the end of their group)
+    const groupIndex = unifiedLoopPeople.findIndex(item => item.groupId === prayedPerson.groupId)
+    let insertIndex = unifiedLoopPeople.length // Default to end
+
+    if (groupIndex >= 0) {
+      // Find the last person in their group and insert after
+      for (let i = unifiedLoopPeople.length - 1; i >= 0; i--) {
+        if (unifiedLoopPeople[i].groupId === prayedPerson.groupId) {
+          insertIndex = i + 1
+          break
+        }
+      }
+    }
+
+    const newLoopPerson: UnifiedLoopPerson = {
+      person: prayedPerson.person,
+      groupId: prayedPerson.groupId,
+      groupName: prayedPerson.groupName
+    }
+
+    const newLoop = [
+      ...unifiedLoopPeople.slice(0, insertIndex),
+      newLoopPerson,
+      ...unifiedLoopPeople.slice(insertIndex)
+    ]
+
+    setUnifiedLoopPeople(newLoop)
+    setPrayedThisSession(prev => prev.filter(p => p.person.id !== prayedPerson.person.id))
+    setShowSummaryCard(false)
+  }
+
+  // Load additional people for "Pray for More"
+  const loadMorePeople = () => {
+    // Get all people (including those prayed today) who are not currently in the loop
+    const currentLoopIds = new Set(unifiedLoopPeople.map(p => p.person.id))
+
+    // Get all people who were prayed today - these can be prayed for again
+    const allPeopleToday = buildUnifiedPrayerLoop(undefined, false)
+    const additionalPeople = allPeopleToday.filter(
+      item => !currentLoopIds.has(item.person.id) &&
+              isSameDay(item.person.lastPrayedFor, prayerListDate)
+    )
+
+    if (additionalPeople.length > 0) {
+      setUnifiedLoopPeople(additionalPeople)
+      setUnifiedLoopIndex(0)
+      setShowSummaryCard(false)
+      setAdditionalPeopleLoaded(true)
+
+      // Auto-fetch details for first person
+      setExpandedPersonId(additionalPeople[0].person.id)
+      fetchExpandedDetails(additionalPeople[0].person.id)
+    }
+  }
+
+  // Get current group name based on unified loop index
+  const getCurrentGroupName = (): string => {
+    if (unifiedLoopPeople.length === 0 || unifiedLoopIndex >= unifiedLoopPeople.length) {
+      return ''
+    }
+    return unifiedLoopPeople[unifiedLoopIndex].groupName
+  }
+
+  // Get group start indices for navigation
+  const getGroupStartIndices = (): Map<string, { index: number; name: string; count: number }> => {
+    const indices = new Map<string, { index: number; name: string; count: number }>()
+    let currentGroup = ''
+
+    for (let i = 0; i < unifiedLoopPeople.length; i++) {
+      const item = unifiedLoopPeople[i]
+      if (item.groupId !== currentGroup) {
+        currentGroup = item.groupId
+        indices.set(item.groupId, {
+          index: i,
+          name: item.groupName,
+          count: unifiedLoopPeople.filter(p => p.groupId === item.groupId).length
+        })
+      }
+    }
+
+    return indices
+  }
+
+  // Jump to a specific group in the unified loop
+  const jumpToGroup = (groupId: string) => {
+    const indices = getGroupStartIndices()
+    const groupInfo = indices.get(groupId)
+    if (groupInfo) {
+      setUnifiedLoopIndex(groupInfo.index)
+    }
+  }
 
   // PR #3: Function to fetch all follow-ups for all people
   const fetchAllFollowUps = async (people: Person[]): Promise<FollowUp[]> => {
@@ -1076,25 +1356,58 @@ export default function PrayerPage() {
                   totalCount={totalCount}
                   prayerListDate={prayerListDate}
                   onOpenFocusedMode={(groupId) => {
-                    const groupData = groupsWithProgress.find(g => g.group.id === groupId)
-                    const peopleIds = groupData?.people.map(p => p.id) || []
-                    setFocusedGroupPeopleOrder(peopleIds)
-                    setFocusedGroupId(groupId)
-                    setCurrentCarouselIndex(0)
-                    // Auto-fetch details for first person
-                    if (peopleIds.length > 0) {
-                      setExpandedPersonId(peopleIds[0])
-                      fetchExpandedDetails(peopleIds[0])
-                    }
+                    // Open unified prayer mode starting at this group
+                    openUnifiedPrayerMode(groupId)
                   }}
                 />
               ))
             )}
           </div>
 
-          {/* PR #4: Focused Prayer Mode Dialog */}
-          {focusedGroupId && (
+          {/* Unified Prayer Mode Dialog */}
+          {isUnifiedPrayerMode && (
             <FocusedPrayerMode
+              mode="unified"
+              isOpen={isUnifiedPrayerMode}
+              onClose={closeUnifiedPrayerMode}
+              unifiedLoopPeople={unifiedLoopPeople}
+              expandedData={{
+                requests: expandedData.requests,
+                loading: expandedData.loading
+              }}
+              prayedThisSession={prayedThisSession}
+              showSummaryCard={showSummaryCard}
+              groupStartIndices={getGroupStartIndices()}
+              onJumpToGroup={jumpToGroup}
+              onRestorePerson={restorePersonToLoop}
+              onPrayForMore={loadMorePeople}
+              hasMorePeople={!additionalPeopleLoaded && buildUnifiedPrayerLoop(undefined, false).some(
+                item => isSameDay(item.person.lastPrayedFor, prayerListDate) &&
+                        !prayedThisSession.find(p => p.person.id === item.person.id)
+              )}
+              currentPersonIndex={unifiedLoopIndex}
+              onPersonIndexChange={(index) => {
+                setUnifiedLoopIndex(index)
+                // Auto-fetch details for new person
+                if (unifiedLoopPeople[index]) {
+                  setExpandedPersonId(unifiedLoopPeople[index].person.id)
+                  fetchExpandedDetails(unifiedLoopPeople[index].person.id)
+                }
+              }}
+              onMarkPrayed={markAsPrayedFor}
+              isMarkingPrayed={!!isMarkingPrayedId}
+              prayerListDate={prayerListDate}
+              onAddRequest={handleOpenQuickActionRequest}
+              onAddFollowUp={async (personId: string, content: string, dueDate?: Date) => {
+                await handleAddQuickFollowUp(personId, content, dueDate)
+              }}
+            />
+          )}
+
+          {/* Legacy: PR #4 Single Group Focused Prayer Mode Dialog */}
+          {focusedGroupId && !isUnifiedPrayerMode && (
+            <FocusedPrayerMode
+              mode="single"
               isOpen={!!focusedGroupId}
               onClose={() => {
                 setFocusedGroupId(null)
@@ -1113,12 +1426,6 @@ export default function PrayerPage() {
               isMarkingPrayed={!!isMarkingPrayedId}
               prayerListDate={prayerListDate}
               onAddRequest={handleOpenQuickActionRequest}
-              allGroups={groupsWithProgress.map(g => g.group)}
-              onSwitchGroup={(groupId) => {
-                setFocusedGroupId(groupId)
-                setCurrentCarouselIndex(0)
-                setFocusedGroupPeopleOrder([]) // Reset people order when switching groups
-              }}
             />
           )}
 
