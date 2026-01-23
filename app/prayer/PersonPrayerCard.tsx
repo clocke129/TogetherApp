@@ -3,9 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, MessageSquarePlus, CalendarIcon } from "lucide-react"
+import { Plus, CalendarIcon } from "lucide-react"
 import type { Person, PrayerRequest } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
 import {
@@ -26,6 +25,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
@@ -34,7 +34,7 @@ interface PersonPrayerCardProps {
   mostRecentRequest?: PrayerRequest
   expandedRequests: PrayerRequest[]
   isLoadingExpanded: boolean
-  onAddRequest?: () => void
+  onAddRequest?: (content: string) => Promise<void>
   onAddFollowUp?: (content: string, dueDate?: Date) => Promise<void>
 }
 
@@ -49,11 +49,13 @@ export function PersonPrayerCard({
   const isMobile = useMobile()
   const [isPastRequestsOpen, setIsPastRequestsOpen] = useState(false)
   const [isCurrentRequestExpanded, setIsCurrentRequestExpanded] = useState(false)
-  const [isFollowUpExpanded, setIsFollowUpExpanded] = useState(false)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<"request" | "followup">("request")
+  const [requestContent, setRequestContent] = useState("")
   const [followUpContent, setFollowUpContent] = useState("")
   const [followUpDueDate, setFollowUpDueDate] = useState<Date | undefined>(undefined)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
-  const [isAddingFollowUp, setIsAddingFollowUp] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const MAX_CHARS = 150 // Reduced to ensure "See Past Requests" is visible
   const pastRequestsToShow = expandedRequests.slice(1, 6) // Show up to 5 past requests
 
@@ -118,116 +120,19 @@ export function PersonPrayerCard({
             Last prayed: {formatDate(person.lastPrayedFor.toDate())}
           </p>
         )}
-
-        {/* Quick Follow-up Link */}
-        {onAddFollowUp && !isFollowUpExpanded && (
-          <Button
-            variant="link"
-            size="sm"
-            onClick={() => setIsFollowUpExpanded(true)}
-            className="p-0 h-auto text-sm text-muted-foreground hover:text-foreground mt-1"
-          >
-            <MessageSquarePlus className="h-3 w-3 mr-1" />
-            Add follow-up
-          </Button>
-        )}
-
-        {/* Inline Follow-up Form */}
-        {isFollowUpExpanded && (
-          <div className="mt-3 space-y-3">
-            <Textarea
-              placeholder="Quick note or follow-up..."
-              value={followUpContent}
-              onChange={(e) => setFollowUpContent(e.target.value)}
-              rows={2}
-              className="text-sm"
-            />
-
-            {/* Due Date Picker */}
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-muted-foreground shrink-0">Due date:</Label>
-              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "justify-start text-left font-normal flex-1",
-                      !followUpDueDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {followUpDueDate ? formatDate(followUpDueDate) : "Optional"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={followUpDueDate}
-                    onSelect={(date) => {
-                      setFollowUpDueDate(date)
-                      setIsDatePickerOpen(false)
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              {followUpDueDate && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFollowUpDueDate(undefined)}
-                  className="text-muted-foreground h-8 px-2"
-                >
-                  Clear
-                </Button>
-              )}
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setIsFollowUpExpanded(false)
-                  setFollowUpContent("")
-                  setFollowUpDueDate(undefined)
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                disabled={!followUpContent.trim() || isAddingFollowUp}
-                onClick={async () => {
-                  if (onAddFollowUp && followUpContent.trim()) {
-                    setIsAddingFollowUp(true)
-                    try {
-                      await onAddFollowUp(followUpContent.trim(), followUpDueDate)
-                      setIsFollowUpExpanded(false)
-                      setFollowUpContent("")
-                      setFollowUpDueDate(undefined)
-                    } catch (error) {
-                      console.error("Error adding follow-up:", error)
-                    } finally {
-                      setIsAddingFollowUp(false)
-                    }
-                  }
-                }}
-              >
-                {isAddingFollowUp ? "Adding..." : "Add"}
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Current Requests */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold">Current Requests</h3>
-          {onAddRequest && (
-            <Button variant="ghost" size="sm" onClick={onAddRequest} className="text-muted-foreground hover:text-foreground">
+          {(onAddRequest || onAddFollowUp) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsAddModalOpen(true)}
+              className="text-muted-foreground hover:text-foreground"
+            >
               <Plus className="h-4 w-4 mr-1" />
               Add
             </Button>
@@ -319,6 +224,142 @@ export function PersonPrayerCard({
         </>
       )}
 
+      {/* Add Prayer Request / Follow-Up Modal */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add for {person.name}</DialogTitle>
+          </DialogHeader>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "request" | "followup")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="request">Prayer Request</TabsTrigger>
+              <TabsTrigger value="followup">Follow-Up</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="request" className="space-y-4 mt-4">
+              <Textarea
+                placeholder="What would you like prayer for?"
+                value={requestContent}
+                onChange={(e) => setRequestContent(e.target.value)}
+                rows={4}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsAddModalOpen(false)
+                    setRequestContent("")
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={!requestContent.trim() || isSubmitting || !onAddRequest}
+                  onClick={async () => {
+                    if (onAddRequest && requestContent.trim()) {
+                      setIsSubmitting(true)
+                      try {
+                        await onAddRequest(requestContent.trim())
+                        setIsAddModalOpen(false)
+                        setRequestContent("")
+                      } catch (error) {
+                        console.error("Error adding prayer request:", error)
+                      } finally {
+                        setIsSubmitting(false)
+                      }
+                    }
+                  }}
+                >
+                  {isSubmitting ? "Adding..." : "Add Request"}
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="followup" className="space-y-4 mt-4">
+              <Textarea
+                placeholder="Quick note or follow-up..."
+                value={followUpContent}
+                onChange={(e) => setFollowUpContent(e.target.value)}
+                rows={4}
+              />
+
+              {/* Due Date Picker */}
+              <div className="flex items-center gap-2">
+                <Label className="text-sm text-muted-foreground shrink-0">Due date:</Label>
+                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "justify-start text-left font-normal flex-1",
+                        !followUpDueDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {followUpDueDate ? formatDate(followUpDueDate) : "Optional"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={followUpDueDate}
+                      onSelect={(date) => {
+                        setFollowUpDueDate(date)
+                        setIsDatePickerOpen(false)
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {followUpDueDate && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFollowUpDueDate(undefined)}
+                    className="text-muted-foreground h-8 px-2"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsAddModalOpen(false)
+                    setFollowUpContent("")
+                    setFollowUpDueDate(undefined)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={!followUpContent.trim() || isSubmitting || !onAddFollowUp}
+                  onClick={async () => {
+                    if (onAddFollowUp && followUpContent.trim()) {
+                      setIsSubmitting(true)
+                      try {
+                        await onAddFollowUp(followUpContent.trim(), followUpDueDate)
+                        setIsAddModalOpen(false)
+                        setFollowUpContent("")
+                        setFollowUpDueDate(undefined)
+                      } catch (error) {
+                        console.error("Error adding follow-up:", error)
+                      } finally {
+                        setIsSubmitting(false)
+                      }
+                    }
+                  }}
+                >
+                  {isSubmitting ? "Adding..." : "Add Follow-Up"}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

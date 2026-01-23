@@ -549,6 +549,32 @@ export default function PrayerPage() {
     }
   }
 
+  // Direct prayer request handler for PersonPrayerCard modal
+  const handleAddPrayerRequestFromCard = async (personId: string, content: string) => {
+    if (!user || !content) return
+
+    try {
+      const person = allUserPeople.find(p => p.id === personId)
+      const requestRef = collection(db, "persons", personId, "prayerRequests")
+      await addDoc(requestRef, {
+        personId: personId,
+        personName: person?.name || "Unknown",
+        content: content,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+        isCompleted: false
+      })
+
+      // Refresh expanded details if this person is expanded
+      if (expandedPersonId === personId) {
+        fetchExpandedDetails(personId)
+      }
+    } catch (error) {
+      console.error("Error adding prayer request:", error)
+      throw error
+    }
+  }
+
   // Quick follow-up handler for PersonPrayerCard
   const handleAddQuickFollowUp = async (personId: string, content: string, dueDate?: Date) => {
     if (!user || !content) return
@@ -1403,10 +1429,8 @@ export default function PrayerPage() {
               onMarkPrayed={markAsPrayedFor}
               isMarkingPrayed={!!isMarkingPrayedId}
               prayerListDate={prayerListDate}
-              onAddRequest={handleOpenQuickActionRequest}
-              onAddFollowUp={async (personId: string, content: string, dueDate?: Date) => {
-                await handleAddQuickFollowUp(personId, content, dueDate)
-              }}
+              onAddRequest={handleAddPrayerRequestFromCard}
+              onAddFollowUp={handleAddQuickFollowUp}
             />
           )}
 
@@ -1431,7 +1455,8 @@ export default function PrayerPage() {
               onMarkPrayed={markAsPrayedFor}
               isMarkingPrayed={!!isMarkingPrayedId}
               prayerListDate={prayerListDate}
-              onAddRequest={handleOpenQuickActionRequest}
+              onAddRequest={handleAddPrayerRequestFromCard}
+              onAddFollowUp={handleAddQuickFollowUp}
             />
           )}
 

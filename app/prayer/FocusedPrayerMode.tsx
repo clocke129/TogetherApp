@@ -76,7 +76,7 @@ type FocusedPrayerModeProps = {
   onMarkPrayed: (person: Person) => void
   isMarkingPrayed: boolean
   prayerListDate: Date
-  onAddRequest?: (personId: string) => void
+  onAddRequest?: (personId: string, content: string) => Promise<void>
   onAddFollowUp?: (personId: string, content: string, dueDate?: Date) => Promise<void>
 } & (SingleGroupModeProps | UnifiedModeProps)
 
@@ -349,7 +349,7 @@ export function FocusedPrayerMode(props: FocusedPrayerModeProps) {
                         mostRecentRequest={person.mostRecentRequest}
                         expandedRequests={person.expandedRequests}
                         isLoadingExpanded={person.isLoadingExpanded}
-                        onAddRequest={onAddRequest ? () => onAddRequest(person.id) : undefined}
+                        onAddRequest={onAddRequest ? (content: string) => onAddRequest(person.id, content) : undefined}
                         onAddFollowUp={onAddFollowUp ? (content: string, dueDate?: Date) => onAddFollowUp(person.id, content, dueDate) : undefined}
                       />
                     </CarouselItem>
