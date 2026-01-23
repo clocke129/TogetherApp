@@ -147,7 +147,6 @@ export default function PrayerPage() {
   const [unifiedLoopPeople, setUnifiedLoopPeople] = useState<UnifiedLoopPerson[]>([])
   const [prayedThisSession, setPrayedThisSession] = useState<PrayedPerson[]>([])
   const [showSummaryCard, setShowSummaryCard] = useState(false)
-  const [additionalPeopleLoaded, setAdditionalPeopleLoaded] = useState(false)
 
   // PR #6: Quick action dialog state (prayer requests only)
   const [quickActionDialogOpen, setQuickActionDialogOpen] = useState<'request' | null>(null)
@@ -795,7 +794,6 @@ export default function PrayerPage() {
       setPrayedThisSession(alreadyPrayedToday)
       setUnifiedLoopPeople([])
       setShowSummaryCard(true)
-      setAdditionalPeopleLoaded(true) // Mark as loaded since everyone is already prayed
       setIsUnifiedPrayerMode(true)
       return
     }
@@ -804,7 +802,6 @@ export default function PrayerPage() {
     setUnifiedLoopIndex(0)
     setPrayedThisSession([])
     setShowSummaryCard(false)
-    setAdditionalPeopleLoaded(false)
     setIsUnifiedPrayerMode(true)
 
     // Auto-fetch details for first person
@@ -821,63 +818,77 @@ export default function PrayerPage() {
     setUnifiedLoopIndex(0)
     setPrayedThisSession([])
     setShowSummaryCard(false)
-    setAdditionalPeopleLoaded(false)
   }
 
-  // Restore a person from the prayed list back to the loop
-  const restorePersonToLoop = (prayedPerson: PrayedPerson) => {
-    // Find the right position to insert them back (at the end of their group)
-    const groupIndex = unifiedLoopPeople.findIndex(item => item.groupId === prayedPerson.groupId)
-    let insertIndex = unifiedLoopPeople.length // Default to end
+  // Restore multiple people from the prayed list back to the loop
+  const restoreMultiplePeopleToLoop = async (prayedPeople: PrayedPerson[]) => {
+    if (prayedPeople.length === 0) return
 
-    if (groupIndex >= 0) {
+    // Build the new loop with all restored people
+    let newLoop = [...unifiedLoopPeople]
+    const restoredIds = new Set<string>()
+
+    for (const prayedPerson of prayedPeople) {
+      restoredIds.add(prayedPerson.person.id)
+
+      // Find the right position to insert them back (at the end of their group)
+      let insertIndex = newLoop.length // Default to end
+
       // Find the last person in their group and insert after
-      for (let i = unifiedLoopPeople.length - 1; i >= 0; i--) {
-        if (unifiedLoopPeople[i].groupId === prayedPerson.groupId) {
+      for (let i = newLoop.length - 1; i >= 0; i--) {
+        if (newLoop[i].groupId === prayedPerson.groupId) {
           insertIndex = i + 1
           break
         }
       }
-    }
 
-    const newLoopPerson: UnifiedLoopPerson = {
-      person: prayedPerson.person,
-      groupId: prayedPerson.groupId,
-      groupName: prayedPerson.groupName
-    }
+      // Clear lastPrayedFor so the pray button works correctly
+      const newLoopPerson: UnifiedLoopPerson = {
+        person: { ...prayedPerson.person, lastPrayedFor: undefined },
+        groupId: prayedPerson.groupId,
+        groupName: prayedPerson.groupName
+      }
 
-    const newLoop = [
-      ...unifiedLoopPeople.slice(0, insertIndex),
-      newLoopPerson,
-      ...unifiedLoopPeople.slice(insertIndex)
-    ]
+      newLoop = [
+        ...newLoop.slice(0, insertIndex),
+        newLoopPerson,
+        ...newLoop.slice(insertIndex)
+      ]
+    }
 
     setUnifiedLoopPeople(newLoop)
-    setPrayedThisSession(prev => prev.filter(p => p.person.id !== prayedPerson.person.id))
+    setPrayedThisSession(prev => prev.filter(p => !restoredIds.has(p.person.id)))
     setShowSummaryCard(false)
-  }
 
-  // Load additional people for "Pray for More"
-  const loadMorePeople = () => {
-    // Get all people (including those prayed today) who are not currently in the loop
-    const currentLoopIds = new Set(unifiedLoopPeople.map(p => p.person.id))
+    // Auto-fetch details for first restored person
+    if (newLoop.length > 0) {
+      setExpandedPersonId(newLoop[0].person.id)
+      fetchExpandedDetails(newLoop[0].person.id)
+    }
 
-    // Get all people who were prayed today - these can be prayed for again
-    const allPeopleToday = buildUnifiedPrayerLoop(undefined, false)
-    const additionalPeople = allPeopleToday.filter(
-      item => !currentLoopIds.has(item.person.id) &&
-              isSameDay(item.person.lastPrayedFor, prayerListDate)
-    )
+    // Update Firestore to remove lastPrayedFor for all restored people
+    const batch = writeBatch(db)
+    for (const prayedPerson of prayedPeople) {
+      const personRef = doc(db, "persons", prayedPerson.person.id)
+      batch.update(personRef, { lastPrayedFor: deleteField() })
+    }
 
-    if (additionalPeople.length > 0) {
-      setUnifiedLoopPeople(additionalPeople)
-      setUnifiedLoopIndex(0)
-      setShowSummaryCard(false)
-      setAdditionalPeopleLoaded(true)
+    try {
+      await batch.commit()
 
-      // Auto-fetch details for first person
-      setExpandedPersonId(additionalPeople[0].person.id)
-      fetchExpandedDetails(additionalPeople[0].person.id)
+      // Update local state
+      setAllUserPeople(prevPeople =>
+        prevPeople.map(p =>
+          restoredIds.has(p.id) ? { ...p, lastPrayedFor: undefined } : p
+        )
+      )
+      setTodaysPrayerList(prevList =>
+        prevList.map(p =>
+          restoredIds.has(p.id) ? { ...p, lastPrayedFor: undefined } : p
+        )
+      )
+    } catch (err) {
+      console.error("Error undoing prayer status:", err)
     }
   }
 
@@ -1379,12 +1390,7 @@ export default function PrayerPage() {
               showSummaryCard={showSummaryCard}
               groupStartIndices={getGroupStartIndices()}
               onJumpToGroup={jumpToGroup}
-              onRestorePerson={restorePersonToLoop}
-              onPrayForMore={loadMorePeople}
-              hasMorePeople={!additionalPeopleLoaded && buildUnifiedPrayerLoop(undefined, false).some(
-                item => isSameDay(item.person.lastPrayedFor, prayerListDate) &&
-                        !prayedThisSession.find(p => p.person.id === item.person.id)
-              )}
+              onRestoreMultiple={restoreMultiplePeopleToLoop}
               currentPersonIndex={unifiedLoopIndex}
               onPersonIndexChange={(index) => {
                 setUnifiedLoopIndex(index)

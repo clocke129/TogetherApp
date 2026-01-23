@@ -65,9 +65,7 @@ interface UnifiedModeProps {
   showSummaryCard: boolean
   groupStartIndices: Map<string, GroupNavInfo>
   onJumpToGroup: (groupId: string) => void
-  onRestorePerson: (prayedPerson: PrayedPerson) => void
-  onPrayForMore: () => void
-  hasMorePeople: boolean
+  onRestoreMultiple: (prayedPeople: PrayedPerson[]) => void
 }
 
 type FocusedPrayerModeProps = {
@@ -321,10 +319,8 @@ export function FocusedPrayerMode(props: FocusedPrayerModeProps) {
         {showSummary && isUnifiedMode ? (
           <SummaryCard
             prayedPeople={props.prayedThisSession}
-            onUndo={props.onRestorePerson}
-            onPrayForMore={props.onPrayForMore}
+            onRestoreMultiple={props.onRestoreMultiple}
             onDone={onClose}
-            hasMorePeople={props.hasMorePeople}
           />
         ) : (
           <>
