@@ -88,7 +88,7 @@ export function SortableGroupCard({
           <Users className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="font-semibold text-base leading-none">{group.name}</span>
 
-          <span className="text-xs text-muted-foreground truncate">
+          <span className="text-xs text-muted-foreground truncate hidden sm:block">
             {daySummary} · {perDaySummary}
           </span>
 
