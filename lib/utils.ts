@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { db } from "@/lib/firebaseConfig" // Import db instance
-import { collection, query, where, getDocs, getDoc, doc, Timestamp, setDoc, addDoc, serverTimestamp, type Firestore } from 'firebase/firestore' // Import Firestore types/functions
+import { collection, query, where, getDocs, getDoc, doc, Timestamp, setDoc, addDoc, serverTimestamp, writeBatch, type Firestore } from 'firebase/firestore' // Import Firestore types/functions
 import type { Group, Person } from '@/lib/types' // Import Group and Person types
 
 export function cn(...inputs: ClassValue[]) {
@@ -185,15 +185,25 @@ export async function calculateAndSaveDailyPrayerList(
 
         console.log(`[Calculation Function] Final Person IDs determined:`, Array.from(personIdsToPrayFor));
 
-        // 5. Save the calculated list AND settings snapshot to dailyPrayerLists
-        await setDoc(dailyListRef, {
+        // 5. Save the calculated list AND settings snapshot to dailyPrayerLists,
+        //    and mark each selected person as prayed for today so the rotation advances.
+        const batch = writeBatch(db);
+
+        batch.set(dailyListRef, {
             userId: userId,
             date: dateKey,
             personIds: Array.from(personIdsToPrayFor),
-            settingsSnapshot: settingsSnapshot, // NEW: Save the snapshot
+            settingsSnapshot: settingsSnapshot,
             createdAt: serverTimestamp()
         });
-        console.log(`[Calculation Function] Saved calculated list AND settings snapshot to Firestore path: ${dailyListRef.path}`);
+
+        const prayedAt = Timestamp.fromDate(targetDate);
+        personIdsToPrayFor.forEach(personId => {
+            batch.update(doc(db, "persons", personId), { lastPrayedFor: prayedAt });
+        });
+
+        await batch.commit();
+        console.log(`[Calculation Function] Saved list and updated lastPrayedFor for ${personIdsToPrayFor.size} people.`);
 
         return personIdsToPrayFor;
 

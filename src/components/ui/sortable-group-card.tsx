@@ -36,7 +36,7 @@ interface SortableGroupCardProps {
   peopleInGroup: Person[];
   openGroupActionsDialog: (group: Group) => void;
   openPersonActionsDialog: (person: Person) => void;
-  handleAddPersonToGroup: (groupId: string) => void;
+  handleAddPersonToGroup: (groupId: string | undefined) => void;
   isMobile: boolean;
   currentNumSetting: number | null;
   displayDays: string[];
@@ -149,15 +149,13 @@ export function SortableGroupCard({
             </div>
           )}
 
-          {!group.isSystemGroup && (
-            <button
-              onClick={() => handleAddPersonToGroup(group.id)}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground/50 hover:text-muted-foreground transition-colors px-1 py-1 mt-1"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              Add person
-            </button>
-          )}
+          <button
+            onClick={() => handleAddPersonToGroup(group.isSystemGroup ? undefined : group.id)}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground/50 hover:text-muted-foreground transition-colors px-1 py-1 mt-1"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Add person
+          </button>
         </div>
       </div>
 

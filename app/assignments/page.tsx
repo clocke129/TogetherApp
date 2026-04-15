@@ -485,7 +485,7 @@ export default function AssignmentsPage() {
   };
   
   // Add Person to Specific Group - opens dialog pre-assigned to that group
-  const handleAddPersonToGroup = (groupId: string) => {
+  const handleAddPersonToGroup = (groupId: string | undefined) => {
     setNewPersonName("")
     setAddPersonTargetGroupId(groupId)
     setIsAddPersonDialogOpen(true)
