@@ -91,6 +91,7 @@ export default function AssignmentsPage() {
   const [isAddPersonDialogOpen, setIsAddPersonDialogOpen] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
   const [isAddingPerson, setIsAddingPerson] = useState(false);
+  const [addPersonTargetGroupId, setAddPersonTargetGroupId] = useState<string | undefined>(undefined);
 
   const [isAddGroupDialogOpen, setIsAddGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
@@ -555,8 +556,9 @@ export default function AssignmentsPage() {
         ...prev,
         { id: docRef.id, ...newPersonData, createdAt: Timestamp.now() } as Person
       ]);
-      setNewPersonName(""); // Clear input
-      setIsAddPersonDialogOpen(false); // Close dialog
+      setNewPersonName("")
+      setAddPersonTargetGroupId(undefined)
+      setIsAddPersonDialogOpen(false)
       console.log("Person added with ID: ", docRef.id);
 
     } catch (err) {
@@ -730,10 +732,11 @@ export default function AssignmentsPage() {
      }
   };
   
-  // Add Person to Specific Group - Note: groupId parameter is unused here as it opens the generic add person dialog
-  const handleAddPersonToGroup = (groupId: string) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-    setNewPersonName(""); 
-    setIsAddPersonDialogOpen(true);
+  // Add Person to Specific Group - opens dialog pre-assigned to that group
+  const handleAddPersonToGroup = (groupId: string) => {
+    setNewPersonName("")
+    setAddPersonTargetGroupId(groupId)
+    setIsAddPersonDialogOpen(true)
   };
 
   // NEW: Update numPerDay setting for a group (handles null for "All")
@@ -1670,6 +1673,52 @@ export default function AssignmentsPage() {
                 </>
             )}
         </div>
+
+        {/* Add Person to Group Dialog */}
+        <Dialog
+          open={isAddPersonDialogOpen}
+          onOpenChange={(open) => {
+            setIsAddPersonDialogOpen(open)
+            if (!open) { setAddPersonTargetGroupId(undefined); setNewPersonName("") }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                Add Person{addPersonTargetGroupId ? ` to ${groups.find(g => g.id === addPersonTargetGroupId)?.name}` : ""}
+              </DialogTitle>
+              <DialogDescription>Enter the person's name to add them to this group.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={(e) => handleAddPersonSubmit(e, addPersonTargetGroupId)}>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="new-person-name">Name</Label>
+                  <Input
+                    id="new-person-name"
+                    value={newPersonName}
+                    onChange={(e) => setNewPersonName(e.target.value)}
+                    placeholder="Enter name..."
+                    disabled={isAddingPerson}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <DialogFooter className="mt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setIsAddPersonDialogOpen(false); setAddPersonTargetGroupId(undefined); setNewPersonName("") }}
+                  disabled={isAddingPerson}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isAddingPerson || !newPersonName.trim()}>
+                  {isAddingPerson ? "Adding..." : "Add Person"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* Person Actions Dialog */}
         <Dialog open={isPersonActionsDialogOpen} onOpenChange={setIsPersonActionsDialogOpen}>

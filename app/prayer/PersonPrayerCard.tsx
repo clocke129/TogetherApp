@@ -115,11 +115,6 @@ export function PersonPrayerCard({
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold">{person.name}</h2>
-        {person.lastPrayedFor && (
-          <p className="text-sm text-muted-foreground mt-1">
-            Last prayed: {formatDate(person.lastPrayedFor.toDate())}
-          </p>
-        )}
       </div>
 
       {/* Current Requests */}

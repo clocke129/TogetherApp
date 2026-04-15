@@ -32,18 +32,14 @@ export const isSameDay = (timestamp: Timestamp | undefined, date: Date): boolean
  * Sorts people by lastPrayedFor timestamp (oldest first).
  * People who have never been prayed for (null/undefined) are prioritized.
  * Tie-breaking uses personId for stable, deterministic ordering.
+ * Note: lastPrayedFor is no longer written by the app, but this function
+ * is still used by calculateAndSaveDailyPrayerList to pick today's people.
  */
 function sortByLastPrayedFor(people: Person[]): Person[] {
   return people.slice().sort((a, b) => {
-    // Convert timestamps to milliseconds, treat null/undefined as 0 (epoch) to prioritize
     const timeA = a.lastPrayedFor?.toMillis() ?? 0
     const timeB = b.lastPrayedFor?.toMillis() ?? 0
-
-    if (timeA !== timeB) {
-      return timeA - timeB  // Ascending: oldest first
-    }
-
-    // Tie-breaker: stable sort by personId
+    if (timeA !== timeB) return timeA - timeB
     return a.id.localeCompare(b.id)
   })
 }
@@ -262,65 +258,6 @@ export async function ensureEveryoneGroup(
     }
 }
 
-/**
- * Calculates the user's current prayer streak.
- * A streak is the number of consecutive days (from today backward) where at least one person was prayed for.
- * Returns 0 if no streak exists or on error.
- */
-export async function calculateStreak(
-    db: Firestore,
-    userId: string
-): Promise<number> {
-    try {
-        console.log(`[calculateStreak] Calculating streak for user ${userId}...`);
-
-        const listsRef = collection(db, "users", userId, "dailyPrayerLists");
-        const listsQuery = query(listsRef); // Get all daily lists
-        const listsSnapshot = await getDocs(listsQuery);
-
-        if (listsSnapshot.empty) {
-            console.log(`[calculateStreak] No daily prayer lists found. Streak = 0.`);
-            return 0;
-        }
-
-        // Build a map of dates to whether they had completions
-        const dateMap = new Map<string, boolean>();
-
-        listsSnapshot.docs.forEach(docSnap => {
-            const data = docSnap.data();
-            const dateKey = data.date; // Format: "YYYY-MM-DD"
-            const personIds = data.personIds || [];
-            // We need to check if any of these people were actually prayed for
-            // For now, we'll just check if the list exists (simplification)
-            // In future, could query persons to check lastPrayedFor timestamps
-            dateMap.set(dateKey, personIds.length > 0);
-        });
-
-        // Count consecutive days backward from today
-        let streak = 0;
-        const today = new Date();
-
-        for (let i = 0; i < 365; i++) { // Max 365 days backward
-            const checkDate = new Date(today);
-            checkDate.setDate(today.getDate() - i);
-            const dateKey = checkDate.toISOString().split('T')[0];
-
-            if (dateMap.has(dateKey) && dateMap.get(dateKey)) {
-                streak++;
-            } else {
-                // Streak broken
-                break;
-            }
-        }
-
-        console.log(`[calculateStreak] Calculated streak: ${streak} days.`);
-        return streak;
-
-    } catch (error) {
-        console.error(`[calculateStreak] Error calculating streak:`, error);
-        return 0; // Return 0 on error
-    }
-}
 
 // Helper function to stringify Map with Sets for session storage
 export function stringifyMapWithSets(map: Map<string, Set<string>>): string {

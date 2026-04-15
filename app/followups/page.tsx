@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, Clock, AlertTriangle, User, Check, Plus, CalendarPlus, Loader2 } from "lucide-react"
+import { Calendar, Clock, User, Check, Plus, CalendarPlus, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -37,12 +36,6 @@ import {
   deleteField,
 } from "firebase/firestore"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { cn } from "@/lib/utils"
 import type { Person, Group, FollowUp } from "@/lib/types"
 
@@ -518,297 +511,177 @@ export default function FollowupsPage() {
           <TabsTrigger value="completed">Completed</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="active" className="space-y-2">
-           <Accordion type="multiple" className="w-full space-y-2" defaultValue={['overdue', 'this-week']}>
-              {overdueFollowUps.length > 0 && (
-                 <AccordionItem value="overdue">
-                   <AccordionTrigger className="p-3 bg-card border border-shrub/20 rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
-                      <div className="flex items-center gap-2 text-lg font-medium">
-                        <AlertTriangle className="h-5 w-5 text-shrub" />
-                        <span>Attention</span>
-                        <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground">{overdueFollowUps.length}</Badge>
+        <TabsContent value="active" className="space-y-6">
+          {/* Overdue / Attention */}
+          {overdueFollowUps.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Attention</p>
+                <span className="text-xs bg-shrub text-primary-foreground px-1.5 py-0.5 rounded-full font-medium">
+                  {overdueFollowUps.length}
+                </span>
+              </div>
+              <div className="space-y-1">
+                {overdueFollowUps.map((followUp) => (
+                  <div key={followUp.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
+                    <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor={followUp.id} className="font-medium cursor-pointer text-base leading-snug">{followUp.content}</label>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+                        <User className="h-3 w-3 shrink-0" />
+                        <span>{getPersonNameById(followUp.personId)}</span>
                       </div>
-                   </AccordionTrigger>
-                   <AccordionContent className="p-0">
-                      <Card className="rounded-t-none border-t-0 border-shrub/20">
-                        <CardContent className="pt-4">
-                          <div className="space-y-4">
-                            {overdueFollowUps.map((followUp) => (
-                              <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                                <Checkbox
-                                  id={followUp.id}
-                                  checked={followUp.completed}
-                                  onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                                  className="mt-1"
-                                />
-                                <div className="space-y-1 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <label htmlFor={followUp.id} className="font-medium cursor-pointer">
-                                      {followUp.content}
-                                    </label>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                      <User className="h-3 w-3" />
-                                      <span>{getPersonNameById(followUp.personId)}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="default" className={cn(
-                                        "bg-shrub hover:bg-shrub/90 text-primary-foreground",
-                                        "text-xs font-medium"
-                                      )}>
-                                        <Clock className="h-3 w-3 mr-1" />
-                                        {/* Safely access dueDate */}
-                                        {followUp.dueDate ? formatDate(followUp.dueDate.toDate()) : "No date"}
-                                      </Badge>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7"
-                                        onClick={() => openEditDialog(followUp)}
-                                      >
-                                        <CalendarPlus className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                   </AccordionContent>
-                 </AccordionItem>
-              )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                      {followUp.dueDate && (
+                        <Badge variant="default" className="bg-shrub hover:bg-shrub/90 text-primary-foreground text-xs gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDate(followUp.dueDate.toDate())}
+                        </Badge>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(followUp)}>
+                        <CalendarPlus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-              {thisWeekFollowUps.length > 0 && (
-                 <AccordionItem value="this-week">
-                   <AccordionTrigger className="p-3 bg-card border rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
-                      <div className="flex items-center gap-2 text-lg font-medium">
-                        <Calendar className="h-5 w-5 text-shrub" />
-                        <span>This Week</span>
-                        <Badge variant="outline">{thisWeekFollowUps.length}</Badge>
+          {/* This Week */}
+          {thisWeekFollowUps.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">This Week</p>
+              <div className="space-y-1">
+                {thisWeekFollowUps.map((followUp) => (
+                  <div key={followUp.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
+                    <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor={followUp.id} className="font-medium cursor-pointer text-base leading-snug">{followUp.content}</label>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+                        <User className="h-3 w-3 shrink-0" />
+                        <span>{getPersonNameById(followUp.personId)}</span>
                       </div>
-                   </AccordionTrigger>
-                   <AccordionContent className="p-0">
-                      <Card className="rounded-t-none border-t-0">
-                         <CardContent className="pt-4">
-                            <div className="space-y-4">
-                              {thisWeekFollowUps.map((followUp) => (
-                                <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                                  <Checkbox
-                                    id={followUp.id}
-                                    checked={followUp.completed}
-                                    onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                                    className="mt-1"
-                                  />
-                                  <div className="space-y-1 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <label htmlFor={followUp.id} className="font-medium cursor-pointer">
-                                        {followUp.content}
-                                      </label>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <User className="h-3 w-3" />
-                                        <span>{getPersonNameById(followUp.personId)}</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className={cn(
-                                          "text-xs font-medium"
-                                        )}>
-                                          <Calendar className="h-3 w-3 mr-1" />
-                                          {/* Safely access dueDate */}
-                                          {followUp.dueDate ? formatDate(followUp.dueDate.toDate()) : "No date"}
-                                        </Badge>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
-                                          onClick={() => openEditDialog(followUp)}
-                                        >
-                                          <CalendarPlus className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                         </CardContent>
-                      </Card>
-                   </AccordionContent>
-                 </AccordionItem>
-              )}
-              
-              {futureFollowUps.length > 0 && (
-                 <AccordionItem value="future">
-                   <AccordionTrigger className="p-3 bg-card border rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
-                      <div className="flex items-center gap-2 text-lg font-medium">
-                        <Calendar className="h-5 w-5 text-shrub" />
-                        <span>Scheduled</span>
-                        <Badge variant="outline">{futureFollowUps.length}</Badge>
-                      </div>
-                   </AccordionTrigger>
-                   <AccordionContent className="p-0">
-                      <Card className="rounded-t-none border-t-0">
-                         <CardContent className="pt-4">
-                            <div className="space-y-4">
-                              {futureFollowUps.map((followUp) => (
-                                <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                                  <Checkbox
-                                    id={followUp.id}
-                                    checked={followUp.completed}
-                                    onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                                    className="mt-1"
-                                  />
-                                  <div className="space-y-1 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <label htmlFor={followUp.id} className="font-medium cursor-pointer">
-                                        {followUp.content}
-                                      </label>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <User className="h-3 w-3" />
-                                        <span>{getPersonNameById(followUp.personId)}</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className={cn(
-                                          "text-xs font-medium"
-                                        )}>
-                                          <Calendar className="h-3 w-3 mr-1" />
-                                          {/* Safely access dueDate */}
-                                          {followUp.dueDate ? formatDate(followUp.dueDate.toDate()) : "No date"}
-                                        </Badge>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
-                                          onClick={() => openEditDialog(followUp)}
-                                        >
-                                          <CalendarPlus className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                         </CardContent>
-                      </Card>
-                   </AccordionContent>
-                 </AccordionItem>
-              )}
-              
-              {noDateFollowUps.length > 0 && (
-                 <AccordionItem value="no-date">
-                   <AccordionTrigger className="p-3 bg-card border rounded-md hover:no-underline hover:bg-muted transition-colors [&[data-state=open]]:rounded-b-none [&[data-state=open]]:border-b-0">
-                      <div className="flex items-center gap-2 text-lg font-medium">
-                         <span>No Date Assigned</span>
-                         <Badge variant="outline">{noDateFollowUps.length}</Badge>
-                      </div>
-                   </AccordionTrigger>
-                   <AccordionContent className="p-0">
-                      <Card className="rounded-t-none border-t-0">
-                         <CardContent className="pt-4">
-                            <div className="space-y-4">
-                              {noDateFollowUps.map((followUp) => (
-                                <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                                  <Checkbox
-                                    id={followUp.id}
-                                    checked={followUp.completed}
-                                    onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                                    className="mt-1"
-                                  />
-                                  <div className="space-y-1 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <label htmlFor={followUp.id} className="font-medium cursor-pointer">
-                                        {followUp.content}
-                                      </label>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                      <User className="h-3 w-3" />
-                                      <span>{getPersonNameById(followUp.personId)}</span>
-                                    </div>
-                                  </div>
-                                  <Button variant="outline" size="sm" onClick={() => setDateForFollowUp(followUp.id)}>
-                                    Set Date
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                         </CardContent>
-                      </Card>
-                   </AccordionContent>
-                 </AccordionItem>
-              )}
-           </Accordion>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                      {followUp.dueDate && (
+                        <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground text-xs gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(followUp.dueDate.toDate())}
+                        </Badge>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(followUp)}>
+                        <CalendarPlus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-           {overdueFollowUps.length === 0 && thisWeekFollowUps.length === 0 && futureFollowUps.length === 0 && noDateFollowUps.length === 0 && (
-             <div className="text-center py-12">
-               <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-               <h3 className="text-lg font-medium">No active follow-ups</h3>
-               <p className="text-muted-foreground mt-1">All your follow-ups are completed!</p>
-             </div>
-           )}
+          {/* Scheduled / Future */}
+          {futureFollowUps.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Scheduled</p>
+              <div className="space-y-1">
+                {futureFollowUps.map((followUp) => (
+                  <div key={followUp.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
+                    <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor={followUp.id} className="font-medium cursor-pointer text-base leading-snug">{followUp.content}</label>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+                        <User className="h-3 w-3 shrink-0" />
+                        <span>{getPersonNameById(followUp.personId)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                      {followUp.dueDate && (
+                        <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground text-xs gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(followUp.dueDate.toDate())}
+                        </Badge>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(followUp)}>
+                        <CalendarPlus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No Date */}
+          {noDateFollowUps.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">No Date</p>
+              <div className="space-y-1">
+                {noDateFollowUps.map((followUp) => (
+                  <div key={followUp.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
+                    <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor={followUp.id} className="font-medium cursor-pointer text-base leading-snug">{followUp.content}</label>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+                        <User className="h-3 w-3 shrink-0" />
+                        <span>{getPersonNameById(followUp.personId)}</span>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 mt-0.5" onClick={() => setDateForFollowUp(followUp.id)}>
+                      <CalendarPlus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {overdueFollowUps.length === 0 && thisWeekFollowUps.length === 0 && futureFollowUps.length === 0 && noDateFollowUps.length === 0 && (
+            <div className="text-center py-12">
+              <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">No active follow-ups</h3>
+              <p className="text-muted-foreground mt-1">All your follow-ups are completed!</p>
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="completed">
-           <Card>
-             <CardHeader className="pb-3 flex flex-row items-center justify-between"> 
-               <CardTitle className="text-lg flex items-center gap-2">
-                  <Check className="h-5 w-5 text-primary" />
-                  <span>Completed</span>
-                  <Badge variant="outline">{completedFollowUps.length}</Badge>
-                </CardTitle>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleClearCompletedFollowUps}
-                    disabled={isClearing || completedFollowUps.length === 0}
-                    className="gap-1 text-xs"
-                 >
-                   {isClearing ? (
-                     <Loader2 className="h-4 w-4 animate-spin" />
-                   ) : null}
-                   Clear Completed
-                 </Button>
-              </CardHeader>
-              <CardContent>
-                 {completedFollowUps.length === 0 ? (
-                   <div className="text-center py-8 text-muted-foreground">
-                     <p>No completed follow-ups yet</p>
-                   </div>
-                 ) : (
-                   <div className="space-y-4">
-                     {completedFollowUps.map((followUp) => (
-                       <div key={followUp.id} className="flex items-start gap-3 p-3 rounded-md hover:bg-muted">
-                         <Checkbox
-                           id={followUp.id}
-                           checked={followUp.completed}
-                           onCheckedChange={() => toggleFollowUpCompletion(followUp.id)}
-                           className="mt-1"
-                         />
-                         <div className="space-y-1 flex-1">
-                           <div className="flex items-center gap-2">
-                             <label htmlFor={followUp.id} className="line-through text-muted-foreground cursor-pointer">
-                               {followUp.content}
-                             </label>
-                           </div>
-                           <div className="flex items-center justify-between">
-                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                               <User className="h-3 w-3" />
-                               <span>{getPersonNameById(followUp.personId)}</span>
-                             </div>
-                           </div>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 )}
-              </CardContent>
-            </Card>
+        <TabsContent value="completed" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Completed ({completedFollowUps.length})
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearCompletedFollowUps}
+              disabled={isClearing || completedFollowUps.length === 0}
+              className="gap-1 text-xs"
+            >
+              {isClearing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Clear Completed
+            </Button>
+          </div>
+          {completedFollowUps.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No completed follow-ups yet</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {completedFollowUps.map((followUp) => (
+                <div key={followUp.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
+                  <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
+                  <div className="flex-1 min-w-0">
+                    <label htmlFor={followUp.id} className="line-through text-muted-foreground cursor-pointer text-base leading-snug">{followUp.content}</label>
+                    <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+                      <User className="h-3 w-3 shrink-0" />
+                      <span>{getPersonNameById(followUp.personId)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
