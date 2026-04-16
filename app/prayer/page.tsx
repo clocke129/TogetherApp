@@ -4,7 +4,9 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, Plus, User, Check, Pencil, CalendarIcon } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ChevronLeft, ChevronRight, Plus, User, Check, CalendarIcon, CalendarPlus, Clock, Calendar as CalendarIconLucide } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
@@ -530,7 +532,7 @@ export default function PrayerPage() {
               {/* Carousel */}
               <Carousel
                 setApi={setCarouselApi}
-                opts={{ loop: false, duration: 30 }}
+                opts={{ loop: true, duration: 30 }}
                 className="flex-1 min-h-0"
               >
                 <CarouselContent className="h-full">
@@ -584,46 +586,41 @@ export default function PrayerPage() {
                             {sortFollowUpsByUrgency(urgentFollowUps).map(fu => {
                               const person = allUserPeople.find(p => p.id === fu.personId)
                               const urgency = getUrgencyLevel(fu.dueDate)
-                              const tagClass = "bg-shrub text-primary-foreground"
-                              const tagLabel = urgency === "overdue" ? "Overdue" : urgency === "today" ? "Today" : "Soon"
+                              const isOverdue = urgency === "overdue" || urgency === "today"
                               return (
-                                <div key={fu.id} className="flex items-start gap-2 px-2 py-2 rounded-md">
-                                  <User className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
+                                <div key={fu.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
+                                  <Checkbox
+                                    id={`today-fu-${fu.id}`}
+                                    checked={false}
+                                    onCheckedChange={() => handleCompleteFollowUp(fu.personId, fu.id)}
+                                    disabled={isCompletingFollowUpId === fu.id}
+                                    className="mt-1"
+                                  />
                                   <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <p className="font-semibold text-base leading-snug">{person?.name || "Unknown"}</p>
-                                      <span className={cn("text-xs px-1.5 py-0.5 rounded-full shrink-0 font-medium", tagClass)}>
-                                        {tagLabel}
-                                      </span>
-                                      {fu.dueDate && (
-                                        <span className="text-xs text-muted-foreground shrink-0">
-                                          {formatFollowUpDate(fu.dueDate)}
-                                        </span>
-                                      )}
+                                    <label htmlFor={`today-fu-${fu.id}`} className="font-medium cursor-pointer text-base leading-snug">{fu.content}</label>
+                                    <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+                                      <User className="h-3 w-3 shrink-0" />
+                                      <span>{person?.name || "Unknown"}</span>
                                     </div>
-                                    <p className="text-sm text-muted-foreground truncate mt-0.5">{fu.content}</p>
                                   </div>
-                                  <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+                                  <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                                    {fu.dueDate && (
+                                      <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground text-xs gap-1">
+                                        {isOverdue ? <Clock className="h-3 w-3" /> : <CalendarIconLucide className="h-3 w-3" />}
+                                        {formatFollowUpDate(fu.dueDate)}
+                                      </Badge>
+                                    )}
                                     <Button
                                       variant="ghost"
-                                      size="sm"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                      size="icon"
+                                      className="h-7 w-7"
                                       onClick={() => {
                                         setEditingFollowUp(fu)
                                         setEditFollowUpContent(fu.content)
                                         setEditFollowUpDueDate(fu.dueDate?.toDate())
                                       }}
                                     >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                                      onClick={() => handleCompleteFollowUp(fu.personId, fu.id)}
-                                      disabled={isCompletingFollowUpId === fu.id}
-                                    >
-                                      <Check className="h-3.5 w-3.5" />
+                                      <CalendarPlus className="h-4 w-4" />
                                     </Button>
                                   </div>
                                 </div>
@@ -651,8 +648,8 @@ export default function PrayerPage() {
                 </CarouselContent>
               </Carousel>
 
-              {/* Navigation footer */}
-              <div className="border-t bg-background shrink-0">
+              {/* Navigation footer — hidden on mobile, swipe to navigate */}
+              <div className="hidden sm:block border-t bg-background shrink-0">
                 <div className="flex items-center justify-between h-14 px-4">
                   <Button
                     variant="outline"

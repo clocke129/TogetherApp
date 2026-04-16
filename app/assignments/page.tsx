@@ -1446,63 +1446,62 @@ export default function AssignmentsPage() {
               </div>
             ) : (
               <div className="py-4 space-y-2">
-                {/* Conditionally render group-related actions */}
+                {/* Remove from group — only if currently in one */}
                 {selectedPerson?.groupId && (
-                  <>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                    onClick={() => {
+                      if (selectedPerson?.id && selectedPerson?.groupId) {
+                        handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
+                        setIsPersonActionsDialogOpen(false);
+                      }
+                    }}
+                    disabled={!!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Remove from Group
+                    {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
+                  </Button>
+                )}
+
+                {/* Move / Assign to group — always shown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <Button
                       variant="outline"
                       className="w-full justify-start gap-2"
-                      onClick={() => {
-                        if (selectedPerson?.id && selectedPerson?.groupId) {
-                          handleRemovePersonFromGroup(selectedPerson.id, selectedPerson.groupId);
-                              setIsPersonActionsDialogOpen(false);
-                        }
-                      }}
-                      disabled={!selectedPerson?.groupId || !!isRemovingPersonId || isAssigningPerson === selectedPerson?.id}
+                      disabled={!selectedPerson || isAssigningPerson === selectedPerson?.id || !!isRemovingPersonId}
                     >
-                      <LogOut className="h-4 w-4" />
-                      Remove from Group
-                      {isRemovingPersonId === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
+                      <Users className="h-4 w-4" />
+                      {selectedPerson?.groupId ? "Move to Another Group" : "Assign to Group"}
+                      {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
                     </Button>
-    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start gap-2" 
-                          disabled={groups.length <= 1 || !selectedPerson || isAssigningPerson === selectedPerson?.id || isRemovingPersonId === selectedPerson?.id}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+                    <DropdownMenuLabel>{selectedPerson?.groupId ? `Move ${selectedPerson?.name} to:` : `Assign ${selectedPerson?.name} to:`}</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {groups
+                      .filter(group => group.id !== selectedPerson?.groupId && !group.isSystemGroup)
+                      .map((group) => (
+                        <DropdownMenuItem
+                          key={group.id}
+                          onSelect={() => {
+                            if (selectedPerson?.id) {
+                              handleAssignPersonToGroup(selectedPerson.id, group.id);
+                              setIsPersonActionsDialogOpen(false);
+                            }
+                          }}
+                          disabled={isAssigningPerson === selectedPerson?.id}
                         >
-                              <Users className="h-4 w-4" />
-                          Move to Another Group
-                          {isAssigningPerson === selectedPerson?.id && <Loader2 className="h-4 w-4 animate-spin ml-auto" />} 
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
-                        <DropdownMenuLabel>Move {selectedPerson?.name} to:</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        {groups
-                              .filter(group => group.id !== selectedPerson?.groupId && !group.isSystemGroup)
-                          .map((group) => (
-                            <DropdownMenuItem
-                              key={group.id}
-                              onSelect={() => {
-                                if (selectedPerson?.id) {
-                                   handleAssignPersonToGroup(selectedPerson.id, group.id);
-                                       setIsPersonActionsDialogOpen(false);
-                                }
-                              }}
-                                  disabled={isAssigningPerson === selectedPerson?.id}
-                            >
-                              {group.name}
-                            </DropdownMenuItem>
-                        ))}
-                        {groups.filter(group => group.id !== selectedPerson?.groupId && !group.isSystemGroup).length === 0 && (
-                          <DropdownMenuItem disabled>No other groups available</DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                )}
+                          {group.name}
+                        </DropdownMenuItem>
+                      ))}
+                    {groups.filter(group => group.id !== selectedPerson?.groupId && !group.isSystemGroup).length === 0 && (
+                      <DropdownMenuItem disabled>No groups available</DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 {/* Always show Edit Name and Delete Person */}
                 <Button 
