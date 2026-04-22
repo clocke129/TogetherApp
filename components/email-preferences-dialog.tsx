@@ -40,10 +40,20 @@ const TIME_OPTIONS = Array.from({ length: 35 }, (_, i) => {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+const US_TIMEZONES = [
+  { value: 'America/New_York',    label: 'Eastern'  },
+  { value: 'America/Chicago',     label: 'Central'  },
+  { value: 'America/Denver',      label: 'Mountain' },
+  { value: 'America/Phoenix',     label: 'Arizona (no DST)' },
+  { value: 'America/Los_Angeles', label: 'Pacific'  },
+  { value: 'America/Anchorage',   label: 'Alaska'   },
+  { value: 'Pacific/Honolulu',    label: 'Hawaii'   },
+]
+
 const DEFAULT_PREFS: EmailPreferences = {
   enabled: false,
   sendTime: '07:00',
-  timezone: 'UTC',
+  timezone: 'America/New_York',
   frequency: 'daily',
 }
 
@@ -74,10 +84,12 @@ export function EmailPreferencesDialog({ open, onOpenChange }: EmailPreferencesD
           if (data) {
             setPrefs({ ...DEFAULT_PREFS, ...data })
           } else {
-            // First time — auto-detect timezone
+            // First time — auto-detect timezone, snap to nearest US option
+            const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+            const matched = US_TIMEZONES.find(tz => tz.value === detected)?.value ?? 'America/New_York'
             setPrefs({
               ...DEFAULT_PREFS,
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              timezone: matched,
             })
           }
         }
@@ -164,9 +176,9 @@ export function EmailPreferencesDialog({ open, onOpenChange }: EmailPreferencesD
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="max-h-52">
-                      {Intl.supportedValuesOf('timeZone').map(tz => (
-                        <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                    <SelectContent>
+                      {US_TIMEZONES.map(tz => (
+                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
