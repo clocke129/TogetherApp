@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     if (!uid || !token || !verifyUnsubscribeToken(uid, token)) {
       return NextResponse.json({ error: 'Invalid unsubscribe link' }, { status: 400 })
     }
-    await adminDb.doc(`users/${uid}/emailPreferences/preferences`).set(
+    await adminDb.doc(`emailPreferences/${uid}`).set(
       { enabled: false, updatedAt: Timestamp.now() },
       { merge: true }
     )
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   const uid = await verifyIdToken(req)
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const snap = await adminDb.doc(`users/${uid}/emailPreferences/preferences`).get()
+  const snap = await adminDb.doc(`emailPreferences/${uid}`).get()
   if (!snap.exists) {
     return NextResponse.json(null)
   }
@@ -65,6 +65,6 @@ export async function POST(req: NextRequest) {
     updatedAt: Timestamp.now(),
   }
 
-  await adminDb.doc(`users/${uid}/emailPreferences/preferences`).set(preferences, { merge: true })
+  await adminDb.doc(`emailPreferences/${uid}`).set(preferences, { merge: true })
   return NextResponse.json({ ok: true })
 }

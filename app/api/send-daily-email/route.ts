@@ -66,15 +66,15 @@ export async function POST(req: NextRequest) {
 
   // Query all users with email digests enabled
   const prefsSnap = await adminDb
-    .collectionGroup('emailPreferences')
+    .collection('emailPreferences')
     .where('enabled', '==', true)
     .get()
 
   const results: { uid: string; status: string }[] = []
 
   for (const prefDoc of prefsSnap.docs) {
-    // Extract uid from path: users/{uid}/emailPreferences/preferences
-    const uid = prefDoc.ref.path.split('/')[1]
+    // Document ID is the uid: emailPreferences/{uid}
+    const uid = prefDoc.id
     const prefs = prefDoc.data()
 
     try {
