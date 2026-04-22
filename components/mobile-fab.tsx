@@ -80,8 +80,7 @@ export function MobileFAB() {
     }
 
     const fetchPersons = async () => {
-      const personsRef = collection(db, "persons")
-      const q = query(personsRef, where("createdBy", "==", user.uid))
+      const q = query(collection(db, "users", user.uid, "persons"))
       try {
         const querySnapshot = await getDocs(q)
         const personsList = querySnapshot.docs.map(doc => ({
@@ -361,8 +360,7 @@ export function MobileFAB() {
 
     // Check for existing persons in Firestore BEFORE batching
     const personNameChecks = parsedData.map(async (personData) => {
-      const personsRef = collection(db, "persons")
-      const q = query(personsRef, where("name", "==", personData.name), where("createdBy", "==", user.uid))
+      const q = query(collection(db, "users", user.uid, "persons"), where("name", "==", personData.name))
       const querySnapshot = await getDocs(q)
       if (!querySnapshot.empty) {
         const existingDoc = querySnapshot.docs[0]
@@ -382,33 +380,31 @@ export function MobileFAB() {
         let personRef
 
         if (personData.isExisting) {
-          personRef = doc(db, "persons", personId)
+          personRef = doc(db, "users", user.uid, "persons", personId)
         } else {
-          personRef = doc(collection(db, "persons"))
+          personRef = doc(collection(db, "users", user.uid, "persons"))
           personId = personRef.id
           batch.set(personRef, {
             name: personData.name,
-            createdBy: user.uid,
             createdAt: serverTimestamp(),
           })
         }
 
         // Add Prayer Requests
         personData.prayerRequests.forEach((request: PrayerRequest) => {
-          const requestRef = doc(collection(db, "persons", personId, "prayerRequests"))
+          const requestRef = doc(collection(db, "users", user.uid, "persons", personId, "prayerRequests"))
           batch.set(requestRef, {
             personId: personId,
             personName: personData.name,
             content: request.content,
             createdAt: serverTimestamp(),
-            createdBy: user.uid,
             isCompleted: false
           })
         })
 
         // Add Follow-Ups
         personData.followUps.forEach((followUp: FollowUp) => {
-          const followUpRef = doc(collection(db, "persons", personId, "followUps"))
+          const followUpRef = doc(collection(db, "users", user.uid, "persons", personId, "followUps"))
           batch.set(followUpRef, {
             personId: personId,
             personName: personData.name,
@@ -416,7 +412,6 @@ export function MobileFAB() {
             dueDate: Timestamp.fromDate(followUp.dueDate),
             completed: followUp.completed,
             createdAt: serverTimestamp(),
-            createdBy: user.uid,
           })
         })
 

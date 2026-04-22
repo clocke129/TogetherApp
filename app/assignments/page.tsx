@@ -165,18 +165,17 @@ export default function AssignmentsPage() {
         try {
           const userId = user.uid
 
-          // Fetch People created by the user
-          const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId))
+          // Fetch People for this user
+          const peopleQuery = query(collection(db, "users", userId, "persons"))
           const peopleSnapshot = await getDocs(peopleQuery)
           const peopleData = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person))
           setPeople(peopleData)
           console.log("Fetched People:", peopleData)
 
-          // Fetch Groups created by the user, ordered by the 'order' field
+          // Fetch Groups for this user, ordered by the 'order' field
           const groupsQuery = query(
-            collection(db, "groups"), 
-            where("createdBy", "==", userId),
-            orderBy("order", "asc") // Add ordering by the 'order' field
+            collection(db, "users", userId, "groups"),
+            orderBy("order", "asc")
           );
           const groupsSnapshot = await getDocs(groupsQuery)
           // Ensure fetched data includes the 'order' field, provide default if missing for robustness
@@ -254,7 +253,7 @@ export default function AssignmentsPage() {
     }
 
     try {
-      const groupRef = doc(db, "groups", groupId);
+      const groupRef = doc(db, "users", user!.uid, "groups", groupId);
       await updateDoc(groupRef, {
         prayerDays: newPrayerDays
       });
@@ -284,21 +283,20 @@ export default function AssignmentsPage() {
     try {
       // Explicitly define the type for newPersonData
       // Corrected 'any' type to use serverTimestamp() which returns a specific type
-      const newPersonData: { name: string; createdBy: string; createdAt: Timestamp; groupId?: string } = {
+      const newPersonData: { name: string; createdAt: Timestamp; groupId?: string } = {
         name: newPersonName.trim(),
-        createdBy: user.uid,
-        createdAt: serverTimestamp() as Timestamp, // Cast to Timestamp for type safety
+        createdAt: serverTimestamp() as Timestamp,
       };
 
       if (groupIdToAssign) {
         newPersonData.groupId = groupIdToAssign;
       }
 
-      const docRef = await addDoc(collection(db, "persons"), newPersonData);
+      const docRef = await addDoc(collection(db, "users", user.uid, "persons"), newPersonData);
 
       // If assigned to group, update group's personIds array
       if (groupIdToAssign) {
-        const groupRef = doc(db, "groups", groupIdToAssign);
+        const groupRef = doc(db, "users", user.uid, "groups", groupIdToAssign);
         await updateDoc(groupRef, {
           personIds: arrayUnion(docRef.id)
         });
@@ -332,25 +330,22 @@ export default function AssignmentsPage() {
     try {
       const newGroupData = {
         name: newGroupName.trim(),
-        createdBy: user.uid,
         personIds: [], // Start with no people
         prayerDays: [], // Start with no days assigned
-        // Use the updated prayerSettings structure with defaults
         prayerSettings: {
-          strategy: "sequential" as const, // Add 'as const' for stricter typing
-          numPerDay: null, // Default to null (All)
+          strategy: "sequential" as const,
+          numPerDay: null,
           nextIndex: 0
         },
         createdAt: serverTimestamp(),
-        order: groups.length // Set order to current length
+        order: groups.length
       };
-      const docRef = await addDoc(collection(db, "groups"), newGroupData);
+      const docRef = await addDoc(collection(db, "users", user.uid, "groups"), newGroupData);
       
       // Add the new group to local state, ensuring all fields match the Group type
       const groupForState: Group = {
         id: docRef.id,
         name: newGroupData.name,
-        createdBy: newGroupData.createdBy,
         personIds: newGroupData.personIds,
         prayerDays: newGroupData.prayerDays,
         prayerSettings: { // Ensure prayerSettings is defined
@@ -390,8 +385,8 @@ export default function AssignmentsPage() {
      const oldGroupId = person?.groupId;
 
      // Create refs for the documents
-     const personRef = doc(db, "persons", personId);
-     const groupRef = doc(db, "groups", groupId);
+     const personRef = doc(db, "users", user.uid, "persons", personId);
+     const groupRef = doc(db, "users", user.uid, "groups", groupId);
      // Create a batch
      const batch = writeBatch(db);
 
@@ -404,7 +399,7 @@ export default function AssignmentsPage() {
 
        // 3. Update Old Group (if exists): Remove personId from personIds array
        if (oldGroupId && oldGroupId !== groupId) {
-         const oldGroupRef = doc(db, "groups", oldGroupId);
+         const oldGroupRef = doc(db, "users", user.uid, "groups", oldGroupId);
          batch.update(oldGroupRef, { personIds: arrayRemove(personId) });
          console.log(`Also removing person ${personId} from old group ${oldGroupId}`);
        }
@@ -455,8 +450,8 @@ export default function AssignmentsPage() {
      console.log(`Removing person ${personId} from group ${groupId}`);
      setIsRemovingPersonId(personId); // Set loading state for this person
 
-     const personRef = doc(db, "persons", personId);
-     const groupRef = doc(db, "groups", groupId);
+     const personRef = doc(db, "users", user.uid, "persons", personId);
+     const groupRef = doc(db, "users", user.uid, "groups", groupId);
      const batch = writeBatch(db);
 
      try {
@@ -520,7 +515,7 @@ export default function AssignmentsPage() {
     setIsSavingNumPerDay(groupId);
 
     try {
-      const groupRef = doc(db, "groups", groupId);
+      const groupRef = doc(db, "users", user!.uid, "groups", groupId);
 
       // Explicitly construct the prayerSettings object for the update
       const newPrayerSettings = {
@@ -595,7 +590,7 @@ export default function AssignmentsPage() {
       // --- No Conflict Found: Proceed with standard name update --- 
 
       // 2. Update Firestore document
-      const personRef = doc(db, "persons", personId);
+      const personRef = doc(db, "users", user!.uid, "persons", personId);
       await updateDoc(personRef, {
         name: newName
       });
@@ -636,14 +631,14 @@ export default function AssignmentsPage() {
       const batch = writeBatch(db);
 
       // 1. Get Ref for the source person (to be deleted)
-      const sourcePersonRef = doc(db, "persons", sourcePerson.id);
+      const sourcePersonRef = doc(db, "users", user!.uid, "persons", sourcePerson.id);
 
       // 2. Delete the source person document
       batch.delete(sourcePersonRef);
 
       // 3. If the source person was in a group, remove them from that group's personIds
       if (sourcePerson.groupId) {
-        const sourceGroupRef = doc(db, "groups", sourcePerson.groupId);
+        const sourceGroupRef = doc(db, "users", user!.uid, "groups", sourcePerson.groupId);
         batch.update(sourceGroupRef, {
           personIds: arrayRemove(sourcePerson.id)
         });
@@ -710,12 +705,12 @@ export default function AssignmentsPage() {
       const batch = writeBatch(db);
 
       // 1. Delete the person document
-      const personRef = doc(db, "persons", personId);
+      const personRef = doc(db, "users", user!.uid, "persons", personId);
       batch.delete(personRef);
 
       // 2. If in a group, remove from group's personIds array
       if (groupId) {
-        const groupRef = doc(db, "groups", groupId);
+        const groupRef = doc(db, "users", user!.uid, "groups", groupId);
         batch.update(groupRef, {
           personIds: arrayRemove(personId)
         });
@@ -769,7 +764,7 @@ export default function AssignmentsPage() {
       // TODO: Add group name conflict check if necessary
 
       // Update Firestore
-      const groupRef = doc(db, "groups", groupId);
+      const groupRef = doc(db, "users", user!.uid, "groups", groupId);
       await updateDoc(groupRef, {
         name: newName
       });
@@ -816,20 +811,20 @@ export default function AssignmentsPage() {
       const batch = writeBatch(db);
 
       // 1. Delete the group document
-      const groupRef = doc(db, "groups", groupId);
+      const groupRef = doc(db, "users", user!.uid, "groups", groupId);
       batch.delete(groupRef);
 
       // 2. Handle members based on the selected option
       if (deleteGroupMembersOption === "unassign" && memberIds.length > 0) {
         // Move members to uncategorized by removing groupId
         memberIds.forEach(personId => {
-          const personRef = doc(db, "persons", personId);
-          batch.update(personRef, { groupId: deleteField() }); // Remove the groupId field
+          const personRef = doc(db, "users", user!.uid, "persons", personId);
+          batch.update(personRef, { groupId: deleteField() });
         });
       } else if (deleteGroupMembersOption === "delete" && memberIds.length > 0) {
         // Delete member documents
         memberIds.forEach(personId => {
-          const personRef = doc(db, "persons", personId);
+          const personRef = doc(db, "users", user!.uid, "persons", personId);
           batch.delete(personRef);
         });
       }
@@ -935,9 +930,7 @@ export default function AssignmentsPage() {
     try {
       // Fetch Prayer Requests from the subcollection
       const requestsQuery = query(
-        collection(db, "persons", personId, "prayerRequests"), // Corrected path
-        // where("personId", "==", personId), // No longer needed when querying subcollection
-        where("createdBy", "==", user.uid),
+        collection(db, "users", user.uid, "persons", personId, "prayerRequests"),
         orderBy("createdAt", "desc")
       );
       const requestsSnapshot = await getDocs(requestsQuery);
@@ -947,10 +940,8 @@ export default function AssignmentsPage() {
 
       // Fetch Follow Ups from the subcollection
       const followUpsQuery = query(
-        collection(db, "persons", personId, "followUps"), // Corrected path
-        // where("personId", "==", personId), // No longer needed when querying subcollection
-        where("createdBy", "==", user.uid),
-        orderBy("dueDate", "desc") // Show newest follow-ups first
+        collection(db, "users", user.uid, "persons", personId, "followUps"),
+        orderBy("dueDate", "desc")
       );
       const followUpsSnapshot = await getDocs(followUpsQuery);
       const followUpsData = followUpsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FollowUp));
@@ -991,7 +982,7 @@ export default function AssignmentsPage() {
     if (!requestToEdit || !editingRequestContent.trim() || !user || !selectedPersonForDetails) return;
 
     setIsSavingRequestEdit(true);
-    const docRef = doc(db, "persons", selectedPersonForDetails.id, "prayerRequests", requestToEdit.id);
+    const docRef = doc(db, "users", user!.uid, "persons", selectedPersonForDetails.id, "prayerRequests", requestToEdit.id);
 
     try {
       await updateDoc(docRef, {
@@ -1020,7 +1011,7 @@ export default function AssignmentsPage() {
     if (!requestToDelete || !user || !selectedPersonForDetails) return;
 
     setIsDeletingRequest(true);
-    const docRef = doc(db, "persons", selectedPersonForDetails.id, "prayerRequests", requestToDelete.id);
+    const docRef = doc(db, "users", user!.uid, "persons", selectedPersonForDetails.id, "prayerRequests", requestToDelete.id);
 
     try {
       await deleteDoc(docRef);
@@ -1071,13 +1062,12 @@ export default function AssignmentsPage() {
     const personName = selectedPersonForDetails.name;
 
     try {
-      const requestsRef = collection(db, "persons", personId, "prayerRequests");
+      const requestsRef = collection(db, "users", user.uid, "persons", personId, "prayerRequests");
       const newRequestData = {
         personId: personId,
-        personName: personName, // Denormalize name
+        personName: personName,
         content: newRequestContent.trim(),
         createdAt: serverTimestamp(),
-        createdBy: user.uid,
         isCompleted: false
       };
       const docRef = await addDoc(requestsRef, newRequestData);
@@ -1119,7 +1109,7 @@ export default function AssignmentsPage() {
     const personName = selectedPersonForDetails.name;
 
     try {
-      const followUpsRef = collection(db, "persons", personId, "followUps");
+      const followUpsRef = collection(db, "users", user.uid, "persons", personId, "followUps");
       const newFollowUpData = {
         personId: personId,
         personName: personName,
@@ -1127,7 +1117,6 @@ export default function AssignmentsPage() {
         dueDate: Timestamp.fromDate(newFollowUpDueDate),
         completed: false,
         createdAt: serverTimestamp(),
-        createdBy: user.uid,
         ...(newFollowUpRecurring && { recurring: true, recurrenceType: "annual" }),
       };
       const docRef = await addDoc(followUpsRef, newFollowUpData);
@@ -1175,7 +1164,7 @@ export default function AssignmentsPage() {
     }
 
     setIsSavingFollowUpEdit(true);
-    const docRef = doc(db, "persons", selectedPersonForDetails.id, "followUps", followUpToEdit.id);
+    const docRef = doc(db, "users", user!.uid, "persons", selectedPersonForDetails.id, "followUps", followUpToEdit.id);
 
     try {
       await updateDoc(docRef, {
@@ -1216,7 +1205,7 @@ export default function AssignmentsPage() {
     }
 
     setIsDeletingFollowUp(true);
-    const docRef = doc(db, "persons", selectedPersonForDetails.id, "followUps", followUpToDelete.id);
+    const docRef = doc(db, "users", user!.uid, "persons", selectedPersonForDetails.id, "followUps", followUpToDelete.id);
 
     try {
       await deleteDoc(docRef);

@@ -75,7 +75,7 @@ export async function calculateAndSaveDailyPrayerList(
             const storedSettingsSnapshot = existingData.settingsSnapshot || {};
 
             // Fetch current groups to validate settings
-            const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", userId));
+            const groupsQuery = query(collection(db, "users", userId, "groups"));
             const groupsSnapshot = await getDocs(groupsQuery);
             const fetchedGroups = groupsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Group));
 
@@ -84,7 +84,7 @@ export async function calculateAndSaveDailyPrayerList(
             const activeGroups = fetchedGroups.filter(group => group.prayerDays?.includes(currentDayIndex));
 
             // Fetch all people to handle Everyone group correctly
-            const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId));
+            const peopleQuery = query(collection(db, "users", userId, "persons"));
             const peopleSnapshot = await getDocs(peopleQuery);
             const allPeople = peopleSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Person));
 
@@ -125,14 +125,14 @@ export async function calculateAndSaveDailyPrayerList(
 
         // If we reach here, we need to calculate (either no list exists or settings changed)
         console.log(`[Calculation Function] Fetching groups for calculation...`);
-        const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", userId));
+        const groupsQuery = query(collection(db, "users", userId, "groups"));
         const groupsSnapshot = await getDocs(groupsQuery);
         const fetchedGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
         console.log(`[Calculation Function] Fetched ${fetchedGroups.length} groups.`);
 
         // Fetch all people for this user (needed for lastPrayedFor sorting)
         console.log(`[Calculation Function] Fetching people for calculation...`);
-        const peopleQuery = query(collection(db, "persons"), where("createdBy", "==", userId));
+        const peopleQuery = query(collection(db, "users", userId, "persons"));
         const peopleSnapshot = await getDocs(peopleQuery);
         const allPeople = peopleSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Person));
         console.log(`[Calculation Function] Fetched ${allPeople.length} people.`);
@@ -199,7 +199,7 @@ export async function calculateAndSaveDailyPrayerList(
 
         const prayedAt = Timestamp.fromDate(targetDate);
         personIdsToPrayFor.forEach(personId => {
-            batch.update(doc(db, "persons", personId), { lastPrayedFor: prayedAt });
+            batch.update(doc(db, "users", userId, "persons", personId), { lastPrayedFor: prayedAt });
         });
 
         await batch.commit();
@@ -228,8 +228,7 @@ export async function ensureEveryoneGroup(
 
         // Query for existing Everyone group for this user (check by name to be specific)
         const groupsQuery = query(
-            collection(db, "groups"),
-            where("createdBy", "==", userId),
+            collection(db, "users", userId, "groups"),
             where("name", "==", "Everyone")
         );
         const groupsSnapshot = await getDocs(groupsQuery);
@@ -246,9 +245,8 @@ export async function ensureEveryoneGroup(
         console.log(`[ensureEveryoneGroup] Creating Everyone group for user ${userId}...`);
 
         // Create with auto-generated ID
-        await addDoc(collection(db, "groups"), {
+        await addDoc(collection(db, "users", userId, "groups"), {
             name: "Everyone",
-            createdBy: userId,
             personIds: [], // Always empty - computed dynamically from people with no groupId
             prayerDays: [0, 1, 2, 3, 4, 5, 6], // All days (editable by user)
             prayerSettings: {

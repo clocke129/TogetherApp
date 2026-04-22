@@ -82,8 +82,7 @@ export default function NotesPage() {
     }
     const fetchPersons = async () => {
       console.log("Fetching persons for user:", user.uid)
-      const personsRef = collection(db, "persons")
-      const q = query(personsRef, where("createdBy", "==", user.uid))
+      const q = query(collection(db, "users", user.uid, "persons"))
       try {
         const querySnapshot = await getDocs(q)
         const personsList = querySnapshot.docs.map(doc => ({
@@ -309,16 +308,13 @@ export default function NotesPage() {
 
     // Check for existing persons in Firestore BEFORE batching
     const personNameChecks = parsedData.map(async (personData) => {
-      const personsRef = collection(db, "persons");
-      const q = query(personsRef, where("name", "==", personData.name), where("createdBy", "==", user.uid));
+      const q = query(collection(db, "users", user.uid, "persons"), where("name", "==", personData.name));
       const querySnapshot = await getDocs(q);
       if (!querySnapshot.empty) {
-        // Person exists, use existing ID
         const existingDoc = querySnapshot.docs[0];
         console.log(`Person '${personData.name}' already exists with ID: ${existingDoc.id}`);
         return { ...personData, id: existingDoc.id, isExisting: true };
       } else {
-        // Person is new
         console.log(`Person '${personData.name}' is new.`);
         return { ...personData, isExisting: false };
       }
@@ -329,24 +325,20 @@ export default function NotesPage() {
       console.log("Resolved people data (with existing check):", resolvedPeopleData);
 
       const batch = writeBatch(db);
-      const successfullySavedNames: string[] = []; // Track names for toast
+      const successfullySavedNames: string[] = [];
 
       for (const personData of resolvedPeopleData) {
-        let personId = personData.id; // Use existing ID if found
+        let personId = personData.id;
 
-        // 1. Create or Get Person document reference
         let personRef;
         if (personData.isExisting) {
-          personRef = doc(db, "persons", personId);
-          // No need to create/set person data if they already exist
+          personRef = doc(db, "users", user.uid, "persons", personId);
           console.log(`Using existing person ref for '${personData.name}' (ID: ${personId})`);
         } else {
-          // Create a new person document ONLY IF they don\'t exist
-          personRef = doc(collection(db, "persons")); // Generate new ID client-side
-          personId = personRef.id; // Update personId with the new ID
+          personRef = doc(collection(db, "users", user.uid, "persons"));
+          personId = personRef.id;
           batch.set(personRef, {
             name: personData.name,
-            createdBy: user.uid,
             createdAt: serverTimestamp(),
           });
           console.log(`Creating new person '${personData.name}' with ID: ${personId}`);
@@ -354,29 +346,27 @@ export default function NotesPage() {
 
         // 2. Add Prayer Requests for this person
         personData.prayerRequests.forEach((request: PrayerRequest) => {
-          const requestRef = doc(collection(db, "persons", personId, "prayerRequests"));
+          const requestRef = doc(collection(db, "users", user.uid, "persons", personId, "prayerRequests"));
           batch.set(requestRef, {
-            personId: personId, // Link back to the person
-            personName: personData.name, // Denormalize name for easier querying later?
+            personId: personId,
+            personName: personData.name,
             content: request.content,
-            createdAt: serverTimestamp(), // Use server timestamp
-            createdBy: user.uid, // Track who created it
-            isCompleted: false // Default completion status
+            createdAt: serverTimestamp(),
+            isCompleted: false
           });
           console.log(`Batching prayer request for ${personData.name}: "${request.content.substring(0, 20)}..."`);
         });
 
         // 3. Add Follow-Ups for this person
         personData.followUps.forEach((followUp: FollowUp) => {
-          const followUpRef = doc(collection(db, "persons", personId, "followUps"));
+          const followUpRef = doc(collection(db, "users", user.uid, "persons", personId, "followUps"));
           batch.set(followUpRef, {
-            personId: personId, // Link back to the person
-            personName: personData.name, // Denormalize name
+            personId: personId,
+            personName: personData.name,
             content: followUp.content,
-            dueDate: Timestamp.fromDate(followUp.dueDate), // Convert JS Date to Firestore Timestamp
+            dueDate: Timestamp.fromDate(followUp.dueDate),
             completed: followUp.completed,
-            createdAt: serverTimestamp(), // Track creation time
-            createdBy: user.uid, // Track who created it
+            createdAt: serverTimestamp(),
           });
            console.log(`Batching follow-up for ${personData.name} due ${followUp.dueDate.toISOString().split('T')[0]}: "${followUp.content.substring(0, 20)}..."`);
         });

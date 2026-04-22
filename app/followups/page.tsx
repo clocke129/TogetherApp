@@ -34,7 +34,6 @@ import { db } from "@/lib/firebaseConfig"
 import {
   collection,
   query,
-  where,
   getDocs,
   doc,
   updateDoc,
@@ -140,35 +139,29 @@ export default function FollowupsPage() {
       console.log("Fetching data for user:", user.uid)
       setIsLoading(true)
       try {
-        // 1. Fetch People created by this user
-        const peopleQuery = query(
-          collection(db, "persons"),
-          where("createdBy", "==", user.uid)
-        )
+        // 1. Fetch People for this user
+        const peopleQuery = query(collection(db, "users", user.uid, "persons"))
         const peopleSnapshot = await getDocs(peopleQuery)
-        // Store full person data
         const fetchedPeople: Person[] = peopleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
         setAllUserPeople(fetchedPeople);
         console.log("Fetched people:", fetchedPeople);
 
-        // 2. Fetch Groups created by this user
-        const groupsQuery = query(collection(db, "groups"), where("createdBy", "==", user.uid));
+        // 2. Fetch Groups for this user
+        const groupsQuery = query(collection(db, "users", user.uid, "groups"));
         const groupsSnapshot = await getDocs(groupsQuery);
         const fetchedGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
         setAllUserGroups(fetchedGroups);
         console.log("Fetched groups:", fetchedGroups);
 
-        // 3. Fetch FollowUps for each person
-        let allFollowUps: FollowUp[] = []
-        for (const person of fetchedPeople) {
-          // Consider adding orderBy('dueDate') or similar if needed
-          const followUpsQuery = query(collection(db, "persons", person.id, "followUps"))
-          const followUpsSnapshot = await getDocs(followUpsQuery)
-          followUpsSnapshot.forEach((doc) => {
-            // Type assertion, assuming data matches FollowUp structure
-            allFollowUps.push({ id: doc.id, ...(doc.data() as Omit<FollowUp, "id">) })
-          })
-        }
+        // 3. Fetch FollowUps for each person (parallel for speed)
+        const followUpSnapshots = await Promise.all(
+          fetchedPeople.map(person =>
+            getDocs(collection(db, "users", user.uid, "persons", person.id, "followUps"))
+          )
+        )
+        const allFollowUps: FollowUp[] = followUpSnapshots.flatMap(snap =>
+          snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<FollowUp, "id">) }))
+        )
         setFollowUps(allFollowUps)
         console.log("Fetched follow-ups count:", allFollowUps.length)
 
@@ -213,7 +206,7 @@ export default function FollowupsPage() {
       return;
     }
 
-    const docRef = doc(db, "persons", followUpToUpdate.personId, "followUps", followUpId);
+    const docRef = doc(db, "users", user!.uid, "persons", followUpToUpdate.personId, "followUps", followUpId);
 
     try {
       // Recurring follow-ups advance by 1 year instead of completing
@@ -361,7 +354,7 @@ export default function FollowupsPage() {
     };
 
     try {
-      const followUpRef = collection(db, "persons", newFollowUp.personId, "followUps"); // Use correct personId
+      const followUpRef = collection(db, "users", user!.uid, "persons", newFollowUp.personId, "followUps");
       const docRef = await addDoc(followUpRef, docToAdd);
 
       // Optimistic Add (use Timestamp.now() for createdAt locally)
@@ -400,7 +393,7 @@ export default function FollowupsPage() {
     }
 
     console.log("Saving edits for follow-up:", editingFollowUp);
-    const docRef = doc(db, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id);
+    const docRef = doc(db, "users", user!.uid, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id);
 
     try {
       const dataToUpdate = {
@@ -449,7 +442,7 @@ export default function FollowupsPage() {
     if (!followUpToDelete) return
     setIsDeletingFollowUp(true)
     try {
-      await deleteDoc(doc(db, "persons", followUpToDelete.personId, "followUps", followUpToDelete.id))
+      await deleteDoc(doc(db, "users", user!.uid, "persons", followUpToDelete.personId, "followUps", followUpToDelete.id))
       setFollowUps(prev => prev.filter(fu => fu.id !== followUpToDelete.id))
       setIsDeleteConfirmOpen(false)
       setFollowUpToDelete(null)
@@ -499,7 +492,7 @@ export default function FollowupsPage() {
 
       itemsToArchive.forEach(followUp => {
           // Get the full path to the follow-up doc
-          const followUpRef = doc(db, "persons", followUp.personId, "followUps", followUp.id);
+          const followUpRef = doc(db, "users", user!.uid, "persons", followUp.personId, "followUps", followUp.id);
           console.log(`Staging archive for follow-up ${followUp.id} (parent: ${followUp.personId})`);
           batch.update(followUpRef, { archived: true });
           itemsToArchiveCount++;

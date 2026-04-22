@@ -46,14 +46,12 @@ export async function buildDailyDigestData(userId: string, targetDate: Date): Pr
   } else {
     // Calculate the list (mirrors client-side logic)
     const groupsSnap = await adminDb
-      .collection('groups')
-      .where('createdBy', '==', userId)
+      .collection('users').doc(userId).collection('groups')
       .get()
     const groups = groupsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as any)
 
     const peopleSnap = await adminDb
-      .collection('persons')
-      .where('createdBy', '==', userId)
+      .collection('users').doc(userId).collection('persons')
       .get()
     const allPeople = peopleSnap.docs.map(d => ({ id: d.id, ...d.data() }) as any)
 
@@ -98,7 +96,7 @@ export async function buildDailyDigestData(userId: string, targetDate: Date): Pr
   }
 
   // 2. Fetch person names in batches (Firestore getAll supports up to 500)
-  const personRefs = personIds.map(id => adminDb.doc(`persons/${id}`))
+  const personRefs = personIds.map(id => adminDb.doc(`users/${userId}/persons/${id}`))
   const personSnaps = await adminDb.getAll(...personRefs)
   const personMap = new Map(personSnaps.map(s => [s.id, s.data()]))
 
@@ -111,7 +109,7 @@ export async function buildDailyDigestData(userId: string, targetDate: Date): Pr
       let prayerRequest: string | undefined
       try {
         const requestsSnap = await adminDb
-          .collection(`persons/${personId}/prayerRequests`)
+          .collection(`users/${userId}/persons/${personId}/prayerRequests`)
           .orderBy('createdAt', 'desc')
           .limit(1)
           .get()

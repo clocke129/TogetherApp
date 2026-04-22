@@ -142,8 +142,8 @@ export default function PrayerPage() {
     setExpandedData({ requests: [], followUps: [], loading: true, error: null })
     try {
       const [requestsSnap, followUpsSnap] = await Promise.all([
-        getDocs(query(collection(db, "persons", personId, "prayerRequests"), orderBy("createdAt", "desc"))),
-        getDocs(query(collection(db, "persons", personId, "followUps")))
+        getDocs(query(collection(db, "users", user!.uid, "persons", personId, "prayerRequests"), orderBy("createdAt", "desc"))),
+        getDocs(query(collection(db, "users", user!.uid, "persons", personId, "followUps")))
       ])
       setExpandedData({
         requests: requestsSnap.docs.map(d => ({ id: d.id, ...d.data() } as PrayerRequest)),
@@ -165,7 +165,7 @@ export default function PrayerPage() {
       const results = await Promise.all(
         people.map(async (person) => {
           const snap = await getDocs(
-            query(collection(db, "persons", person.id, "followUps"), where("completed", "==", false))
+            query(collection(db, "users", userId, "persons", person.id, "followUps"), where("completed", "==", false))
           )
           return snap.docs.map(d => ({ id: d.id, ...d.data(), personId: person.id } as FollowUp))
             .filter(fu => !fu.archived)
@@ -228,8 +228,8 @@ export default function PrayerPage() {
     try {
       // Fetch people and groups in parallel
       const [peopleSnap, groupsSnap] = await Promise.all([
-        getDocs(query(collection(db, "persons"), where("createdBy", "==", userId))),
-        getDocs(query(collection(db, "groups"), where("createdBy", "==", userId)))
+        getDocs(collection(db, "users", userId, "persons")),
+        getDocs(collection(db, "users", userId, "groups"))
       ])
 
       const fetchedGroups = groupsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Group))
@@ -241,7 +241,7 @@ export default function PrayerPage() {
       const peopleWithRequests = await Promise.all(
         fetchedPeople.map(async (person) => {
           const reqSnap = await getDocs(
-            query(collection(db, "persons", person.id, "prayerRequests"), orderBy("createdAt", "desc"), limit(1))
+            query(collection(db, "users", userId, "persons", person.id, "prayerRequests"), orderBy("createdAt", "desc"), limit(1))
           )
           const mostRecentRequest = reqSnap.empty ? undefined : { id: reqSnap.docs[0].id, ...reqSnap.docs[0].data() } as PrayerRequest
           return { ...person, mostRecentRequest }
@@ -342,7 +342,7 @@ export default function PrayerPage() {
     if (isCompletingFollowUpId) return
     setIsCompletingFollowUpId(followUpId)
     try {
-      await updateDoc(doc(db, "persons", personId, "followUps", followUpId), {
+      await updateDoc(doc(db, "users", userId, "persons", personId, "followUps", followUpId), {
         completed: true,
         completedAt: serverTimestamp()
       })
@@ -365,7 +365,7 @@ export default function PrayerPage() {
     if (!editingFollowUp || !editFollowUpContent.trim()) return
     setIsEditingFollowUp(true)
     try {
-      await updateDoc(doc(db, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id), {
+      await updateDoc(doc(db, "users", userId, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id), {
         content: editFollowUpContent.trim(),
         dueDate: editFollowUpDueDate ? Timestamp.fromDate(editFollowUpDueDate) : null,
       })
@@ -388,12 +388,11 @@ export default function PrayerPage() {
   const handleAddPrayerRequestFromCard = async (personId: string, content: string) => {
     if (!user || !content) return
     const person = allUserPeople.find(p => p.id === personId)
-    await addDoc(collection(db, "persons", personId, "prayerRequests"), {
+    await addDoc(collection(db, "users", user.uid, "persons", personId, "prayerRequests"), {
       personId,
       personName: person?.name || "Unknown",
       content,
       createdAt: serverTimestamp(),
-      createdBy: user.uid,
       isCompleted: false
     })
     if (expandedPersonId === personId) fetchExpandedDetails(personId)
@@ -412,7 +411,7 @@ export default function PrayerPage() {
       archived: false
     }
     if (dueDate) followUpData.dueDate = Timestamp.fromDate(dueDate)
-    await addDoc(collection(db, "persons", personId, "followUps"), followUpData)
+    await addDoc(collection(db, "users", user.uid, "persons", personId, "followUps"), followUpData)
     if (expandedPersonId === personId) fetchExpandedDetails(personId)
   }
 
@@ -432,12 +431,11 @@ export default function PrayerPage() {
     setIsAddingHeaderPrayer(true)
     try {
       const person = allUserPeople.find(p => p.id === headerPrayerPersonId)
-      await addDoc(collection(db, "persons", headerPrayerPersonId, "prayerRequests"), {
+      await addDoc(collection(db, "users", user.uid, "persons", headerPrayerPersonId, "prayerRequests"), {
         personId: headerPrayerPersonId,
         personName: person?.name || "Unknown",
         content: headerPrayerContent,
         createdAt: serverTimestamp(),
-        createdBy: user.uid,
         isCompleted: false
       })
       if (expandedPersonId === headerPrayerPersonId) fetchExpandedDetails(headerPrayerPersonId)
