@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, Clock, User, Check, Plus, CalendarPlus, Loader2 } from "lucide-react"
+import { Calendar, Clock, User, Check, Plus, CalendarPlus, Loader2, ChevronDown, ChevronRight, RefreshCw, Trash2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,16 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select"
@@ -29,6 +39,7 @@ import {
   doc,
   updateDoc,
   addDoc,
+  deleteDoc,
   Timestamp,
   orderBy,
   serverTimestamp,
@@ -38,6 +49,39 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import type { Person, Group, FollowUp } from "@/lib/types"
+
+function FollowUpRow({ followUp, getPersonNameById, formatDate, toggleFollowUpCompletion, openEditDialog }: {
+  followUp: FollowUp
+  getPersonNameById: (id: string) => string
+  formatDate: (date: import("firebase/firestore").Timestamp | Date) => string
+  toggleFollowUpCompletion: (id: string) => void
+  openEditDialog: (fu: FollowUp) => void
+}) {
+  return (
+    <div className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
+      <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
+      <div className="flex-1 min-w-0">
+        <label htmlFor={followUp.id} className="font-medium cursor-pointer text-base leading-snug">{followUp.content}</label>
+        <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
+          <User className="h-3 w-3 shrink-0" />
+          <span>{getPersonNameById(followUp.personId)}</span>
+          {followUp.recurring && <RefreshCw className="h-3 w-3 shrink-0 ml-0.5" aria-label="Repeats annually" />}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0 mt-0.5">
+        {followUp.dueDate && (
+          <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground text-xs gap-1">
+            <Calendar className="h-3 w-3" />
+            {formatDate(followUp.dueDate.toDate())}
+          </Badge>
+        )}
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(followUp)}>
+          <CalendarPlus className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 export default function FollowupsPage() {
   // State for data
@@ -58,8 +102,14 @@ export default function FollowupsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedGroupIdForFilter, setSelectedGroupIdForFilter] = useState<string | "all">("all")
+  const [scheduledExpanded, setScheduledExpanded] = useState(false)
+  const [milestonesExpanded, setMilestonesExpanded] = useState(false)
+  const [newFollowUpRecurring, setNewFollowUpRecurring] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [followUpToDelete, setFollowUpToDelete] = useState<FollowUp | null>(null)
+  const [isDeletingFollowUp, setIsDeletingFollowUp] = useState(false)
 
   // State for formatted date string
   const [currentDateString, setCurrentDateString] = useState(() => {
@@ -158,23 +208,29 @@ export default function FollowupsPage() {
   // Toggle follow-up completion
   const toggleFollowUpCompletion = async (followUpId: string) => {
     const followUpToUpdate = followUps.find(fu => fu.id === followUpId);
-    if (!followUpToUpdate || !followUpToUpdate.personId) { // Check both exist
+    if (!followUpToUpdate || !followUpToUpdate.personId) {
       console.error("Could not find follow-up or its personId to toggle.");
       return;
     }
 
     const docRef = doc(db, "persons", followUpToUpdate.personId, "followUps", followUpId);
+
     try {
-      await updateDoc(docRef, {
-        completed: !followUpToUpdate.completed,
-        // Optionally add completedAt timestamp
-        // completedAt: !followUpToUpdate.completed ? serverTimestamp() : null 
-      });
-      console.log("Toggle successful.");
-      // Update local state immediately for responsiveness
-      setFollowUps(prev => prev.map(fu => 
-        fu.id === followUpId ? { ...fu, completed: !fu.completed } : fu
-      ));
+      // Recurring follow-ups advance by 1 year instead of completing
+      if (followUpToUpdate.recurring && followUpToUpdate.recurrenceType === "annual" && followUpToUpdate.dueDate) {
+        const nextDate = followUpToUpdate.dueDate.toDate();
+        nextDate.setFullYear(nextDate.getFullYear() + 1);
+        const nextTimestamp = Timestamp.fromDate(nextDate);
+        await updateDoc(docRef, { dueDate: nextTimestamp, completed: false });
+        setFollowUps(prev => prev.map(fu =>
+          fu.id === followUpId ? { ...fu, dueDate: nextTimestamp, completed: false } : fu
+        ));
+      } else {
+        await updateDoc(docRef, { completed: !followUpToUpdate.completed });
+        setFollowUps(prev => prev.map(fu =>
+          fu.id === followUpId ? { ...fu, completed: !fu.completed } : fu
+        ));
+      }
     } catch (error) {
       console.error("Error toggling follow-up completion:", error);
       alert("Failed to update follow-up status. Please try again.");
@@ -217,28 +273,37 @@ export default function FollowupsPage() {
   // Get comparison timestamps
   const now = Timestamp.now();
   const sevenDaysFromNow = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+  const thirtyDaysFromNow = Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
   const epochZeroTimestamp = Timestamp.fromDate(new Date(0));
 
   // Filter logic using Timestamps with safe access
   const activeFollowUps = followUps.filter((followUp) => !followUp.completed && !followUp.archived);
 
-  const overdueFollowUps = activeFollowUps
+  // Milestones (recurring) are shown in their own dedicated section
+  const milestonesFollowUps = activeFollowUps
+    .filter((fu) => fu.recurring)
+    .sort((a, b) => (a.dueDate?.seconds ?? Infinity) - (b.dueDate?.seconds ?? Infinity));
+
+  // Regular follow-ups exclude recurring items
+  const regularActiveFollowUps = activeFollowUps.filter((fu) => !fu.recurring);
+
+  const overdueFollowUps = regularActiveFollowUps
     .filter(
       (followUp) =>
-        followUp.dueDate && // Check dueDate exists
+        followUp.dueDate &&
         followUp.dueDate < now &&
         followUp.dueDate.seconds !== epochZeroTimestamp.seconds
     )
     .sort((a, b) => {
-      const dateA = a.dueDate?.seconds ?? Infinity; // Default missing dates to far future for sorting
+      const dateA = a.dueDate?.seconds ?? Infinity;
       const dateB = b.dueDate?.seconds ?? Infinity;
       return dateA - dateB;
     });
 
-  const thisWeekFollowUps = activeFollowUps
+  const thisWeekFollowUps = regularActiveFollowUps
      .filter(
        (followUp) =>
-         followUp.dueDate && // Check dueDate exists
+         followUp.dueDate &&
          followUp.dueDate >= now &&
          followUp.dueDate < sevenDaysFromNow
      )
@@ -247,24 +312,25 @@ export default function FollowupsPage() {
         const dateB = b.dueDate?.seconds ?? Infinity;
         return dateA - dateB;
       });
-  
-  const futureFollowUps = activeFollowUps
-     .filter(
-       (followUp) => followUp.dueDate && followUp.dueDate >= sevenDaysFromNow // Check dueDate exists
-     )
-     .sort((a, b) => {
-        const dateA = a.dueDate?.seconds ?? Infinity;
-        const dateB = b.dueDate?.seconds ?? Infinity;
-        return dateA - dateB;
-      });
 
-  const noDateFollowUps = activeFollowUps
+  const upcomingFollowUps = regularActiveFollowUps
+     .filter(
+       (followUp) => followUp.dueDate && followUp.dueDate >= sevenDaysFromNow && followUp.dueDate < thirtyDaysFromNow
+     )
+     .sort((a, b) => (a.dueDate?.seconds ?? Infinity) - (b.dueDate?.seconds ?? Infinity));
+
+  const scheduledFollowUps = regularActiveFollowUps
+     .filter(
+       (followUp) => followUp.dueDate && followUp.dueDate >= thirtyDaysFromNow
+     )
+     .sort((a, b) => (a.dueDate?.seconds ?? Infinity) - (b.dueDate?.seconds ?? Infinity));
+
+  const noDateFollowUps = regularActiveFollowUps
     .filter(
       (followUp) =>
-        !followUp.dueDate || // Check dueDate does NOT exist or...
-        followUp.dueDate.seconds === epochZeroTimestamp.seconds // it's epoch zero
+        !followUp.dueDate ||
+        followUp.dueDate.seconds === epochZeroTimestamp.seconds
     );
-    // No specific sort needed for no-date items unless based on content/person
 
   // Include non-archived completed items only
   const completedFollowUps = followUps
@@ -286,11 +352,12 @@ export default function FollowupsPage() {
       personId: newFollowUp.personId,
       personName: person?.name || "Unknown",
       content: newFollowUp.content,
-      dueDate: newFollowUp.dueDate?.seconds === 0 ? deleteField() : newFollowUp.dueDate, // Handle epoch zero case
+      dueDate: newFollowUp.dueDate?.seconds === 0 ? deleteField() : newFollowUp.dueDate,
       completed: false,
       archived: false,
       createdBy: user.uid,
-      createdAt: serverTimestamp(), // Use serverTimestamp for adding
+      createdAt: serverTimestamp(),
+      ...(newFollowUpRecurring && { recurring: true, recurrenceType: "annual" }),
     };
 
     try {
@@ -298,21 +365,21 @@ export default function FollowupsPage() {
       const docRef = await addDoc(followUpRef, docToAdd);
 
       // Optimistic Add (use Timestamp.now() for createdAt locally)
-      const optimisticFollowUp: FollowUp = {
-        id: docRef.id, // Use the new ID
+      const optimisticFollowUp = {
+        id: docRef.id,
         personId: newFollowUp.personId,
-        personName: person?.name || "Unknown",
         content: newFollowUp.content,
-        dueDate: newFollowUp.dueDate?.seconds === 0 ? undefined : newFollowUp.dueDate, // Handle epoch zero case
+        dueDate: newFollowUp.dueDate?.seconds === 0 ? undefined : newFollowUp.dueDate,
         completed: false,
         archived: false,
-        createdBy: user.uid,
-        createdAt: Timestamp.now(), // Use local timestamp for immediate UI
-      };
+        createdAt: Timestamp.now(),
+        ...(newFollowUpRecurring && { recurring: true, recurrenceType: "annual" as const }),
+      } as FollowUp;
       setFollowUps(prev => [...prev, optimisticFollowUp]);
 
       // Reset form and close dialog
       setNewFollowUp({ content: "", personId: "", dueDate: Timestamp.now(), completed: false, archived: false } as Partial<FollowUp>);
+      setNewFollowUpRecurring(false);
       setIsAddDialogOpen(false);
       setSelectedGroupIdForFilter("all");
 
@@ -336,14 +403,13 @@ export default function FollowupsPage() {
     const docRef = doc(db, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id);
 
     try {
-      const dataToUpdate: {
-          content: string;
-          dueDate: Timestamp;
-      } = {
+      const dataToUpdate = {
         content: editingFollowUp.content,
         dueDate: editingFollowUp.dueDate instanceof Timestamp ? editingFollowUp.dueDate : Timestamp.fromDate(new Date(0)),
+        recurring: editingFollowUp.recurring ?? false,
+        recurrenceType: editingFollowUp.recurring ? "annual" : deleteField(),
       };
-      
+
       await updateDoc(docRef, dataToUpdate);
       console.log("Follow-up updated successfully.");
 
@@ -376,6 +442,23 @@ export default function FollowupsPage() {
   const openEditDialog = (followUp: FollowUp) => {
     setEditingFollowUp(followUp)
     setIsEditDialogOpen(true)
+  }
+
+  // Delete a follow-up
+  const handleConfirmDeleteFollowUp = async () => {
+    if (!followUpToDelete) return
+    setIsDeletingFollowUp(true)
+    try {
+      await deleteDoc(doc(db, "persons", followUpToDelete.personId, "followUps", followUpToDelete.id))
+      setFollowUps(prev => prev.filter(fu => fu.id !== followUpToDelete.id))
+      setIsDeleteConfirmOpen(false)
+      setFollowUpToDelete(null)
+    } catch (err) {
+      console.error("Error deleting follow-up:", err)
+      alert("Failed to delete. Please try again.")
+    } finally {
+      setIsDeletingFollowUp(false)
+    }
   }
 
   // Set date for a follow-up with no date
@@ -496,7 +579,7 @@ export default function FollowupsPage() {
             className="bg-shrub hover:bg-shrub/90"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Follow-up
+            Follow-Up
           </Button>
         </div>
       </div>
@@ -555,61 +638,62 @@ export default function FollowupsPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">This Week</p>
               <div className="space-y-1">
                 {thisWeekFollowUps.map((followUp) => (
-                  <div key={followUp.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
-                    <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor={followUp.id} className="font-medium cursor-pointer text-base leading-snug">{followUp.content}</label>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
-                        <User className="h-3 w-3 shrink-0" />
-                        <span>{getPersonNameById(followUp.personId)}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                      {followUp.dueDate && (
-                        <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground text-xs gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(followUp.dueDate.toDate())}
-                        </Badge>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(followUp)}>
-                        <CalendarPlus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+                  <FollowUpRow key={followUp.id} followUp={followUp} getPersonNameById={getPersonNameById} formatDate={formatDate} toggleFollowUpCompletion={toggleFollowUpCompletion} openEditDialog={openEditDialog} />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Scheduled / Future */}
-          {futureFollowUps.length > 0 && (
+          {/* Upcoming (7–30 days) */}
+          {upcomingFollowUps.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Scheduled</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Upcoming</p>
               <div className="space-y-1">
-                {futureFollowUps.map((followUp) => (
-                  <div key={followUp.id} className="flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted/60 transition-colors">
-                    <Checkbox id={followUp.id} checked={followUp.completed} onCheckedChange={() => toggleFollowUpCompletion(followUp.id)} className="mt-1" />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor={followUp.id} className="font-medium cursor-pointer text-base leading-snug">{followUp.content}</label>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-sm text-muted-foreground">
-                        <User className="h-3 w-3 shrink-0" />
-                        <span>{getPersonNameById(followUp.personId)}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                      {followUp.dueDate && (
-                        <Badge className="bg-shrub hover:bg-shrub/90 text-primary-foreground text-xs gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(followUp.dueDate.toDate())}
-                        </Badge>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(followUp)}>
-                        <CalendarPlus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+                {upcomingFollowUps.map((followUp) => (
+                  <FollowUpRow key={followUp.id} followUp={followUp} getPersonNameById={getPersonNameById} formatDate={formatDate} toggleFollowUpCompletion={toggleFollowUpCompletion} openEditDialog={openEditDialog} />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Scheduled (30+ days, collapsed) */}
+          {scheduledFollowUps.length > 0 && (
+            <div>
+              <button
+                onClick={() => setScheduledExpanded(e => !e)}
+                className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 hover:text-foreground transition-colors"
+              >
+                {scheduledExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                Scheduled ({scheduledFollowUps.length})
+              </button>
+              {scheduledExpanded && (
+                <div className="space-y-1">
+                  {scheduledFollowUps.map((followUp) => (
+                    <FollowUpRow key={followUp.id} followUp={followUp} getPersonNameById={getPersonNameById} formatDate={formatDate} toggleFollowUpCompletion={toggleFollowUpCompletion} openEditDialog={openEditDialog} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Milestones (recurring, collapsed) */}
+          {milestonesFollowUps.length > 0 && (
+            <div>
+              <button
+                onClick={() => setMilestonesExpanded(e => !e)}
+                className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 hover:text-foreground transition-colors"
+              >
+                {milestonesExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                <RefreshCw className="h-3 w-3" />
+                Milestones ({milestonesFollowUps.length})
+              </button>
+              {milestonesExpanded && (
+                <div className="space-y-1">
+                  {milestonesFollowUps.map((followUp) => (
+                    <FollowUpRow key={followUp.id} followUp={followUp} getPersonNameById={getPersonNameById} formatDate={formatDate} toggleFollowUpCompletion={toggleFollowUpCompletion} openEditDialog={openEditDialog} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -637,7 +721,7 @@ export default function FollowupsPage() {
             </div>
           )}
 
-          {overdueFollowUps.length === 0 && thisWeekFollowUps.length === 0 && futureFollowUps.length === 0 && noDateFollowUps.length === 0 && (
+          {overdueFollowUps.length === 0 && thisWeekFollowUps.length === 0 && upcomingFollowUps.length === 0 && scheduledFollowUps.length === 0 && noDateFollowUps.length === 0 && milestonesFollowUps.length === 0 && (
             <div className="text-center py-12">
               <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium">No active follow-ups</h3>
@@ -687,51 +771,97 @@ export default function FollowupsPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-         <DialogContent className="sm:max-w-[425px]"> 
-           <DialogHeader> 
-             <DialogTitle>Edit Follow-up</DialogTitle> 
-             <DialogDescription>Update the details for this follow-up.</DialogDescription> 
-           </DialogHeader> 
-           {editingFollowUp && ( 
-             <div className="grid gap-4 py-4"> 
-               <div className="grid gap-2"> 
-                 <Label htmlFor="edit-content">Follow-up Item</Label> 
-                 <Input 
-                   id="edit-content" 
-                   value={editingFollowUp.content} 
-                   onChange={(e) => setEditingFollowUp({ ...editingFollowUp, content: e.target.value })} 
-                 /> 
-               </div> 
-               <div className="grid grid-cols-4 items-center gap-4"> 
-                 <Label htmlFor="edit-dueDate" className="text-right">Due Date</Label> 
-                 <Input 
-                   id="edit-dueDate" 
-                   type="date" 
-                   className="col-span-3" 
-                   value={formatDateForInput(editingFollowUp.dueDate || Timestamp.now())} 
-                   onChange={(e) => { 
-                     const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.now(); 
+         <DialogContent className="sm:max-w-[425px]">
+           <DialogHeader>
+             <DialogTitle>Edit Follow-Up</DialogTitle>
+           </DialogHeader>
+           {editingFollowUp && (
+             <div className="grid gap-4 py-4">
+               <div className="grid gap-2">
+                 <Label htmlFor="edit-content">Follow-Up Details</Label>
+                 <Textarea
+                   id="edit-content"
+                   value={editingFollowUp.content}
+                   onChange={(e) => setEditingFollowUp({ ...editingFollowUp, content: e.target.value })}
+                   rows={3}
+                 />
+               </div>
+               <div className="grid grid-cols-4 items-center gap-4">
+                 <Label htmlFor="edit-dueDate" className="text-right">Due Date</Label>
+                 <Input
+                   id="edit-dueDate"
+                   type="date"
+                   className="col-span-3"
+                   value={formatDateForInput(editingFollowUp.dueDate || Timestamp.now())}
+                   onChange={(e) => {
+                     const dateValue = e.target.value ? Timestamp.fromDate(new Date(e.target.value)) : Timestamp.now();
                      setEditingFollowUp({ ...editingFollowUp, dueDate: dateValue })
-                   }} 
-                 /> 
-               </div> 
-             </div> 
-           )} 
-           <DialogFooter> 
-             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button> 
-             <Button onClick={handleEditFollowUp}>Save Changes</Button> 
-           </DialogFooter> 
-         </DialogContent> 
-       </Dialog> 
+                   }}
+                 />
+               </div>
+               <div className="flex items-center gap-2 pt-1">
+                 <Checkbox
+                   id="edit-recurring"
+                   checked={!!editingFollowUp.recurring}
+                   onCheckedChange={(checked) => setEditingFollowUp({ ...editingFollowUp, recurring: !!checked, recurrenceType: !!checked ? "annual" : undefined })}
+                 />
+                 <Label htmlFor="edit-recurring" className="text-sm font-normal cursor-pointer flex items-center gap-1.5">
+                   <RefreshCw className="h-3 w-3" /> Make this a milestone (repeats annually)
+                 </Label>
+               </div>
+             </div>
+           )}
+           <DialogFooter className="flex-row">
+             <Button
+               variant="ghost"
+               className="text-destructive hover:text-destructive hover:bg-destructive/10 mr-auto"
+               onClick={() => {
+                 if (editingFollowUp) {
+                   setFollowUpToDelete(editingFollowUp)
+                   setIsEditDialogOpen(false)
+                   setIsDeleteConfirmOpen(true)
+                 }
+               }}
+             >
+               <Trash2 className="h-4 w-4 mr-1" /> Delete
+             </Button>
+             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+             <Button onClick={handleEditFollowUp}>Save Changes</Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
 
-      {/* Add Follow-up Dialog */}
+      {/* Delete Follow-Up Confirm Dialog */}
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                This cannot be undone. This will permanently delete:
+                <div className="italic mt-2 text-sm text-muted-foreground">{followUpToDelete?.content}</div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingFollowUp}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteFollowUp}
+              disabled={isDeletingFollowUp}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isDeletingFollowUp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Follow-Up Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Add New Follow-up</DialogTitle>
-            <DialogDescription>
-              Enter the details for the new follow-up item.
-            </DialogDescription>
+            <DialogTitle>Add Follow-Up</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
               {/* Group Filter Dropdown */}
@@ -793,12 +923,12 @@ export default function FollowupsPage() {
                 </Select>
               </div>
 
-              {/* Follow-up Content Textarea */}
+              {/* Follow-Up Content Textarea */}
               <div className="grid gap-2">
-                <Label htmlFor="followup-content">Follow-up Item</Label>
+                <Label htmlFor="followup-content">Follow-Up Details</Label>
                 <Textarea
                   id="followup-content"
-                  placeholder="What is the follow-up task?"
+                  placeholder="Enter follow-up details..."
                   value={newFollowUp.content || ""}
                   onChange={(e) => setNewFollowUp({ ...newFollowUp, content: e.target.value })}
                   rows={3}
@@ -819,14 +949,26 @@ export default function FollowupsPage() {
                   }}
                 />
               </div>
+
+              {/* Milestone checkbox */}
+              <div className="flex items-center gap-2 pt-1">
+                <Checkbox
+                  id="followup-recurring"
+                  checked={newFollowUpRecurring}
+                  onCheckedChange={(checked) => setNewFollowUpRecurring(!!checked)}
+                />
+                <Label htmlFor="followup-recurring" className="text-sm font-normal cursor-pointer flex items-center gap-1.5">
+                  <RefreshCw className="h-3 w-3" /> Make this a milestone (repeats annually)
+                </Label>
+              </div>
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
             <Button
               onClick={handleAddFollowUp}
-              disabled={!newFollowUp.content || !newFollowUp.personId} // Basic validation
+              disabled={!newFollowUp.content || !newFollowUp.personId}
             >
-              Save Follow-up
+              Add Follow-Up
             </Button>
           </DialogFooter>
         </DialogContent>

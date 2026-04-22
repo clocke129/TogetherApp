@@ -4,6 +4,7 @@ import { useState, useEffect, FormEvent } from "react"
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, User, UserPlus, Users, Loader2, MoreVertical, Trash2, Edit, LogOut, Calendar as CalendarIcon } from "lucide-react"
+import { Plus, User, UserPlus, Users, Loader2, MoreVertical, Trash2, Edit, LogOut, Calendar as CalendarIcon, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
@@ -120,6 +121,7 @@ export default function AssignmentsPage() {
   const [isAddFollowUpDialogOpen, setIsAddFollowUpDialogOpen] = useState(false);
   const [newFollowUpContent, setNewFollowUpContent] = useState("");
   const [newFollowUpDueDate, setNewFollowUpDueDate] = useState<Date | null>(null);
+  const [newFollowUpRecurring, setNewFollowUpRecurring] = useState(false);
   const [isAddingFollowUp, setIsAddingFollowUp] = useState(false);
 
   const [isEditRequestDialogOpen, setIsEditRequestDialogOpen] = useState(false);
@@ -1049,9 +1051,10 @@ export default function AssignmentsPage() {
 
   // NEW: Handler to open the Add Follow-Up dialog
   const handleOpenAddFollowUpDialog = () => {
-    setNewFollowUpContent(""); // Clear previous content
-    setNewFollowUpDueDate(null); // Reset date
-    setIsAddingFollowUp(false); // Reset loading state
+    setNewFollowUpContent("");
+    setNewFollowUpDueDate(null);
+    setNewFollowUpRecurring(false);
+    setIsAddingFollowUp(false);
     setIsAddFollowUpDialogOpen(true);
   };
 
@@ -1119,12 +1122,13 @@ export default function AssignmentsPage() {
       const followUpsRef = collection(db, "persons", personId, "followUps");
       const newFollowUpData = {
         personId: personId,
-        personName: personName, // Denormalize name
+        personName: personName,
         content: newFollowUpContent.trim(),
-        dueDate: Timestamp.fromDate(newFollowUpDueDate), // Convert JS Date to Firestore Timestamp
+        dueDate: Timestamp.fromDate(newFollowUpDueDate),
         completed: false,
         createdAt: serverTimestamp(),
         createdBy: user.uid,
+        ...(newFollowUpRecurring && { recurring: true, recurrenceType: "annual" }),
       };
       const docRef = await addDoc(followUpsRef, newFollowUpData);
       console.log("New follow-up added with ID:", docRef.id);
@@ -1795,58 +1799,106 @@ export default function AssignmentsPage() {
                      <p className="text-sm text-center text-muted-foreground italic py-4">No prayer requests found.</p>
                    )}
                 </TabsContent>
-                <TabsContent value="followups" className="mt-4 space-y-4"> {/* Added space-y-4 */}
-                   {/* Add New Follow-Up Button - REMOVED FROM HERE */}
-                    {/* <div className="flex justify-end"> ... </div> */}
-                   {/* Follow Ups List */}
-                    {personFollowUps.length > 0 ? (
+                <TabsContent value="followups" className="mt-4 space-y-5">
+                  {/* Follow-Ups section */}
+                  {(() => {
+                    const regularFollowUps = personFollowUps
+                      .filter(fu => !fu.recurring)
+                      .sort((a, b) => {
+                        // Pending before completed
+                        if (a.completed !== b.completed) return a.completed ? 1 : -1
+                        // Then by due date ascending
+                        const dateA = a.dueDate instanceof Timestamp ? a.dueDate.toMillis() : 0
+                        const dateB = b.dueDate instanceof Timestamp ? b.dueDate.toMillis() : 0
+                        return dateA - dateB
+                      })
+                    const milestones = personFollowUps
+                      .filter(fu => fu.recurring)
+                      .sort((a, b) => {
+                        const dateA = a.dueDate instanceof Timestamp ? a.dueDate.toMillis() : 0
+                        const dateB = b.dueDate instanceof Timestamp ? b.dueDate.toMillis() : 0
+                        return dateA - dateB
+                      })
+                    const formatMilestoneDate = (ts: Timestamp) =>
+                      ts.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                    const followUpActions = (fu: FollowUp) => (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-6 w-6 p-0">
+                            <MoreVertical className="h-4 w-4" />
+                            <span className="sr-only">Actions</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => { setFollowUpToEdit(fu); setEditingFollowUpContent(fu.content); setIsEditFollowUpDialogOpen(true); }}>
+                            <Edit className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => { setFollowUpToDelete(fu); setIsDeleteFollowUpConfirmOpen(true); }} className="text-destructive">
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )
+                    return (
                       <>
-                        <ul className="space-y-2 list-disc pl-5">
-                          {/* ... existing follow-up mapping ... */}
-                          {(showAllFollowUps ? personFollowUps : personFollowUps.slice(0, 3)).map(fu => (
-                            <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
-                              {/* Follow-Up Content and Details */}
-                              <div className="flex-1 mr-2">
-                                {fu.content}
-                                <span className="text-xs ml-2 block text-gray-500"> (Due: {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'N/A'}, Status: {fu.completed ? 'Completed' : 'Pending'})</span>
-                              </div>
-                            {/* Edit/Delete Trigger */}
-                            <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                              {/* ... existing dropdown ... */}
-                               <DropdownMenu>
-                                 <DropdownMenuTrigger asChild>
-                                   <Button variant="ghost" className="h-6 w-6 p-0"> {/* Adjusted size/padding */}
-                                     <MoreVertical className="h-4 w-4" />
-                                     <span className="sr-only">Actions</span>
-                                   </Button>
-                                 </DropdownMenuTrigger>
-                                 <DropdownMenuContent align="end">
-                                   <DropdownMenuItem onSelect={() => { setFollowUpToEdit(fu); setEditingFollowUpContent(fu.content); setIsEditFollowUpDialogOpen(true); }}>
-                                     <Edit className="mr-2 h-4 w-4" /> Edit
-                                   </DropdownMenuItem>
-                                   <DropdownMenuItem onSelect={() => { setFollowUpToDelete(fu); setIsDeleteFollowUpConfirmOpen(true); }} className="text-destructive">
-                                     <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                   </DropdownMenuItem>
-                                 </DropdownMenuContent>
-                               </DropdownMenu>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                      {personFollowUps.length > 3 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowAllFollowUps(!showAllFollowUps)}
-                          className="mt-2 w-full"
-                        >
-                          {showAllFollowUps ? 'Show Less' : `Show ${personFollowUps.length - 3} More`}
-                        </Button>
-                      )}
-                    </>
-                    ) : (
-                      <p className="text-sm text-center text-muted-foreground italic py-4">No follow-ups found.</p>
-                    )}
+                        {/* Regular follow-ups */}
+                        {regularFollowUps.length > 0 ? (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Follow-Ups</p>
+                            <ul className="space-y-2">
+                              {(showAllFollowUps ? regularFollowUps : regularFollowUps.slice(0, 3)).map(fu => (
+                                <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
+                                  <div className="flex-1 mr-2">
+                                    {fu.content}
+                                    <span className="text-xs block mt-0.5">
+                                      {fu.dueDate instanceof Timestamp ? fu.dueDate.toDate().toLocaleDateString() : 'No date'} · {fu.completed ? 'Completed' : 'Pending'}
+                                    </span>
+                                  </div>
+                                  <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                    {followUpActions(fu)}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                            {regularFollowUps.length > 3 && (
+                              <Button variant="ghost" size="sm" onClick={() => setShowAllFollowUps(!showAllFollowUps)} className="mt-2 w-full">
+                                {showAllFollowUps ? 'Show Less' : `Show ${regularFollowUps.length - 3} More`}
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-center text-muted-foreground italic py-2">No follow-ups yet.</p>
+                        )}
+
+                        {/* Milestones */}
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Milestones</p>
+                          {milestones.length > 0 ? (
+                            <ul className="space-y-2">
+                              {milestones.map(fu => (
+                                <li key={fu.id} className="text-sm text-muted-foreground flex justify-between items-start group">
+                                  <div className="flex items-start gap-1.5 flex-1 mr-2">
+                                    <RefreshCw className="h-3 w-3 mt-0.5 shrink-0" />
+                                    <div>
+                                      {fu.content}
+                                      {fu.dueDate instanceof Timestamp && (
+                                        <span className="text-xs block mt-0.5">{formatMilestoneDate(fu.dueDate)}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                    {followUpActions(fu)}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-center text-muted-foreground italic py-2">No milestones yet.</p>
+                          )}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </TabsContent>
               </Tabs>
             )}
@@ -1856,19 +1908,16 @@ export default function AssignmentsPage() {
               <Button type="button" variant="outline">Close</Button> 
             </DialogClose>
             {/* Conditional Add New Button moved to footer, after Close */}
-            <Button 
-              size="sm" 
-              className="bg-shrub hover:bg-shrub/90 gap-1"
-              onClick={() => {
-                if (activeDetailsTab === 'requests') {
-                  handleOpenAddRequestDialog();
-                } else {
-                  handleOpenAddFollowUpDialog();
-                }
-              }}
-            >
-              <Plus className="h-4 w-4" /> Add New
-            </Button>
+            {activeDetailsTab === 'requests' && (
+              <Button size="sm" className="bg-shrub hover:bg-shrub/90 gap-1" onClick={handleOpenAddRequestDialog}>
+                <Plus className="h-4 w-4" /> Add Request
+              </Button>
+            )}
+            {activeDetailsTab === 'followups' && (
+              <Button size="sm" className="bg-shrub hover:bg-shrub/90 gap-1" onClick={handleOpenAddFollowUpDialog}>
+                <Plus className="h-4 w-4" /> Follow-Up
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1906,7 +1955,7 @@ export default function AssignmentsPage() {
       <Dialog open={isAddFollowUpDialogOpen} onOpenChange={setIsAddFollowUpDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Follow-Up for {selectedPersonForDetails?.name}</DialogTitle>
+            <DialogTitle>Add {newFollowUpRecurring ? "Milestone" : "Follow-Up"} for {selectedPersonForDetails?.name}</DialogTitle>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div>
@@ -1945,6 +1994,17 @@ export default function AssignmentsPage() {
                     />
                   </PopoverContent>
                 </Popover>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                id="new-followup-recurring"
+                checked={newFollowUpRecurring}
+                onCheckedChange={(checked) => setNewFollowUpRecurring(checked === true)}
+                disabled={isAddingFollowUp}
+              />
+              <Label htmlFor="new-followup-recurring" className="text-sm font-normal cursor-pointer flex items-center gap-1.5">
+                <RefreshCw className="h-3 w-3" /> Make this a milestone (repeats annually)
+              </Label>
             </div>
           </div>
           <DialogFooter>
@@ -2036,11 +2096,24 @@ export default function AssignmentsPage() {
               disabled={isSavingFollowUpEdit}
             />
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-row">
+            <Button
+              variant="ghost"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10 mr-auto"
+              disabled={isSavingFollowUpEdit}
+              onClick={() => {
+                if (followUpToEdit) {
+                  setFollowUpToDelete(followUpToEdit)
+                  setIsEditFollowUpDialogOpen(false)
+                  setIsDeleteFollowUpConfirmOpen(true)
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-1" /> Delete
+            </Button>
             <DialogClose asChild>
               <Button variant="outline" disabled={isSavingFollowUpEdit}>Cancel</Button>
             </DialogClose>
-            {/* Connect Save button to the new handler */}
             <Button onClick={handleSaveFollowUpEdit} disabled={isSavingFollowUpEdit || !editingFollowUpContent.trim()}>
               {isSavingFollowUpEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
               Save Changes
