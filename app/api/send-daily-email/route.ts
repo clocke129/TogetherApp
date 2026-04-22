@@ -1,0 +1,147 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { Resend } from 'resend'
+import { adminDb, adminAuth } from '@/lib/firebase-admin'
+import { buildDailyDigestData, generateUnsubscribeToken } from '@/lib/email-utils.server'
+import { Timestamp } from 'firebase-admin/firestore'
+import { DailyDigestEmail } from '@/emails/DailyDigestEmail'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://togetherapp.vercel.app'
+
+// Returns "HH:MM" for the current time in a given IANA timezone
+function currentTimeInZone(timezone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date())
+    const h = parts.find(p => p.type === 'hour')?.value ?? '00'
+    const m = parts.find(p => p.type === 'minute')?.value ?? '00'
+    return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
+  } catch {
+    return '00:00'
+  }
+}
+
+// Returns the day-of-week (0–6) in the user's timezone
+function currentDayInZone(timezone: string): number {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'short',
+    })
+    const day = formatter.format(new Date())
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(day)
+  } catch {
+    return new Date().getDay()
+  }
+}
+
+// Check if current time is within a 15-minute window of the target time
+function isWithinWindow(current: string, target: string): boolean {
+  const [ch, cm] = current.split(':').map(Number)
+  const [th, tm] = target.split(':').map(Number)
+  const currentMins = ch * 60 + cm
+  const targetMins = th * 60 + tm
+  return currentMins >= targetMins && currentMins < targetMins + 15
+}
+
+// Returns "YYYY-MM-DD" in the user's timezone
+function todayInZone(timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date())
+  } catch {
+    return new Date().toISOString().split('T')[0]
+  }
+}
+
+export async function POST(req: NextRequest) {
+  // Protect endpoint — Vercel sends Authorization: Bearer {CRON_SECRET}
+  const authHeader = req.headers.get('Authorization')
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Query all users with email digests enabled
+  const prefsSnap = await adminDb
+    .collectionGroup('emailPreferences')
+    .where('enabled', '==', true)
+    .get()
+
+  const results: { uid: string; status: string }[] = []
+
+  for (const prefDoc of prefsSnap.docs) {
+    // Extract uid from path: users/{uid}/emailPreferences/preferences
+    const uid = prefDoc.ref.path.split('/')[1]
+    const prefs = prefDoc.data()
+
+    try {
+      const timezone = prefs.timezone ?? 'UTC'
+      const currentTime = currentTimeInZone(timezone)
+      const today = todayInZone(timezone)
+      const dayOfWeek = currentDayInZone(timezone)
+
+      // Skip if outside the send-time window
+      if (!isWithinWindow(currentTime, prefs.sendTime ?? '07:00')) {
+        results.push({ uid, status: 'skipped:time' })
+        continue
+      }
+
+      // Skip if already sent today
+      if (prefs.lastSentDate === today) {
+        results.push({ uid, status: 'skipped:already_sent' })
+        continue
+      }
+
+      // Frequency checks
+      if (prefs.frequency === 'weekdays' && (dayOfWeek === 0 || dayOfWeek === 6)) {
+        results.push({ uid, status: 'skipped:weekend' })
+        continue
+      }
+      if (prefs.frequency === 'weekly' && prefs.weeklyDay !== dayOfWeek) {
+        results.push({ uid, status: 'skipped:wrong_day' })
+        continue
+      }
+
+      // Get user's email from Firebase Auth
+      const userRecord = await adminAuth.getUser(uid)
+      const email = userRecord.email
+      if (!email) {
+        results.push({ uid, status: 'skipped:no_email' })
+        continue
+      }
+
+      // Build the prayer list
+      const targetDate = new Date()
+      const { people, dateLabel } = await buildDailyDigestData(uid, targetDate)
+
+      if (people.length === 0) {
+        results.push({ uid, status: 'skipped:empty_list' })
+        continue
+      }
+
+      const unsubscribeToken = generateUnsubscribeToken(uid)
+      const unsubscribeUrl = `${APP_URL}/api/email-preferences?action=unsubscribe&uid=${uid}&token=${unsubscribeToken}`
+
+      // Send via Resend
+      await resend.emails.send({
+        from: 'Together <onboarding@resend.dev>',
+        to: email,
+        subject: `Your prayer list for ${dateLabel}`,
+        react: DailyDigestEmail({ people, dateLabel, appUrl: APP_URL, unsubscribeUrl }),
+      })
+
+      // Update lastSentDate to prevent duplicates
+      await prefDoc.ref.set({ lastSentDate: today, updatedAt: Timestamp.now() }, { merge: true })
+
+      results.push({ uid, status: 'sent' })
+    } catch (err) {
+      console.error(`Failed to send digest for ${uid}:`, err)
+      results.push({ uid, status: 'error' })
+    }
+  }
+
+  return NextResponse.json({ processed: results.length, results })
+}

@@ -28,6 +28,15 @@ export interface Group {
 // Firestore Timestamp type for convenience if needed elsewhere
 export { Timestamp };
 
+export interface EmailPreferences {
+  enabled: boolean
+  sendTime: string              // "07:00" 24h format
+  timezone: string              // IANA timezone, e.g. "America/New_York"
+  frequency: "daily" | "weekdays" | "weekly"
+  weeklyDay?: number            // 0–6 (Sun–Sat), only for "weekly"
+  lastSentDate?: string         // "YYYY-MM-DD" — prevents duplicate sends
+}
+
 // Prayer Request Type (Subcollection of Person)
 export interface PrayerRequest {
   id: string; // Firestore document ID
@@ -48,4 +57,6 @@ export interface FollowUp {
   createdAt?: Timestamp; // Firestore server timestamp (optional)
   completedAt?: Timestamp; // Firestore server timestamp (optional)
   archived?: boolean; // Added flag for soft delete/archiving
+  recurring?: boolean; // If true, resets annually on completion instead of marking done
+  recurrenceType?: "annual"; // Only "annual" supported for now
 }

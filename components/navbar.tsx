@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation" // Add useRouter back
-import { FileText, Calendar, Users, Settings, Heart, LogOut, User as UserIcon, LogIn } from "lucide-react" // Add icons back
+import { FileText, Calendar, Users, Settings, Heart, LogOut, User as UserIcon, LogIn, Mail } from "lucide-react" // Add icons back
 import { cn } from "@/lib/utils"
 import { ModeToggle } from "@/components/mode-toggle"
 import { useAuth } from "@/context/AuthContext" // Import useAuth
@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { LucideIcon } from "lucide-react";
-import React, { useEffect } from "react"; // Import useEffect
+import React, { useEffect, useState } from "react"; // Import useEffect
+import { EmailPreferencesDialog } from "@/components/email-preferences-dialog"
 
 // Define an interface for nav items
 interface NavItem {
@@ -32,6 +33,7 @@ export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter() // Add router hook back
   const { user, loading } = useAuth() // Get user and loading state
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
 
   // --- Add this useEffect Hook --- 
   useEffect(() => {
@@ -167,8 +169,21 @@ export default function Navbar() {
 
         <div className="flex flex-1 items-center justify-end space-x-2">
           {renderUserAuth()}
+          {user && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setEmailDialogOpen(true)}
+              aria-label="Email digest settings"
+            >
+              <Mail className="h-[1.2rem] w-[1.2rem]" />
+            </Button>
+          )}
           <ModeToggle />
         </div>
+        {user && (
+          <EmailPreferencesDialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen} />
+        )}
       </div>
 
       {/* Mobile navigation */}
