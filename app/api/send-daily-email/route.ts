@@ -83,14 +83,15 @@ export async function POST(req: NextRequest) {
       const today = todayInZone(timezone)
       const dayOfWeek = currentDayInZone(timezone)
 
-      // Skip if outside the send-time window
-      if (!isWithinWindow(currentTime, prefs.sendTime ?? '07:00')) {
+      // Skip if outside the send-time window (bypass in test mode)
+      const testMode = req.headers.get('X-Test-Mode') === '1'
+      if (!testMode && !isWithinWindow(currentTime, prefs.sendTime ?? '07:00')) {
         results.push({ uid, status: 'skipped:time' })
         continue
       }
 
-      // Skip if already sent today
-      if (prefs.lastSentDate === today) {
+      // Skip if already sent today (bypass in test mode)
+      if (!testMode && prefs.lastSentDate === today) {
         results.push({ uid, status: 'skipped:already_sent' })
         continue
       }
