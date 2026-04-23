@@ -165,7 +165,7 @@ export default function PrayerPage() {
       const results = await Promise.all(
         people.map(async (person) => {
           const snap = await getDocs(
-            query(collection(db, "users", userId, "persons", person.id, "followUps"), where("completed", "==", false))
+            query(collection(db, "users", user!.uid, "persons", person.id, "followUps"), where("completed", "==", false))
           )
           return snap.docs.map(d => ({ id: d.id, ...d.data(), personId: person.id } as FollowUp))
             .filter(fu => !fu.archived)
@@ -342,7 +342,7 @@ export default function PrayerPage() {
     if (isCompletingFollowUpId) return
     setIsCompletingFollowUpId(followUpId)
     try {
-      await updateDoc(doc(db, "users", userId, "persons", personId, "followUps", followUpId), {
+      await updateDoc(doc(db, "users", user!.uid, "persons", personId, "followUps", followUpId), {
         completed: true,
         completedAt: serverTimestamp()
       })
@@ -365,7 +365,7 @@ export default function PrayerPage() {
     if (!editingFollowUp || !editFollowUpContent.trim()) return
     setIsEditingFollowUp(true)
     try {
-      await updateDoc(doc(db, "users", userId, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id), {
+      await updateDoc(doc(db, "users", user!.uid, "persons", editingFollowUp.personId, "followUps", editingFollowUp.id), {
         content: editFollowUpContent.trim(),
         dueDate: editFollowUpDueDate ? Timestamp.fromDate(editFollowUpDueDate) : null,
       })

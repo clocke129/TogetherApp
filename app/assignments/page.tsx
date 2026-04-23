@@ -575,7 +575,7 @@ export default function AssignmentsPage() {
       // 1. Check for existing person with the same name (case-insensitive, client-side)
       // Fetch all people belonging to the user (re-use fetched `people` state for efficiency)
       const potentialConflicts = people.filter(
-         p => p.id !== personId && p.name.toLowerCase() === newNameLower && p.createdBy === user?.uid
+         p => p.id !== personId && p.name.toLowerCase() === newNameLower
       );
 
       if (potentialConflicts.length > 0) {
