@@ -6,7 +6,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { DailyDigestEmail } from '@/emails/DailyDigestEmail'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://togetherapp.vercel.app'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://together-app-nine.vercel.app'
 
 // Returns "HH:MM" for the current time in a given IANA timezone
 function currentTimeInZone(timezone: string): string {
