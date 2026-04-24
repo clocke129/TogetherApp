@@ -146,3 +146,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ processed: results.length, results })
 }
+
+// Vercel cron jobs send GET requests, so alias GET to the same handler
+export const GET = POST
