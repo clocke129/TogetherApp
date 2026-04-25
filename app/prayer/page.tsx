@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/carousel"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import { getUrgencyLevel, formatFollowUpDate, sortFollowUpsByUrgency } from "@/lib/followUpUtils"
-import { calculateAndSaveDailyPrayerList, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
+import { calculateAndSaveDailyPrayerList, previewDailyPrayerList, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
 
 // Firestore and Auth Imports
 import { useAuth } from '@/context/AuthContext'
@@ -58,14 +58,22 @@ export default function PrayerPage() {
   const { user, loading: authLoading } = useAuth()
   const effectRan = useRef(false)
 
-  const [currentDateString] = useState(() => {
-    const today = new Date()
-    return today.toLocaleDateString("en-US", {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric'
-    })
-  })
+  const todayKey = new Date().toISOString().split('T')[0]
+  const [viewingDate, setViewingDate] = useState<Date>(() => new Date())
+  const viewingDateKey = viewingDate.toISOString().split('T')[0]
+  const isToday = viewingDateKey === todayKey
+
+  const daysFromToday = Math.round(
+    (new Date(viewingDateKey).getTime() - new Date(todayKey).getTime()) / (1000 * 60 * 60 * 24)
+  )
+
+  const dateLabel = (() => {
+    if (daysFromToday === 0) return viewingDate.toLocaleDateString("en-US", { weekday: 'long', month: 'long', day: 'numeric' })
+    if (daysFromToday === -1) return "Yesterday"
+    if (daysFromToday === 1) return "Tomorrow"
+    if (daysFromToday > 1) return viewingDate.toLocaleDateString("en-US", { weekday: 'long', month: 'long', day: 'numeric' })
+    return viewingDate.toLocaleDateString("en-US", { weekday: 'long', month: 'long', day: 'numeric' })
+  })()
 
   // --- Data state ---
   const [allUserGroups, setAllUserGroups] = useState<Group[]>([])
@@ -451,6 +459,78 @@ export default function PrayerPage() {
   }
 
   // ----------------------------------------------------------------
+  // Load list for a specific date (past = read Firestore, future = preview)
+  // ----------------------------------------------------------------
+  const loadDateList = async (date: Date) => {
+    if (!user) return
+    const userId = user.uid
+    const dateKey = date.toISOString().split('T')[0]
+    const dayIndex = date.getDay()
+    const today = new Date().toISOString().split('T')[0]
+
+    setLoadingData(true)
+    try {
+      // Always need people/groups for building the display
+      const [peopleSnap, groupsSnap] = await Promise.all([
+        getDocs(collection(db, "users", userId, "persons")),
+        getDocs(collection(db, "users", userId, "groups"))
+      ])
+      const fetchedGroups = groupsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Group))
+      const fetchedPeople = peopleSnap.docs.map(d => ({ id: d.id, ...d.data() } as Person))
+      setAllUserGroups(fetchedGroups)
+
+      const peopleWithRequests = await Promise.all(
+        fetchedPeople.map(async (person) => {
+          const reqSnap = await getDocs(
+            query(collection(db, "users", userId, "persons", person.id, "prayerRequests"), orderBy("createdAt", "desc"), limit(1))
+          )
+          const mostRecentRequest = reqSnap.empty ? undefined : { id: reqSnap.docs[0].id, ...reqSnap.docs[0].data() } as PrayerRequest
+          return { ...person, mostRecentRequest }
+        })
+      )
+      setAllUserPeople(peopleWithRequests)
+
+      let dateIds: Set<string>
+
+      if (dateKey === today) {
+        // Today: use existing full logic
+        await refreshPrayerList()
+        return
+      } else if (dateKey < today) {
+        // Past: read stored list from Firestore
+        const listSnap = await getDoc(doc(db, "users", userId, "dailyPrayerLists", dateKey))
+        if (listSnap.exists()) {
+          dateIds = new Set<string>(listSnap.data().personIds || [])
+        } else {
+          dateIds = new Set<string>()
+        }
+      } else {
+        // Future: calculate preview without writing
+        dateIds = await previewDailyPrayerList(db, userId, date)
+      }
+
+      const groups = buildTodaysGroups(fetchedGroups, peopleWithRequests, dateIds, dayIndex)
+      setTodaysGroups(groups)
+    } catch (err) {
+      console.error("[PrayerPage] Error loading date list:", err)
+    } finally {
+      setLoadingData(false)
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Date navigation
+  // ----------------------------------------------------------------
+  const navigateDate = (delta: number) => {
+    const next = new Date(viewingDate)
+    next.setDate(next.getDate() + delta)
+    setViewingDate(next)
+    setCarouselIndex(0)
+    carouselApi?.scrollTo(0, true)
+    loadDateList(next)
+  }
+
+  // ----------------------------------------------------------------
   // Navigation helpers
   // ----------------------------------------------------------------
   const handlePrevious = () => carouselApi?.scrollPrev()
@@ -473,7 +553,7 @@ export default function PrayerPage() {
         <div className="mb-4 md:mb-6 flex items-center justify-between">
           <div className="flex flex-col">
             <h1 className="page-title">Today</h1>
-            <p className="text-muted-foreground">{currentDateString}</p>
+            <p className="text-muted-foreground">{dateLabel}</p>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center text-center py-16 px-4">
@@ -501,8 +581,28 @@ export default function PrayerPage() {
       {/* Header */}
       <div className="mb-4 md:mb-6 flex items-center justify-between shrink-0">
         <div className="flex flex-col">
-          <h1 className="page-title">Today</h1>
-          <p className="text-muted-foreground">{currentDateString}</p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 -ml-1.5"
+              onClick={() => navigateDate(-1)}
+              disabled={loadingData}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="page-title">{isToday ? "Today" : daysFromToday === 1 ? "Tomorrow" : daysFromToday === -1 ? "Yesterday" : viewingDate.toLocaleDateString("en-US", { weekday: 'long' })}</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => navigateDate(1)}
+              disabled={loadingData || daysFromToday >= 7}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-muted-foreground">{dateLabel}</p>
         </div>
         <Button
           size="sm"
@@ -520,9 +620,11 @@ export default function PrayerPage() {
         <>
           {todaysPeople.length === 0 ? (
             <div className="text-center py-8 px-4 text-muted-foreground">
-              {allUserPeople.length > 0
-                ? <><p className="mb-2">No groups scheduled for prayer today.</p><p>Assign people to groups and set prayer days in the <span className="font-semibold">People</span> tab.</p></>
-                : <p>No groups or people yet.</p>
+              {!isToday
+                ? <p>No prayer list for this day.</p>
+                : allUserPeople.length > 0
+                  ? <><p className="mb-2">No groups scheduled for prayer today.</p><p>Assign people to groups and set prayer days in the <span className="font-semibold">People</span> tab.</p></>
+                  : <p>No groups or people yet.</p>
               }
             </div>
           ) : (

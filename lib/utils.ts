@@ -215,6 +215,49 @@ export async function calculateAndSaveDailyPrayerList(
 }
 
 /**
+ * Calculates a preview of the daily prayer list for a future date WITHOUT writing to Firestore.
+ * Used for date navigation — does not affect lastPrayedFor or the rotation.
+ */
+export async function previewDailyPrayerList(
+    db: Firestore,
+    userId: string,
+    targetDate: Date
+): Promise<Set<string>> {
+    const currentDayIndex = targetDate.getDay();
+
+    const [groupsSnapshot, peopleSnapshot] = await Promise.all([
+        getDocs(query(collection(db, "users", userId, "groups"))),
+        getDocs(query(collection(db, "users", userId, "persons")))
+    ]);
+
+    const fetchedGroups = groupsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Group));
+    const allPeople = peopleSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Person));
+
+    const personIdsToPrayFor = new Set<string>();
+    const activeGroups = fetchedGroups.filter(g => g.prayerDays?.includes(currentDayIndex));
+
+    activeGroups.forEach(group => {
+        let groupPeople: Person[];
+        if (group.isSystemGroup && group.name === "Everyone") {
+            groupPeople = allPeople.filter(p => !p.groupId);
+        } else {
+            groupPeople = allPeople.filter(p => p.groupId === group.id);
+        }
+        if (groupPeople.length === 0) return;
+
+        const numPerDaySetting = group.prayerSettings?.numPerDay ?? null;
+        const actualNum = numPerDaySetting === null
+            ? groupPeople.length
+            : Math.min(numPerDaySetting, groupPeople.length);
+
+        const sorted = sortByLastPrayedFor(groupPeople);
+        sorted.slice(0, actualNum).forEach(p => personIdsToPrayFor.add(p.id));
+    });
+
+    return personIdsToPrayFor;
+}
+
+/**
  * Ensures the "Everyone" system group exists for the user.
  * Creates it with default settings if it doesn't exist.
  * This group is special - it shows all uncategorized people (groupId === null).
