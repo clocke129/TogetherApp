@@ -28,7 +28,6 @@ export { Timestamp };
 
 export interface EmailPreferences {
   enabled: boolean
-  sendTime: string              // "07:00" 24h format
   timezone: string              // IANA timezone, e.g. "America/New_York"
   frequency: "daily" | "weekdays" | "weekly"
   weeklyDay?: number            // 0–6 (Sun–Sat), only for "weekly"

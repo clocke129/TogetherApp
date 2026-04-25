@@ -22,22 +22,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useAuth } from "@/context/AuthContext"
 import type { EmailPreferences } from "@/lib/types"
 
-// Generate time options in 30-min increments from 5:00 to 22:00
-const TIME_OPTIONS = Array.from({ length: 35 }, (_, i) => {
-  const totalMins = 5 * 60 + i * 30
-  const h = Math.floor(totalMins / 60)
-  const m = totalMins % 60
-  const hh = String(h).padStart(2, '0')
-  const mm = String(m).padStart(2, '0')
-  const value = `${hh}:${mm}`
-  const label = new Date(2000, 0, 1, h, m).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
-  return { value, label }
-})
-
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 const US_TIMEZONES = [
@@ -52,7 +36,6 @@ const US_TIMEZONES = [
 
 const DEFAULT_PREFS: EmailPreferences = {
   enabled: false,
-  sendTime: '07:00',
   timezone: 'America/New_York',
   frequency: 'daily',
 }
@@ -148,24 +131,6 @@ export function EmailPreferencesDialog({ open, onOpenChange }: EmailPreferencesD
 
             {prefs.enabled && (
               <>
-                {/* Send time */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Time</Label>
-                  <Select
-                    value={prefs.sendTime}
-                    onValueChange={(v) => setPrefs(p => ({ ...p, sendTime: v }))}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-52">
-                      {TIME_OPTIONS.map(opt => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Timezone */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Timezone</Label>
