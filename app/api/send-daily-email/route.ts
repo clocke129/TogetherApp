@@ -8,23 +8,6 @@ import { DailyDigestEmail } from '@/emails/DailyDigestEmail'
 const resend = new Resend(process.env.RESEND_API_KEY)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://together-app-nine.vercel.app'
 
-// Returns "HH:MM" for the current time in a given IANA timezone
-function currentTimeInZone(timezone: string): string {
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).formatToParts(new Date())
-    const h = parts.find(p => p.type === 'hour')?.value ?? '00'
-    const m = parts.find(p => p.type === 'minute')?.value ?? '00'
-    return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
-  } catch {
-    return '00:00'
-  }
-}
-
 // Returns the day-of-week (0–6) in the user's timezone
 function currentDayInZone(timezone: string): number {
   try {
@@ -37,15 +20,6 @@ function currentDayInZone(timezone: string): number {
   } catch {
     return new Date().getDay()
   }
-}
-
-// Check if current time is within a 15-minute window of the target time
-function isWithinWindow(current: string, target: string): boolean {
-  const [ch, cm] = current.split(':').map(Number)
-  const [th, tm] = target.split(':').map(Number)
-  const currentMins = ch * 60 + cm
-  const targetMins = th * 60 + tm
-  return currentMins >= targetMins && currentMins < targetMins + 15
 }
 
 // Returns "YYYY-MM-DD" in the user's timezone
@@ -79,16 +53,10 @@ export async function POST(req: NextRequest) {
 
     try {
       const timezone = prefs.timezone ?? 'UTC'
-      const currentTime = currentTimeInZone(timezone)
       const today = todayInZone(timezone)
       const dayOfWeek = currentDayInZone(timezone)
 
-      // Skip if outside the send-time window (bypass in test mode)
       const testMode = req.headers.get('X-Test-Mode') === '1'
-      if (!testMode && !isWithinWindow(currentTime, prefs.sendTime ?? '07:00')) {
-        results.push({ uid, status: 'skipped:time' })
-        continue
-      }
 
       // Skip if already sent today (bypass in test mode)
       if (!testMode && prefs.lastSentDate === today) {
