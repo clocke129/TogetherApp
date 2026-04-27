@@ -29,8 +29,6 @@ export { Timestamp };
 export interface EmailPreferences {
   enabled: boolean
   timezone: string              // IANA timezone, e.g. "America/New_York"
-  frequency: "daily" | "weekdays" | "weekly"
-  weeklyDay?: number            // 0–6 (Sun–Sat), only for "weekly"
   lastSentDate?: string         // "YYYY-MM-DD" — prevents duplicate sends
 }
 

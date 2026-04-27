@@ -215,33 +215,20 @@ export async function calculateAndSaveDailyPrayerList(
 }
 
 /**
- * Calculates a preview of the daily prayer list for a future date WITHOUT writing to Firestore.
- * Used for date navigation — does not affect lastPrayedFor or the rotation.
+ * Pure function — computes the prayer list for a given date from provided groups/people.
+ * No Firestore reads or writes. Used for previewing future dates with chained simulation.
  */
-export async function previewDailyPrayerList(
-    db: Firestore,
-    userId: string,
-    targetDate: Date
-): Promise<Set<string>> {
-    const currentDayIndex = targetDate.getDay();
-
-    const [groupsSnapshot, peopleSnapshot] = await Promise.all([
-        getDocs(query(collection(db, "users", userId, "groups"))),
-        getDocs(query(collection(db, "users", userId, "persons")))
-    ]);
-
-    const fetchedGroups = groupsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Group));
-    const allPeople = peopleSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Person));
-
-    const personIdsToPrayFor = new Set<string>();
-    const activeGroups = fetchedGroups.filter(g => g.prayerDays?.includes(currentDayIndex));
+export function computeDayPreview(groups: Group[], people: Person[], targetDate: Date): Set<string> {
+    const dayIndex = targetDate.getDay();
+    const activeGroups = groups.filter(g => g.prayerDays?.includes(dayIndex));
+    const result = new Set<string>();
 
     activeGroups.forEach(group => {
         let groupPeople: Person[];
         if (group.isSystemGroup && group.name === "Everyone") {
-            groupPeople = allPeople.filter(p => !p.groupId);
+            groupPeople = people.filter(p => !p.groupId);
         } else {
-            groupPeople = allPeople.filter(p => p.groupId === group.id);
+            groupPeople = people.filter(p => p.groupId === group.id);
         }
         if (groupPeople.length === 0) return;
 
@@ -250,11 +237,10 @@ export async function previewDailyPrayerList(
             ? groupPeople.length
             : Math.min(numPerDaySetting, groupPeople.length);
 
-        const sorted = sortByLastPrayedFor(groupPeople);
-        sorted.slice(0, actualNum).forEach(p => personIdsToPrayFor.add(p.id));
+        sortByLastPrayedFor(groupPeople).slice(0, actualNum).forEach(p => result.add(p.id));
     });
 
-    return personIdsToPrayFor;
+    return result;
 }
 
 /**

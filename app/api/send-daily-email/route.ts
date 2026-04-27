@@ -8,20 +8,6 @@ import { DailyDigestEmail } from '@/emails/DailyDigestEmail'
 const resend = new Resend(process.env.RESEND_API_KEY)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://together-app-nine.vercel.app'
 
-// Returns the day-of-week (0–6) in the user's timezone
-function currentDayInZone(timezone: string): number {
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      weekday: 'short',
-    })
-    const day = formatter.format(new Date())
-    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(day)
-  } catch {
-    return new Date().getDay()
-  }
-}
-
 // Returns "YYYY-MM-DD" in the user's timezone
 function todayInZone(timezone: string): string {
   try {
@@ -54,23 +40,12 @@ export async function POST(req: NextRequest) {
     try {
       const timezone = prefs.timezone ?? 'UTC'
       const today = todayInZone(timezone)
-      const dayOfWeek = currentDayInZone(timezone)
 
       const testMode = req.headers.get('X-Test-Mode') === '1'
 
       // Skip if already sent today (bypass in test mode)
       if (!testMode && prefs.lastSentDate === today) {
         results.push({ uid, status: 'skipped:already_sent' })
-        continue
-      }
-
-      // Frequency checks
-      if (prefs.frequency === 'weekdays' && (dayOfWeek === 0 || dayOfWeek === 6)) {
-        results.push({ uid, status: 'skipped:weekend' })
-        continue
-      }
-      if (prefs.frequency === 'weekly' && prefs.weeklyDay !== dayOfWeek) {
-        results.push({ uid, status: 'skipped:wrong_day' })
         continue
       }
 

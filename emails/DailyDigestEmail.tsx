@@ -70,6 +70,9 @@ export function DailyDigestEmail({
             <Button href={`${appUrl}/prayer`} style={ctaButton}>
               Open Today's List →
             </Button>
+            <Button href={`${appUrl}/followups`} style={secondaryButton}>
+              View Follow-Ups →
+            </Button>
           </Section>
 
           <Hr style={divider} />
@@ -181,6 +184,19 @@ const ctaButton: React.CSSProperties = {
   padding: '12px 28px',
   textDecoration: 'none',
   display: 'inline-block',
+  marginBottom: '8px',
+}
+
+const secondaryButton: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  borderRadius: '6px',
+  color: '#8A9A80',
+  fontSize: '14px',
+  fontWeight: '600',
+  padding: '10px 28px',
+  textDecoration: 'none',
+  display: 'inline-block',
+  border: '1.5px solid #8A9A80',
 }
 
 const footerText: React.CSSProperties = {

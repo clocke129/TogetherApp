@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -18,11 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useAuth } from "@/context/AuthContext"
 import type { EmailPreferences } from "@/lib/types"
-
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 const US_TIMEZONES = [
   { value: 'America/New_York',    label: 'Eastern'  },
@@ -37,7 +33,6 @@ const US_TIMEZONES = [
 const DEFAULT_PREFS: EmailPreferences = {
   enabled: false,
   timezone: 'America/New_York',
-  frequency: 'daily',
 }
 
 interface EmailPreferencesDialogProps {
@@ -52,7 +47,6 @@ export function EmailPreferencesDialog({ open, onOpenChange }: EmailPreferencesD
   const [isLoading, setIsLoading] = useState(false)
   const [savedMessage, setSavedMessage] = useState(false)
 
-  // Fetch current preferences when dialog opens
   useEffect(() => {
     if (!open || !user) return
     setIsLoading(true)
@@ -67,13 +61,9 @@ export function EmailPreferencesDialog({ open, onOpenChange }: EmailPreferencesD
           if (data) {
             setPrefs({ ...DEFAULT_PREFS, ...data })
           } else {
-            // First time — auto-detect timezone, snap to nearest US option
             const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
             const matched = US_TIMEZONES.find(tz => tz.value === detected)?.value ?? 'America/New_York'
-            setPrefs({
-              ...DEFAULT_PREFS,
-              timezone: matched,
-            })
+            setPrefs({ ...DEFAULT_PREFS, timezone: matched })
           }
         }
       } catch (err) {
@@ -117,7 +107,6 @@ export function EmailPreferencesDialog({ open, onOpenChange }: EmailPreferencesD
           <div className="py-8 text-center text-sm text-muted-foreground">Loading...</div>
         ) : (
           <div className="space-y-5 py-2">
-            {/* Enable toggle */}
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="email-toggle" className="text-sm font-normal cursor-pointer leading-snug">
                 Send me a daily prayer list
@@ -130,66 +119,24 @@ export function EmailPreferencesDialog({ open, onOpenChange }: EmailPreferencesD
             </div>
 
             {prefs.enabled && (
-              <>
-                {/* Timezone */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Timezone</Label>
-                  <Select
-                    value={prefs.timezone}
-                    onValueChange={(v) => setPrefs(p => ({ ...p, timezone: v }))}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {US_TIMEZONES.map(tz => (
-                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Frequency */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Frequency</Label>
-                  <RadioGroup
-                    value={prefs.frequency}
-                    onValueChange={(v) => setPrefs(p => ({ ...p, frequency: v as EmailPreferences['frequency'] }))}
-                    className="space-y-1.5"
-                  >
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="daily" id="freq-daily" />
-                      <Label htmlFor="freq-daily" className="text-sm font-normal cursor-pointer">Daily</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="weekdays" id="freq-weekdays" />
-                      <Label htmlFor="freq-weekdays" className="text-sm font-normal cursor-pointer">Weekdays only</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="weekly" id="freq-weekly" />
-                      <Label htmlFor="freq-weekly" className="text-sm font-normal cursor-pointer">Weekly</Label>
-                      {prefs.frequency === 'weekly' && (
-                        <Select
-                          value={String(prefs.weeklyDay ?? 1)}
-                          onValueChange={(v) => setPrefs(p => ({ ...p, weeklyDay: Number(v) }))}
-                        >
-                          <SelectTrigger className="h-7 w-32 text-xs ml-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DAY_NAMES.map((day, i) => (
-                              <SelectItem key={i} value={String(i)}>{day}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  </RadioGroup>
-                </div>
-              </>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Timezone</Label>
+                <Select
+                  value={prefs.timezone}
+                  onValueChange={(v) => setPrefs(p => ({ ...p, timezone: v }))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {US_TIMEZONES.map(tz => (
+                      <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
-            {/* Save button */}
             <Button
               className="w-full bg-shrub hover:bg-shrub/90"
               onClick={handleSave}

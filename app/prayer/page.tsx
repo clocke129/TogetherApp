@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/carousel"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import { getUrgencyLevel, formatFollowUpDate, sortFollowUpsByUrgency } from "@/lib/followUpUtils"
-import { calculateAndSaveDailyPrayerList, previewDailyPrayerList, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
+import { calculateAndSaveDailyPrayerList, computeDayPreview, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
 
 // Firestore and Auth Imports
 import { useAuth } from '@/context/AuthContext'
@@ -490,7 +490,7 @@ export default function PrayerPage() {
       )
       setAllUserPeople(peopleWithRequests)
 
-      let dateIds: Set<string>
+      let dateIds: Set<string> = new Set()
 
       if (dateKey === today) {
         // Today: use existing full logic
@@ -505,8 +505,27 @@ export default function PrayerPage() {
           dateIds = new Set<string>()
         }
       } else {
-        // Future: calculate preview without writing
-        dateIds = await previewDailyPrayerList(db, userId, date)
+        // Future: chain simulations from tomorrow to targetDate
+        // Each day's result updates virtual lastPrayedFor so the next day rotates correctly
+        let simulatedPeople = [...fetchedPeople]
+        const cursor = new Date()
+        cursor.setDate(cursor.getDate() + 1)
+        cursor.setHours(0, 0, 0, 0)
+        const target = new Date(dateKey)
+        target.setHours(0, 0, 0, 0)
+
+        while (cursor <= target) {
+          const ids = computeDayPreview(fetchedGroups, simulatedPeople, cursor)
+          if (cursor.toISOString().split('T')[0] === dateKey) {
+            dateIds = ids
+            break
+          }
+          // Simulate lastPrayedFor update so next day rotates correctly
+          simulatedPeople = simulatedPeople.map(p =>
+            ids.has(p.id) ? { ...p, lastPrayedFor: Timestamp.fromDate(new Date(cursor)) } : p
+          )
+          cursor.setDate(cursor.getDate() + 1)
+        }
       }
 
       const groups = buildTodaysGroups(fetchedGroups, peopleWithRequests, dateIds, dayIndex)
