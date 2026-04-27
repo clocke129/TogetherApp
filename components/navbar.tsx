@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation" // Add useRouter back
-import { FileText, Calendar, Users, Settings, Heart, LogOut, User as UserIcon, LogIn, Mail } from "lucide-react" // Add icons back
+import { Calendar, Users, Heart, LogOut, User as UserIcon, LogIn, Mail, BookOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModeToggle } from "@/components/mode-toggle"
 import { useAuth } from "@/context/AuthContext" // Import useAuth
@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { LucideIcon } from "lucide-react";
 import React, { useEffect, useState } from "react"; // Import useEffect
 import { EmailPreferencesDialog } from "@/components/email-preferences-dialog"
+import { GettingStartedOverlay, useGettingStarted } from "@/components/getting-started-overlay"
 
 // Define an interface for nav items
 interface NavItem {
@@ -34,6 +35,7 @@ export default function Navbar() {
   const router = useRouter() // Add router hook back
   const { user, loading } = useAuth() // Get user and loading state
   const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const { open: gettingStartedOpen, setOpen: setGettingStartedOpen } = useGettingStarted()
 
   // --- Add this useEffect Hook --- 
   useEffect(() => {
@@ -116,6 +118,11 @@ export default function Navbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setGettingStartedOpen(true)} className="cursor-pointer">
+              <BookOpen className="mr-2 h-4 w-4" />
+              <span>Getting Started</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
@@ -184,6 +191,10 @@ export default function Navbar() {
         {user && (
           <EmailPreferencesDialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen} />
         )}
+        <GettingStartedOverlay
+          open={gettingStartedOpen}
+          onClose={() => setGettingStartedOpen(false)}
+        />
       </div>
 
       {/* Mobile navigation */}
