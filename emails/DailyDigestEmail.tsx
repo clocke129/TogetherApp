@@ -197,6 +197,7 @@ const secondaryButton: React.CSSProperties = {
   textDecoration: 'none',
   display: 'inline-block',
   border: '1.5px solid #8A9A80',
+  marginLeft: '12px',
 }
 
 const footerText: React.CSSProperties = {
