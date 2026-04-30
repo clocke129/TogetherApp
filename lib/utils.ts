@@ -258,6 +258,69 @@ export async function previewDailyPrayerList(
 }
 
 /**
+ * Pure function — computes who would be prayed for on a given date
+ * given a snapshot of people (with their current lastPrayedFor values).
+ * No Firestore reads or writes.
+ */
+export function computeDayPreview(groups: Group[], people: Person[], date: Date): Set<string> {
+    const dayIndex = date.getDay()
+    const activeGroups = groups.filter(g => g.prayerDays?.includes(dayIndex))
+    const result = new Set<string>()
+
+    activeGroups.forEach(group => {
+        let groupPeople: Person[]
+        if (group.isSystemGroup && group.name === "Everyone") {
+            groupPeople = people.filter(p => !p.groupId)
+        } else {
+            groupPeople = people.filter(p => p.groupId === group.id)
+        }
+        if (groupPeople.length === 0) return
+
+        const numPerDaySetting = group.prayerSettings?.numPerDay ?? null
+        const actualNum = numPerDaySetting === null
+            ? groupPeople.length
+            : Math.min(numPerDaySetting, groupPeople.length)
+
+        sortByLastPrayedFor(groupPeople).slice(0, actualNum).forEach(p => result.add(p.id))
+    })
+
+    return result
+}
+
+/**
+ * Simulates prayer list rotation from tomorrow through a future target date.
+ * Returns the predicted Set of person IDs for the target date.
+ * Pure function — no Firestore access.
+ */
+export function simulateFutureDays(
+    groups: Group[],
+    people: Person[],
+    targetDateKey: string  // 'YYYY-MM-DD' in local time
+): Set<string> {
+    const [y, m, d] = targetDateKey.split('-').map(Number)
+    const target = new Date(y, m - 1, d)  // local midnight — avoids UTC parsing bug
+
+    const cursor = new Date()
+    cursor.setDate(cursor.getDate() + 1)
+    cursor.setHours(0, 0, 0, 0)  // tomorrow, local midnight
+
+    let simulatedPeople = [...people]
+
+    // Simulate all intervening days, updating lastPrayedFor as we go
+    while (cursor < target) {
+        const ids = computeDayPreview(groups, simulatedPeople, cursor)
+        const prayedAt = Timestamp.fromDate(new Date(cursor))  // snapshot cursor value before advancing
+        simulatedPeople = simulatedPeople.map(p =>
+            ids.has(p.id) ? { ...p, lastPrayedFor: prayedAt } : p
+        )
+        cursor.setDate(cursor.getDate() + 1)
+    }
+
+    // Compute the target date with the fully simulated state
+    return computeDayPreview(groups, simulatedPeople, target)
+}
+
+/**
  * Ensures the "Everyone" system group exists for the user.
  * Creates it with default settings if it doesn't exist.
  * This group is special - it shows all uncategorized people (groupId === null).

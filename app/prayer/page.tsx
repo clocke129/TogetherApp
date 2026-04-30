@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/carousel"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import { getUrgencyLevel, formatFollowUpDate, sortFollowUpsByUrgency } from "@/lib/followUpUtils"
-import { calculateAndSaveDailyPrayerList, previewDailyPrayerList, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
+import { calculateAndSaveDailyPrayerList, simulateFutureDays, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
 
 // Firestore and Auth Imports
 import { useAuth } from '@/context/AuthContext'
@@ -505,8 +505,8 @@ export default function PrayerPage() {
           dateIds = new Set<string>()
         }
       } else {
-        // Future: calculate preview without writing
-        dateIds = await previewDailyPrayerList(db, userId, date)
+        // Future: simulate rotation through intervening days to get accurate preview
+        dateIds = simulateFutureDays(fetchedGroups, fetchedPeople, dateKey)
       }
 
       const groups = buildTodaysGroups(fetchedGroups, peopleWithRequests, dateIds, dayIndex)
