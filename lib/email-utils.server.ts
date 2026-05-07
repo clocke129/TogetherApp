@@ -81,14 +81,27 @@ export async function buildDailyDigestData(userId: string, targetDate: Date): Pr
 
     personIds = Array.from(selectedIds)
 
-    // Save the list so the client finds it when the user opens the app
-    await dailyListRef.set({
+    // Save the list and update lastPrayedFor so rotation advances correctly.
+    // Must mirror what calculateAndSaveDailyPrayerList does on the client —
+    // without this update, the client finds the cached list and skips its own
+    // lastPrayedFor update, causing the same person to appear every day.
+    const batch = adminDb.batch()
+
+    batch.set(dailyListRef, {
       userId,
       date: dateKey,
       personIds,
       settingsSnapshot,
       createdAt: new Date(),
     })
+
+    const prayedAt = targetDate
+    personIds.forEach(personId => {
+      const personRef = adminDb.doc(`users/${userId}/persons/${personId}`)
+      batch.update(personRef, { lastPrayedFor: prayedAt })
+    })
+
+    await batch.commit()
   }
 
   if (personIds.length === 0) {
