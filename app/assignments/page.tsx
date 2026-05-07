@@ -48,6 +48,7 @@ import {
   RadioGroupItem
 } from "@/components/ui/radio-group"
 import { SortableGroupCard } from "../../src/components/ui/sortable-group-card";
+import { WeeklyScheduleDialog } from "@/components/WeeklyScheduleDialog"
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -147,6 +148,8 @@ export default function AssignmentsPage() {
   const [showAllRequests, setShowAllRequests] = useState(false);
   const [showAllFollowUps, setShowAllFollowUps] = useState(false);
 
+
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false)
 
   const [currentDateString] = useState(() => {
     const today = new Date();
@@ -549,7 +552,45 @@ export default function AssignmentsPage() {
     }
   };
 
-  // --- Functions for Person Actions --- 
+  // --- Weekly Schedule batch save ---
+  const handleScheduleSave = async (changes: Record<string, { prayerDays: number[]; numPerDay: number | null }>) => {
+    if (!user) return
+    const batch = writeBatch(db)
+
+    Object.entries(changes).forEach(([groupId, state]) => {
+      const groupRef = doc(db, "users", user.uid, "groups", groupId)
+      const group = groups.find(g => g.id === groupId)
+      if (!group) return
+
+      const existingSettings = group.prayerSettings ?? { strategy: "sequential", numPerDay: null, nextIndex: 0 }
+      batch.update(groupRef, {
+        prayerDays: state.prayerDays,
+        prayerSettings: { ...existingSettings, numPerDay: state.numPerDay },
+      })
+    })
+
+    await batch.commit()
+
+    // Update local state
+    setGroups(prev => prev.map(g => {
+      const change = changes[g.id]
+      if (!change) return g
+      return {
+        ...g,
+        prayerDays: change.prayerDays,
+        prayerSettings: { ...(g.prayerSettings ?? { strategy: "sequential", numPerDay: null, nextIndex: 0 }), numPerDay: change.numPerDay },
+      }
+    }))
+    setLocalNumPerDaySettings(prev => {
+      const updated = { ...prev }
+      Object.entries(changes).forEach(([groupId, state]) => {
+        updated[groupId] = state.numPerDay
+      })
+      return updated
+    })
+  }
+
+  // --- Functions for Person Actions ---
   const openPersonActionsDialog = (person: Person) => {
     setSelectedPerson(person);
     setIsPersonActionsDialogOpen(true);
@@ -1270,6 +1311,15 @@ export default function AssignmentsPage() {
         </div>
         {/* Right side: Add Group Button */}
         <div className="flex items-center gap-2">
+            <Button
+               variant="ghost"
+               size="icon"
+               onClick={() => setIsScheduleDialogOpen(true)}
+               className="hidden md:flex text-muted-foreground hover:text-foreground"
+               title="Weekly Schedule"
+            >
+               <CalendarIcon className="h-5 w-5" />
+            </Button>
             <Button
                variant="default"
                size="sm"
@@ -2180,6 +2230,14 @@ export default function AssignmentsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <WeeklyScheduleDialog
+        open={isScheduleDialogOpen}
+        onOpenChange={setIsScheduleDialogOpen}
+        groups={groups}
+        people={people}
+        onSave={handleScheduleSave}
+      />
 
     </div>
   )
