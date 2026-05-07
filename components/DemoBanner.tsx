@@ -30,12 +30,12 @@ export function DemoBanner({ page }: DemoBannerProps) {
   }
 
   return (
-    <div className="mb-4 rounded-lg border border-shrub/30 bg-shrub/10 px-4 py-3 flex items-start gap-3">
-      <Sparkles className="h-4 w-4 text-shrub mt-0.5 shrink-0" />
-      <div className="flex-1 min-w-0">
+    <div className="mb-4 rounded-lg border border-shrub/30 bg-shrub/10 px-4 py-3">
+      <div className="flex items-start gap-3">
+        <Sparkles className="h-4 w-4 text-shrub mt-0.5 shrink-0" />
         <p className="text-sm text-foreground">{MESSAGES[page]}</p>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 mt-2 ml-7">
         {page !== 'groups' && (
           <Button
             size="sm"
