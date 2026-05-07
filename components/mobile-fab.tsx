@@ -444,9 +444,10 @@ export function MobileFAB() {
         ref={textareaRef}
         value={text}
         onChange={handleTextChange}
-        placeholder={`Type your prayer notes here...
-Use @PersonName to mention someone.
-Use #MMDD for follow-up dates.`}
+        placeholder={`Use @PersonName to mention someone.
+Type under their name to add a prayer request.
+Use #MMDD for follow-up dates.
+Start a new @Name on a new line to add multiple people.`}
         className="w-full p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-shrub min-h-[200px] resize-none"
         minRows={8}
       />

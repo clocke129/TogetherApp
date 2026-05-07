@@ -5,6 +5,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import Navbar from "@/components/navbar"
 import { AuthProvider } from "@/context/AuthContext"
+import { DemoDataProvider } from "@/context/DemoDataContext"
 import { Toaster } from "@/components/ui/sonner"
 import { MobileFAB } from "@/components/mobile-fab"
 
@@ -30,15 +31,17 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <AuthProvider>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-            <div className="flex min-h-screen flex-col">
-              <Navbar />
-              <main className="flex-1">{children}</main>
-              <div className="h-16 md:hidden"></div> {/* Spacer for mobile navigation */}
-              <MobileFAB />
-              <Toaster richColors />
-            </div>
-          </ThemeProvider>
+          <DemoDataProvider>
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+              <div className="flex min-h-screen flex-col">
+                <Navbar />
+                <main className="flex-1">{children}</main>
+                <div className="h-16 md:hidden"></div> {/* Spacer for mobile navigation */}
+                <MobileFAB />
+                <Toaster richColors />
+              </div>
+            </ThemeProvider>
+          </DemoDataProvider>
         </AuthProvider>
       </body>
     </html>

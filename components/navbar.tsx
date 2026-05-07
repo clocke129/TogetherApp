@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation" // Add useRouter back
-import { Calendar, Users, Heart, LogOut, User as UserIcon, LogIn, Mail, BookOpen } from "lucide-react"
+import { Calendar, Users, Heart, LogOut, User as UserIcon, LogIn, Mail, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ModeToggle } from "@/components/mode-toggle"
 import { useAuth } from "@/context/AuthContext" // Import useAuth
@@ -21,7 +21,17 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { LucideIcon } from "lucide-react";
 import React, { useEffect, useState } from "react"; // Import useEffect
 import { EmailPreferencesDialog } from "@/components/email-preferences-dialog"
-import { GettingStartedOverlay, useGettingStarted } from "@/components/getting-started-overlay"
+import { useDemoData } from "@/context/DemoDataContext"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // Define an interface for nav items
 interface NavItem {
@@ -34,8 +44,10 @@ export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter() // Add router hook back
   const { user, loading } = useAuth() // Get user and loading state
+  const { resetAccount } = useDemoData()
   const [emailDialogOpen, setEmailDialogOpen] = useState(false)
-  const { open: gettingStartedOpen, setOpen: setGettingStartedOpen } = useGettingStarted()
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
 
   // --- Add this useEffect Hook --- 
   useEffect(() => {
@@ -91,6 +103,12 @@ export default function Navbar() {
     }
   };
 
+  const handleResetAccount = async () => {
+    setIsResetting(true)
+    await resetAccount()
+    window.location.reload()
+  }
+
   // Re-add renderUserAuth function
   const renderUserAuth = () => {
     // Show loading indicator
@@ -118,9 +136,9 @@ export default function Navbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setGettingStartedOpen(true)} className="cursor-pointer">
-              <BookOpen className="mr-2 h-4 w-4" />
-              <span>Getting Started</span>
+            <DropdownMenuItem onClick={() => setResetDialogOpen(true)} className="cursor-pointer">
+              <RotateCcw className="mr-2 h-4 w-4" />
+              <span>Reset account</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
@@ -191,10 +209,22 @@ export default function Navbar() {
         {user && (
           <EmailPreferencesDialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen} />
         )}
-        <GettingStartedOverlay
-          open={gettingStartedOpen}
-          onClose={() => setGettingStartedOpen(false)}
-        />
+        <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will delete all your people, groups, and prayer history, and restore the demo data. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleResetAccount} disabled={isResetting}>
+                {isResetting ? 'Resetting...' : 'Reset account'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Mobile navigation */}

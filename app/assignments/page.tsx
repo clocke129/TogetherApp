@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/radio-group"
 import { SortableGroupCard } from "../../src/components/ui/sortable-group-card";
 import { WeeklyScheduleDialog } from "@/components/WeeklyScheduleDialog"
+import { DemoBanner } from "@/components/DemoBanner"
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -394,8 +395,8 @@ export default function AssignmentsPage() {
      const batch = writeBatch(db);
 
      try {
-       // 1. Update Person: Set the groupId field
-       batch.update(personRef, { groupId: groupId });
+       // 1. Update Person: Set the groupId field (strip isDemo if present)
+       batch.update(personRef, { groupId: groupId, isDemo: deleteField() });
 
        // 2. Update New Group: Add personId to the personIds array
        batch.update(groupRef, { personIds: arrayUnion(personId) });
@@ -458,9 +459,8 @@ export default function AssignmentsPage() {
      const batch = writeBatch(db);
 
      try {
-       // 1. Update Person: Remove the groupId field
-       // Using update with deleteField() is safer than setting to null if field might not exist
-       batch.update(personRef, { groupId: deleteField() });
+       // 1. Update Person: Remove the groupId field (also strip isDemo if present)
+       batch.update(personRef, { groupId: deleteField(), isDemo: deleteField() });
 
        // 2. Update Group: Remove personId from the personIds array
        batch.update(groupRef, { personIds: arrayRemove(personId) });
@@ -1331,6 +1331,8 @@ export default function AssignmentsPage() {
             </Button>
         </div>
       </div>
+
+      <DemoBanner page="groups" />
 
       {/* Display error if update failed */}
       {updateError && (

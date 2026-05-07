@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select"
 import { useAuth } from "@/context/AuthContext"
+import { DemoBanner } from "@/components/DemoBanner"
 import { db } from "@/lib/firebaseConfig"
 import {
   collection,
@@ -559,6 +560,8 @@ export default function FollowupsPage() {
   // Logged In State (Original Return Content)
   return (
     <div className="mobile-container pb-16 md:pb-6">
+      <DemoBanner page="followups" />
+
       {/* Consistent Header */}
       <div className="mb-4 md:mb-6 flex items-center justify-between">
         <div className="flex flex-col">

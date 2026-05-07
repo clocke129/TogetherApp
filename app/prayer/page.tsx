@@ -36,6 +36,9 @@ import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import { getUrgencyLevel, formatFollowUpDate, sortFollowUpsByUrgency } from "@/lib/followUpUtils"
 import { calculateAndSaveDailyPrayerList, simulateFutureDays, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
 
+import { DemoBanner } from '@/components/DemoBanner'
+import { useDemoData } from '@/context/DemoDataContext'
+
 // Firestore and Auth Imports
 import { useAuth } from '@/context/AuthContext'
 import { db } from '@/lib/firebaseConfig'
@@ -56,6 +59,7 @@ interface TodayGroup {
 
 export default function PrayerPage() {
   const { user, loading: authLoading } = useAuth()
+  const { isLoading: demoIsLoading } = useDemoData()
   const effectRan = useRef(false)
 
   const todayKey = new Date().toISOString().split('T')[0]
@@ -331,7 +335,7 @@ export default function PrayerPage() {
   // ----------------------------------------------------------------
   useEffect(() => {
     if (effectRan.current === true || process.env.NODE_ENV !== 'development') {
-      if (!authLoading && user) {
+      if (!authLoading && user && !demoIsLoading) {
         refreshPrayerList()
       } else if (!authLoading && !user) {
         setLoadingData(false)
@@ -341,7 +345,7 @@ export default function PrayerPage() {
       }
     }
     return () => { effectRan.current = true }
-  }, [user, authLoading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, authLoading, demoIsLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ----------------------------------------------------------------
   // Follow-up completion
@@ -613,6 +617,8 @@ export default function PrayerPage() {
           Prayer
         </Button>
       </div>
+
+      <DemoBanner page="today" />
 
       {loadingData ? (
         <div className="text-center py-10 text-muted-foreground">Loading prayer list...</div>
