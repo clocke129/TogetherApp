@@ -61,17 +61,22 @@ export async function buildDailyDigestData(userId: string, targetDate: Date): Pr
 
     activeGroups.forEach((group: any) => {
       let groupPeople: any[]
+      let totalPeople: number
       if (group.isSystemGroup && group.name === 'Everyone') {
         groupPeople = allPeople.filter((p: any) => !p.groupId)
+        totalPeople = groupPeople.length
       } else {
         groupPeople = allPeople.filter((p: any) => p.groupId === group.id)
+        // Use personIds.length to match the client's snapshot validation logic,
+        // so the client doesn't see a mismatch and recalculate with different people.
+        totalPeople = (group.personIds ?? []).length
       }
       if (groupPeople.length === 0) return
 
       const numPerDaySetting = group.prayerSettings?.numPerDay ?? null
       const actualNum = numPerDaySetting === null
-        ? groupPeople.length
-        : Math.min(numPerDaySetting, groupPeople.length)
+        ? totalPeople
+        : Math.min(numPerDaySetting, totalPeople)
 
       settingsSnapshot[group.id] = { numPerDay: actualNum }
 
