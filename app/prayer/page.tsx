@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/carousel"
 import type { Person, Group, PrayerRequest, FollowUp } from '@/lib/types'
 import { getUrgencyLevel, formatFollowUpDate, sortFollowUpsByUrgency } from "@/lib/followUpUtils"
-import { calculateAndSaveDailyPrayerList, simulateFutureDays, parseMapWithSets, stringifyMapWithSets } from "@/lib/utils"
+import { calculateAndSaveDailyPrayerList, simulateFutureDays, parseMapWithSets, stringifyMapWithSets, localDateKey } from "@/lib/utils"
 
 import { DemoBanner } from '@/components/DemoBanner'
 import { useDemoData } from '@/context/DemoDataContext'
@@ -62,9 +62,9 @@ export default function PrayerPage() {
   const { isLoading: demoIsLoading } = useDemoData()
   const effectRan = useRef(false)
 
-  const todayKey = new Date().toISOString().split('T')[0]
+  const todayKey = localDateKey(new Date())
   const [viewingDate, setViewingDate] = useState<Date>(() => new Date())
-  const viewingDateKey = viewingDate.toISOString().split('T')[0]
+  const viewingDateKey = localDateKey(viewingDate)
   const isToday = viewingDateKey === todayKey
 
   const daysFromToday = Math.round(
@@ -234,7 +234,7 @@ export default function PrayerPage() {
     const userId = user.uid
     const today = new Date()
     const dayIndex = today.getDay()
-    const dateKey = today.toISOString().split('T')[0]
+    const dateKey = localDateKey(today)
 
     setLoadingData(true)
     try {
@@ -468,9 +468,9 @@ export default function PrayerPage() {
   const loadDateList = async (date: Date) => {
     if (!user) return
     const userId = user.uid
-    const dateKey = date.toISOString().split('T')[0]
+    const dateKey = localDateKey(date)
     const dayIndex = date.getDay()
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDateKey(new Date())
 
     setLoadingData(true)
     try {

@@ -8,6 +8,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Returns YYYY-MM-DD in the user's LOCAL timezone.
+ * Use this instead of toISOString().split('T')[0] which gives the UTC date —
+ * that causes the app to think it's "tomorrow" after 5 PM PDT (midnight UTC).
+ */
+export function localDateKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 // Format date for display (e.g., "Mar 31")
 export const formatDate = (date: Date | undefined): string => {
   if (!date) return "";
@@ -59,7 +71,7 @@ export async function calculateAndSaveDailyPrayerList(
 ): Promise<Set<string>> {
 
     const currentDayIndex = targetDate.getDay();
-    const dateKey = targetDate.toISOString().split('T')[0];
+    const dateKey = localDateKey(targetDate);
     const dailyListRef = doc(db, "users", userId, "dailyPrayerLists", dateKey); // Declare once, reuse throughout
     console.log(`[Calculation Function] Starting for User: ${userId}, Date: ${dateKey}, DayIndex: ${currentDayIndex}`);
 
