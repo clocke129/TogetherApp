@@ -162,11 +162,17 @@ export async function calculateAndSaveDailyPrayerList(
         activeGroups.forEach(group => {
             // Get people in group (handles Everyone group dynamically)
             let groupPeople: Person[]
+            let totalPeople: number
             if (group.isSystemGroup && group.name === "Everyone") {
                 groupPeople = allPeople.filter(p => !p.groupId)
+                totalPeople = groupPeople.length
                 console.log(`[Calculation Function] Everyone group: ${groupPeople.length} people without groupId`)
             } else {
                 groupPeople = allPeople.filter(p => p.groupId === group.id)
+                // Use personIds.length to match the validation path and email snapshot logic.
+                // This keeps the snapshot consistent so validation doesn't incorrectly
+                // trigger a recalculation on the next load.
+                totalPeople = (group.personIds ?? []).length
             }
 
             if (groupPeople.length === 0) {
@@ -177,8 +183,8 @@ export async function calculateAndSaveDailyPrayerList(
             const settings = group.prayerSettings;
             const numPerDaySetting = settings?.numPerDay ?? null;
             const actualNumToAssign = numPerDaySetting === null
-                ? groupPeople.length
-                : Math.min(numPerDaySetting, groupPeople.length);
+                ? totalPeople
+                : Math.min(numPerDaySetting, totalPeople);
 
             // Record the setting for this group in the snapshot
             settingsSnapshot[group.id] = { numPerDay: actualNumToAssign };
