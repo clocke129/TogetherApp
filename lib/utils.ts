@@ -76,64 +76,20 @@ export async function calculateAndSaveDailyPrayerList(
     console.log(`[Calculation Function] Starting for User: ${userId}, Date: ${dateKey}, DayIndex: ${currentDayIndex}`);
 
     try {
-        // CRITICAL FIX: Check if daily list already exists in Firestore
+        // If a list already exists for today, use it — no recalculation within the same day.
+        // Snapshot comparison was removed: the JSON.stringify(obj, arrayReplacer) pattern
+        // strips nested values, so it only ever compared group IDs — not numPerDay settings.
+        // This made it brittle to cross-day group differences (e.g. timezone-bug-corrupted
+        // lists stored with Monday's groups, validated on Tuesday), causing spurious rotation.
         const existingListSnap = await getDoc(dailyListRef);
 
         if (existingListSnap.exists()) {
-            console.log(`[Calculation Function] Found existing list for ${dateKey}. Validating settings...`);
-
-            const existingData = existingListSnap.data();
-            const storedPersonIds = new Set<string>(existingData.personIds || []);
-            const storedSettingsSnapshot = existingData.settingsSnapshot || {};
-
-            // Fetch current groups to validate settings
-            const groupsQuery = query(collection(db, "users", userId, "groups"));
-            const groupsSnapshot = await getDocs(groupsQuery);
-            const fetchedGroups = groupsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Group));
-
-            // Build current settings snapshot
-            const currentSettingsSnapshot: Record<string, { numPerDay: number | null }> = {};
-            const activeGroups = fetchedGroups.filter(group => group.prayerDays?.includes(currentDayIndex));
-
-            // Fetch all people to handle Everyone group correctly
-            const peopleQuery = query(collection(db, "users", userId, "persons"));
-            const peopleSnapshot = await getDocs(peopleQuery);
-            const allPeople = peopleSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Person));
-
-            activeGroups.forEach(group => {
-                let totalPeople: number;
-
-                // Handle Everyone group specially (has empty personIds array)
-                if (group.isSystemGroup && group.name === "Everyone") {
-                    totalPeople = allPeople.filter(p => !p.groupId).length;
-                } else {
-                    const groupPersonIds = group.personIds ?? [];
-                    totalPeople = groupPersonIds.length;
-                }
-
-                if (totalPeople > 0) {
-                    const settings = group.prayerSettings;
-                    const numPerDaySetting = settings?.numPerDay ?? null;
-                    const actualNumToAssign = numPerDaySetting === null ? totalPeople : Math.min(numPerDaySetting, totalPeople);
-                    currentSettingsSnapshot[group.id] = { numPerDay: actualNumToAssign };
-                }
-            });
-
-            // Compare snapshots
-            const storedSnapshotString = JSON.stringify(storedSettingsSnapshot, Object.keys(storedSettingsSnapshot).sort());
-            const currentSnapshotString = JSON.stringify(currentSettingsSnapshot, Object.keys(currentSettingsSnapshot).sort());
-
-            if (storedSnapshotString === currentSnapshotString) {
-                console.log(`[Calculation Function] Settings unchanged. Returning cached list (${storedPersonIds.size} people).`);
-                return storedPersonIds; // Return cached list WITHOUT recalculating
-            } else {
-                console.log(`[Calculation Function] Settings changed. Recalculating...`);
-                console.log(`[Calculation Function] Stored: ${storedSnapshotString}`);
-                console.log(`[Calculation Function] Current: ${currentSnapshotString}`);
-            }
-        } else {
-            console.log(`[Calculation Function] No existing list found. Proceeding with calculation...`);
+            const storedPersonIds = new Set<string>(existingListSnap.data().personIds || []);
+            console.log(`[Calculation Function] Found existing list for ${dateKey}. Returning ${storedPersonIds.size} people.`);
+            return storedPersonIds;
         }
+
+        console.log(`[Calculation Function] No existing list found. Proceeding with calculation...`);
 
         // If we reach here, we need to calculate (either no list exists or settings changed)
         console.log(`[Calculation Function] Fetching groups for calculation...`);

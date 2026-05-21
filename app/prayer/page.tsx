@@ -273,35 +273,11 @@ export default function PrayerPage() {
       const dailyListSnap = await getDoc(dailyListRef)
 
       if (dailyListSnap.exists()) {
-        const data = dailyListSnap.data()
-        const storedIds = new Set<string>(data.personIds || [])
-        const storedSnapshot = data.settingsSnapshot || {}
-
-        // Build current settings snapshot to validate
-        const currentSnapshot: Record<string, { numPerDay: number | null }> = {}
-        const activeGroups = fetchedGroups.filter(g => g.prayerDays?.includes(dayIndex))
-        activeGroups.forEach(group => {
-          let totalPeople: number
-          if (group.isSystemGroup && group.name === "Everyone") {
-            totalPeople = fetchedPeople.filter(p => !p.groupId).length
-          } else {
-            totalPeople = (group.personIds ?? []).length
-          }
-          if (totalPeople > 0) {
-            const numPerDay = group.prayerSettings?.numPerDay ?? null
-            const actual = numPerDay === null ? totalPeople : Math.min(numPerDay, totalPeople)
-            currentSnapshot[group.id] = { numPerDay: actual }
-          }
-        })
-
-        const storedStr = JSON.stringify(storedSnapshot, Object.keys(storedSnapshot).sort())
-        const currentStr = JSON.stringify(currentSnapshot, Object.keys(currentSnapshot).sort())
-
-        if (storedStr === currentStr) {
-          todayIds = storedIds
-        } else {
-          todayIds = await calculateAndSaveDailyPrayerList(db, userId, today)
-        }
+        // Today's list is authoritative once created — use it directly.
+        // No snapshot comparison: the comparison was broken (JSON.stringify with array
+        // replacer strips nested numPerDay values) and caused spurious recalculation
+        // when stored groups differed from current groups across day boundaries.
+        todayIds = new Set<string>(dailyListSnap.data().personIds || [])
       } else {
         // Check session storage fallback
         const sessionData = sessionStorage.getItem(`prayerApp_dailyCache_${userId}`)
